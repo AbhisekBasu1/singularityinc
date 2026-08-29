@@ -1,0 +1,29 @@
+# Cloudflare Pages / Netlify header rules.
+#
+# Two of these are load-bearing for WebMCP and one is a convenience:
+#
+#   Origin-Trial          the Chrome origin-trial token for THIS origin. Tokens
+#                         are per-origin and do not cover subdomains, so a
+#                         preview deployment needs its own. The <meta> tag in
+#                         index.html carries the same token, because some CDNs
+#                         strip one or the other and the tag is the one that
+#                         actually survives an asset router answering before any
+#                         middleware runs.
+#   Origin-Agent-Cluster  `?0` makes document.modelContext vanish outright, and
+#                         so does any use of document.domain. Pinned to ?1.
+#   Cache-Control         the game is a folder of ES modules; a stale one is a
+#                         confusing bug rather than a fast page.
+
+/*
+  Origin-Agent-Cluster: ?1
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Cache-Control: no-cache
+
+/index.html
+  Origin-Trial: REPLACE_WITH_THE_TOKEN_FOR_THIS_ORIGIN
+  Cache-Control: no-cache
+
+/
+  Origin-Trial: REPLACE_WITH_THE_TOKEN_FOR_THIS_ORIGIN
+  Cache-Control: no-cache

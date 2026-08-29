@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Aperture Systems — Press</title>
+<meta name="description" content="Aperture Systems. Press releases and enquiries." />
+
+<!-- A second origin needs its own origin-trial token: they are issued per
+     origin and do not cover subdomains, and this page is deliberately not on
+     the same one as the game. See docs/DEPLOY.md. -->
+<meta http-equiv="origin-trial" content="REPLACE_WITH_THE_TOKEN_FOR_THE_RIVAL_ORIGIN" />
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #0a0508; color: #d8dee8;
+    font: 13px/1.6 ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+  body { padding: 14px 16px; }
+  h1 { font-size: 11px; letter-spacing: .26em; text-transform: uppercase;
+       color: #ff4d5e; margin: 0 0 2px; font-weight: 700; }
+  .sub { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: #6b7686; margin-bottom: 14px; }
+  .rel { border-left: 2px solid rgba(255,77,94,.5); padding: 6px 0 6px 10px; margin-bottom: 12px; }
+  .rel b { color: #fff; font-weight: 650; }
+  .d { color: #454e5c; font-size: 10px; letter-spacing: .1em; }
+  .st { margin-top: 16px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.09);
+        font-size: 10px; color: #6b7686; letter-spacing: .08em; }
+  .ok { color: #00e5a0; } .no { color: #f5a623; }
+</style>
+</head>
+<body>
+  <h1>Aperture Systems</h1>
+  <div class="sub">Press office · Marcus Vance, founder</div>
+  <div id="feed"></div>
+  <div class="st" id="status">…</div>
+  <script type="module" src="./rival.js"></script>
+</body>
+</html>

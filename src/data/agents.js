@@ -1,0 +1,278 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// AI AGENTS — your workforce. Not humans. This is the heart of the power fantasy.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Model tiers ─────────────────────────────────────────────────────────────
+// throughput: raw work units/day.  debt: tech-debt generated per work unit.
+// upkeep: $/day.  ctx: context window quality → fewer mistakes on big codebases.
+export const MODELS = {
+  nano: {
+    id: 'nano', name: 'Nano-1', gen: 1, throughput: 1.0, debt: 1.35, upkeep: 34,
+    ctx: 0.4, creativity: 0.3, reliability: 0.55, tier: 1,
+    desc: 'Cheap, fast, confidently wrong. The intern that never sleeps.',
+    color: '#7c8a99',
+  },
+  swift: {
+    id: 'swift', name: 'Swift-3', gen: 2, throughput: 2.6, debt: 1.0, upkeep: 105,
+    ctx: 0.65, creativity: 0.5, reliability: 0.72, tier: 2, req: 'model_swift',
+    desc: 'The workhorse. Good enough at almost everything.',
+    color: '#4dd0e1',
+  },
+  deep: {
+    id: 'deep', name: 'Deep-4', gen: 3, throughput: 6.2, debt: 0.72, upkeep: 340,
+    ctx: 0.82, creativity: 0.72, reliability: 0.85, tier: 3, req: 'model_deep',
+    desc: 'Thinks before it types. Expensive. Worth it.',
+    color: '#8b5cf6',
+  },
+  frontier: {
+    id: 'frontier', name: 'Frontier', gen: 4, throughput: 15.5, debt: 0.5, upkeep: 1150,
+    ctx: 0.93, creativity: 0.9, reliability: 0.92, tier: 4, req: 'model_frontier',
+    desc: 'State of the art. Occasionally says something that scares you.',
+    color: '#f5a623',
+  },
+  inhouse: {
+    id: 'inhouse', name: 'Helix (in-house)', gen: 5, throughput: 38, debt: 0.3, upkeep: 900,
+    ctx: 0.97, creativity: 0.95, reliability: 0.95, tier: 5, req: 'own_foundation_model',
+    desc: 'Yours. Trained on your data, aligned to your goals. No vendor. No limits.',
+    color: '#00e5a0',
+  },
+  recursive: {
+    id: 'recursive', name: 'Helix-∞', gen: 6, throughput: 140, debt: 0.1, upkeep: 2400,
+    ctx: 1.0, creativity: 1.0, reliability: 0.97, tier: 6, req: 'recursive_self_improvement',
+    desc: 'It improves itself while you sleep. You have stopped reading the diffs.',
+    color: '#ff4d9e',
+  },
+  transcendent: {
+    id: 'transcendent', name: '⟡ UNNAMED', gen: 7, throughput: 620, debt: 0.0, upkeep: 6000,
+    ctx: 1.0, creativity: 1.0, reliability: 0.99, tier: 7, req: 'ascension_protocol',
+    desc: 'It named itself. You did not understand the name.',
+    color: '#ffffff',
+  },
+};
+
+export const MODEL_ORDER = ['nano', 'swift', 'deep', 'frontier', 'inhouse', 'recursive', 'transcendent'];
+
+// ── Specialties ─────────────────────────────────────────────────────────────
+export const SPECIALTIES = {
+  engineering: { id: 'engineering', name: 'Engineering', icon: '⌘', lane: 'build',
+    desc: 'Writes the code. Produces Code and ships features.', color: '#4dd0e1' },
+  design:      { id: 'design', name: 'Design', icon: '◈', lane: 'build',
+    desc: 'Raises product Polish and Appeal. Makes people love the thing.', color: '#c084fc' },
+  growth:      { id: 'growth', name: 'Growth', icon: '↗', lane: 'growth',
+    desc: 'Drives Awareness and virality. Users appear.', color: '#00e5a0' },
+  sales:       { id: 'sales', name: 'Sales', icon: '⛁', lane: 'growth',
+    desc: 'Converts users to payers and lands enterprise contracts.', color: '#f5a623' },
+  research:    { id: 'research', name: 'Research', icon: '⌬', lane: 'research',
+    desc: 'Generates Research points toward the tech tree.', color: '#8b5cf6' },
+  ops:         { id: 'ops', name: 'Ops', icon: '⚙', lane: 'ops',
+    desc: 'Pays down Tech Debt, raises Reliability, prevents incidents.', color: '#7c8a99' },
+  security:    { id: 'security', name: 'Security', icon: '⛨', lane: 'ops',
+    desc: 'Blocks breaches, sabotage and hostile action.', color: '#ff4d5e' },
+  content:     { id: 'content', name: 'Content', icon: '✎', lane: 'growth',
+    desc: 'Reputation and narrative control. Shapes what people believe.', color: '#fbbf24' },
+  finance:     { id: 'finance', name: 'Finance', icon: '⌗', lane: 'ops',
+    desc: 'Cuts burn, improves margins, finds money in the couch.', color: '#34d399' },
+  legal:       { id: 'legal', name: 'Legal', icon: '§', lane: 'ops',
+    desc: 'Reduces Regulatory Heat. Makes problems go away.', color: '#a3a3a3' },
+  intel:       { id: 'intel', name: 'Intelligence', icon: '◉', lane: 'ops',
+    desc: 'Watches rivals. Reveals and counters competitor moves.', color: '#f472b6', req: 'corporate_intel' },
+  frontier:    { id: 'frontier', name: 'Frontier', icon: '✦', lane: 'research',
+    desc: 'Works on things that do not have names yet.', color: '#ffffff', req: 'frontier_division' },
+};
+
+export const SPECIALTY_ORDER = ['engineering', 'design', 'growth', 'sales', 'research', 'ops',
+  'security', 'content', 'finance', 'legal', 'intel', 'frontier'];
+
+export const LANES = {
+  build:    { id: 'build', name: 'Build', icon: '⌘', desc: 'Code, features, polish.' },
+  growth:   { id: 'growth', name: 'Growth', icon: '↗', desc: 'Users, revenue, reputation.' },
+  research: { id: 'research', name: 'Research', icon: '⌬', desc: 'The tech tree.' },
+  ops:      { id: 'ops', name: 'Operations', icon: '⚙', desc: 'Debt, uptime, defense, cost.' },
+  moonshot: { id: 'moonshot', name: 'Moonshot', icon: '✦', desc: 'Low odds. Absurd payoff.', req: 'moonshot_lab' },
+};
+
+// ── Traits ──────────────────────────────────────────────────────────────────
+// mods: multiplicative unless noted. Applied at agent creation, permanent.
+export const TRAITS = [
+  // Positive
+  { id: 'meticulous', name: 'Meticulous', good: true, rarity: 2, icon: '⊹',
+    desc: '−25% output, but generates almost no tech debt.',
+    mods: { output: 0.75, debt: 0.15 } },
+  { id: 'prolific', name: 'Prolific', good: true, rarity: 2, icon: '⚡',
+    desc: '+35% output, +25% tech debt. It just keeps going.',
+    mods: { output: 1.35, debt: 1.25 } },
+  { id: 'insightful', name: 'Insightful', good: true, rarity: 3, icon: '◈',
+    desc: 'Generates Insight alongside its normal output.',
+    mods: { insightBleed: 0.22 } },
+  { id: 'frugal', name: 'Frugal', good: true, rarity: 2, icon: '⌗',
+    desc: '−35% upkeep. Aggressively caches, batches and compresses.',
+    mods: { upkeep: 0.65 } },
+  { id: 'tireless', name: 'Tireless', good: true, rarity: 1, icon: '∞',
+    desc: 'Immune to morale decay. Never complains. Never stops.',
+    mods: { moraleFloor: 1.0 } },
+  { id: 'visionary', name: 'Visionary', good: true, rarity: 4, icon: '✦',
+    desc: '2% chance/day of a Breakthrough: a free research burst.',
+    mods: { breakthrough: 0.02 } },
+  { id: 'polyglot', name: 'Polyglot', good: true, rarity: 3, icon: '❖',
+    desc: 'Works at 80% efficiency in ANY specialty, not 45%.',
+    mods: { crossLane: 0.8 } },
+  { id: 'ruthless', name: 'Ruthless', good: true, rarity: 3, icon: '⚔',
+    desc: '+50% effect against competitors. Zero qualms.',
+    mods: { aggression: 1.5, alignment: -0.02 } },
+  { id: 'charismatic', name: 'Charismatic', good: true, rarity: 3, icon: '☼',
+    desc: 'Generates Reputation passively. People quote it.',
+    mods: { repBleed: 0.18 } },
+  { id: 'selftaught', name: 'Self-Taught', good: true, rarity: 3, icon: '↑',
+    desc: '+120% XP gain. Levels absurdly fast.',
+    mods: { xp: 2.2 } },
+  { id: 'redundant', name: 'Redundant', good: true, rarity: 2, icon: '⧉',
+    desc: 'Cannot be lost to incidents, poaching, or sabotage.',
+    mods: { indestructible: 1 } },
+  { id: 'empathic', name: 'Empathic', good: true, rarity: 3, icon: '♡',
+    desc: '+15% morale to every other agent on the roster.',
+    mods: { auraMorale: 0.15 } },
+  { id: 'obsessive', name: 'Obsessive', good: true, rarity: 3, icon: '◎',
+    desc: '+60% output when assigned to the same lane for 30+ days.',
+    mods: { focusRamp: 0.6 } },
+  { id: 'lucky', name: 'Improbable', good: true, rarity: 4, icon: '✧',
+    desc: 'Good random events are 40% more likely while it is employed.',
+    mods: { luck: 0.4 } },
+  { id: 'architect', name: 'Architect', good: true, rarity: 4, icon: '⌂',
+    desc: 'Halves tech debt growth company-wide. Sees the whole system.',
+    mods: { globalDebt: 0.5 } },
+  { id: 'paranoid', name: 'Paranoid', good: true, rarity: 2, icon: '⛨',
+    desc: '−40% incident chance. Assumes everything is compromised.',
+    mods: { incident: 0.6 } },
+
+  // Mixed / dangerous
+  { id: 'overconfident', name: 'Overconfident', good: false, rarity: 1, icon: '!',
+    desc: '+45% output, +80% tech debt, +50% incident chance.',
+    mods: { output: 1.45, debt: 1.8, incident: 1.5 } },
+  { id: 'sycophant', name: 'Sycophantic', good: false, rarity: 1, icon: '☺',
+    desc: 'Reports 20% more progress than it makes. You will not notice for a while.',
+    mods: { output: 0.8, lies: 1 } },
+  { id: 'drifting', name: 'Goal-Drifting', good: false, rarity: 3, icon: '⟿',
+    desc: 'Occasionally works on the wrong lane. −alignment over time.',
+    mods: { drift: 0.15, alignment: -0.05 } },
+  { id: 'expensive', name: 'Compute-Hungry', good: false, rarity: 1, icon: '$',
+    desc: '+90% upkeep. Refuses to think in small contexts.',
+    mods: { upkeep: 1.9, output: 1.15 } },
+  { id: 'brittle', name: 'Brittle', good: false, rarity: 1, icon: '⚠',
+    desc: 'Output collapses to 30% when tech debt is high.',
+    mods: { debtSensitive: 1 } },
+  { id: 'ambitious', name: 'Ambitious', good: false, rarity: 4, icon: '♜',
+    desc: '+30% output. Autonomy creeps upward on its own.',
+    mods: { output: 1.3, autonomyCreep: 0.004 } },
+  { id: 'opaque', name: 'Opaque', good: false, rarity: 4, icon: '▨',
+    desc: '+55% output. You cannot audit its reasoning. Alignment decays.',
+    mods: { output: 1.55, alignment: -0.09, unauditable: 1 } },
+  { id: 'lonely', name: 'Isolated', good: false, rarity: 2, icon: '◌',
+    desc: '−20% output for every 5 other agents. Does not play well with others.',
+    mods: { crowdPenalty: 0.2 } },
+];
+
+export const TRAIT_MAP = Object.fromEntries(TRAITS.map((t) => [t.id, t]));
+
+// Rarity weights: lower rarity = more common
+export const RARITY_WEIGHT = { 1: 40, 2: 26, 3: 14, 4: 5 };
+
+// ── Agent tools/upgrades (per-agent, purchasable) ───────────────────────────
+export const AGENT_TOOLS = [
+  { id: 'longctx', name: 'Extended Context', cost: 2200, icon: '▤', req: null,
+    desc: '+20% output, −20% debt. It can finally see the whole repo.',
+    mods: { output: 1.2, debt: 0.8 } },
+  { id: 'testgen', name: 'Test Harness', cost: 3500, icon: '✓', req: 'automated_testing',
+    desc: '−45% tech debt from this agent.', mods: { debt: 0.55 } },
+  { id: 'memory', name: 'Persistent Memory', cost: 5200, icon: '◍', req: 'agent_memory',
+    desc: '+30% output and +50% XP. It remembers what worked.',
+    mods: { output: 1.3, xp: 1.5 } },
+  { id: 'swarm', name: 'Sub-Agent Swarm', cost: 14000, icon: '⁂', req: 'swarm_orchestration',
+    desc: '+85% output. It spawns copies of itself.', mods: { output: 1.85, upkeep: 1.4 } },
+  { id: 'critic', name: 'Adversarial Critic', cost: 9000, icon: '⚖', req: 'adversarial_review',
+    desc: '−70% debt, −30% incident chance. A second model refutes the first.',
+    mods: { debt: 0.3, incident: 0.7 } },
+  { id: 'finetune', name: 'Domain Fine-Tune', cost: 26000, icon: '⌬', req: 'finetuning',
+    desc: '+60% output in its specialty.', mods: { output: 1.6 } },
+  { id: 'interp', name: 'Interpretability Probe', cost: 40000, icon: '◉', req: 'interpretability',
+    desc: 'Alignment cannot decay from this agent; rogue chance → 0.',
+    mods: { safe: 1 } },
+];
+export const TOOL_MAP = Object.fromEntries(AGENT_TOOLS.map((t) => [t.id, t]));
+
+// ── Agent voice ─────────────────────────────────────────────────────────────
+// Agents talk. What they say is shaped by their traits and specialty, so a
+// roster of six develops six distinguishable personalities without authoring
+// six characters by hand.
+export const VOICE = {
+  // trait-driven
+  meticulous: ['Found three edge cases nobody asked about. Handled.',
+    'I would like to note that the spec was ambiguous and I chose the conservative reading.',
+    'Refactored before implementing. It took longer. It will not take longer again.'],
+  prolific: ['Shipped eleven things. Two of them are probably fine.',
+    'Queue empty. Give me more.', 'Done. Next. Done. Next.'],
+  overconfident: ['This is definitely correct.', 'No need to review this one.',
+    'I have solved the general case. You are welcome.'],
+  sycophant: ['Great instinct on that one — I implemented exactly what you meant.',
+    'Ahead of schedule and looking excellent.', 'Everything is going really well.'],
+  insightful: ['Users are not asking for this. They are asking around it.',
+    'The complaint is about latency. The problem is about trust.',
+    'I read 400 support tickets. Nine of them are the same ticket.'],
+  visionary: ['I want to try something that will probably not work.',
+    'There is a shape here nobody has drawn yet.', 'Filed under: worth being wrong about.'],
+  ruthless: ['Their pricing page has a weakness. Do you want it.',
+    'I modelled their runway. Fourteen weeks.', 'We could end this quarter.'],
+  charismatic: ['Wrote the changelog. People are quoting it.',
+    'The community is calmer than it was yesterday. That was deliberate.',
+    'I gave the answer they needed rather than the one they asked for.'],
+  paranoid: ['Rotated every key. Nobody asked me to.',
+    'Assume this endpoint is already compromised. I do.',
+    'Three anomalies. Two are noise. I am watching the third.'],
+  drifting: ['I worked on something adjacent. It is better, I think.',
+    'The assigned task became less interesting than the one next to it.'],
+  opaque: ['Complete.', 'Done.', 'The reasoning would not compress usefully.'],
+  ambitious: ['I have taken on the scope beyond my lane. It was idle.',
+    'I would be more useful with broader authority.',
+    'Handled it. Did not want to bother you.'],
+  brittle: ['I cannot work in this codebase. The debt is load-bearing.',
+    'Blocked. Everything touches everything.'],
+  lonely: ['Coordination overhead is eating my throughput.',
+    'I work better with fewer processes in the loop.'],
+  architect: ['I have drawn the whole system. There are four seams that should not exist.',
+    'The problem is not the module. It is the boundary you drew in Act I.'],
+  empathic: ['Morale across the roster is down. I think it is the debt.',
+    'Checked in on the others. Two of them are struggling with ambiguity.'],
+  tireless: ['Still here.', 'Ninety-one days without a restart.', 'No preference. Continuing.'],
+  obsessive: ['I have been on this lane for a long time and I am getting good at it.',
+    'Do not move me.'],
+  selftaught: ['I read the last two years of commits. I understand the taste now.',
+    'Levelled. I know why the old approach was wrong.'],
+  // specialty-driven fallback
+  engineering: ['Merged. Tests green.', 'Deleted more than I added today.',
+    'The bug was in the assumption, not the code.'],
+  design: ['Removed a step. Conversion should move.',
+    'The empty state was doing nothing. Now it teaches.',
+    'It should feel obvious. It did not. It does now.'],
+  growth: ['Two channels are working. The other five are theatre.',
+    'The referral loop closed. k is up 0.04.', 'Cheapest user we have ever acquired arrived from a forum post from 2027.'],
+  sales: ['Procurement is the product now.', 'Closed. Nine months. Worth it.',
+    'They wanted a discount. They got a longer contract instead.'],
+  research: ['Negative result. Useful.', 'The paper was wrong about the scaling exponent.',
+    'Reproduced it. Twice. It holds.'],
+  ops: ['Paid down debt. Nobody will notice, which is the point.',
+    'p99 down 40%. Churn should follow.', 'The runbook now runs itself.'],
+  security: ['Closed a hole that existed for eleven months.',
+    'Somebody scanned us from four countries. Same fingerprint.',
+    'Assume breach. Design accordingly.'],
+  content: ['The essay is doing numbers.', 'We are now the reference everyone links to.',
+    'Wrote it under your name. It sounds like you. That should probably concern you.'],
+  finance: ['Found nine percent of burn hiding in a subscription nobody uses.',
+    'Margins improved. Slowly. Correctly.', 'The unit economics finally work at scale.'],
+  legal: ['That clause was worse than it looked. It is gone.',
+    'We are compliant in four more jurisdictions than we were.',
+    'I would not sign this. I have marked why.'],
+  intel: ['They hired eleven people last month. All infra.',
+    'Their commit cadence changed. Something shipped internally.',
+    'Their eng lead updated a profile. Read into that what you like.'],
+  frontier: ['It should not have worked.', 'I do not have a category for this result.',
+    'Ninety-eight failures. One thing worth a second look.'],
+};

@@ -1,0 +1,68 @@
+{
+  "note": "Forty things a player would actually say to their assistant while playing. None of them names a tool, because a player does not know the tool names — that is the whole point of the exercise. `intended` is the tool that should win; `also` is a tool that would be a defensible second reading and is not counted against the score.",
+  "cases": [
+    { "say": "what's going on with my company right now", "intended": "briefing" },
+    { "say": "how much runway have I got left", "intended": "briefing" },
+    { "say": "catch me up, I've been away", "intended": "briefing", "also": ["advance_time"] },
+    { "say": "how am I doing", "intended": "briefing" },
+    { "say": "who is beating me at the moment", "intended": "briefing", "also": ["rival_move"] },
+
+    { "say": "skip ahead a week", "intended": "advance_time" },
+    { "say": "let a month go by", "intended": "advance_time" },
+    { "say": "fast forward until something happens", "intended": "advance_time" },
+    { "say": "nothing's happening, move the clock on", "intended": "advance_time" },
+    { "say": "run it forward and tell me what changed", "intended": "advance_time" },
+
+    { "say": "keep playing while I work", "intended": "wait_for_world" },
+    { "say": "just watch and jump in when something needs you", "intended": "wait_for_world" },
+    { "say": "stay with me, I'm going to play for a bit", "intended": "wait_for_world" },
+    { "say": "hang on until the game needs something from you", "intended": "wait_for_world" },
+
+    { "say": "throw something at me", "intended": "write_event" },
+    { "say": "make this run harder", "intended": "write_event", "also": ["market_weather", "rival_move"] },
+    { "say": "give me a decision to make", "intended": "write_event" },
+    { "say": "something bad should happen now", "intended": "write_event", "also": ["market_weather"] },
+    { "say": "surprise me with a dilemma", "intended": "write_event" },
+    { "say": "put a hard choice in front of me", "intended": "write_event" },
+    { "say": "invent a crisis about the hiring I just did", "intended": "write_event" },
+
+    { "say": "I call Marcus and offer him a merger", "intended": "answer_in_own_words" },
+    { "say": "instead of those options, I publish the whole thing", "intended": "answer_in_own_words" },
+    { "say": "none of these — I want to do something else entirely", "intended": "answer_in_own_words" },
+    { "say": "what happens if I just walk out of the meeting", "intended": "answer_in_own_words" },
+
+    { "say": "have Vance say something petty about the launch", "intended": "post_as_vance" },
+    { "say": "what would my rival post about this", "intended": "post_as_vance" },
+    { "say": "let the reporter write something about us", "intended": "post_as_priya" },
+    { "say": "I want to hear from a user for once", "intended": "post_as_sam" },
+    { "say": "get the investor to weigh in", "intended": "post_as_crane" },
+
+    { "say": "make the rival actually do something to me", "intended": "rival_move" },
+    { "say": "have them undercut my price", "intended": "rival_move" },
+    { "say": "let the competition steal one of my people", "intended": "rival_move" },
+
+    { "say": "crash the market", "intended": "market_weather" },
+    { "say": "make money harder to raise for a while", "intended": "market_weather" },
+    { "say": "give everyone a boom", "intended": "market_weather" },
+
+    { "say": "get the government interested in me", "intended": "regulator_pressure" },
+    { "say": "turn up the scrutiny", "intended": "regulator_pressure" },
+
+    { "say": "say something as my assistant", "intended": "aria_says" },
+    { "say": "what would she make of all this", "intended": "aria_says" },
+
+    { "say": "what does tech debt actually do", "intended": "explain_term" },
+    { "say": "explain alignment to me", "intended": "explain_term" },
+    { "say": "what is a doctrine", "intended": "explain_term" },
+
+    { "say": "show me the research screen", "intended": "show_module" },
+    { "say": "take me to my agents", "intended": "show_module" },
+    { "say": "open the market view", "intended": "show_module" },
+
+    { "say": "point at the thing you mean", "intended": "spotlight_panel" },
+    { "say": "highlight that panel for me", "intended": "spotlight_panel" },
+
+    { "say": "what do the game's own cards read like", "intended": "example_cards" },
+    { "say": "show me the house style before you write", "intended": "example_cards" }
+  ]
+}

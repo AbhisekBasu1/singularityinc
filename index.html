@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>SINGULARITY, INC.</title>
+<meta name="description" content="A founder simulation where your own assistant plays the world against you." />
+
+<!-- The Chrome origin trial for WebMCP. Tokens are issued per origin and do not
+     cover subdomains, so production and every preview deployment need their own.
+     This tag is the one that actually carries the trial: on a host where an
+     asset router answers before any middleware, the `Origin-Trial` header in
+     `_headers` never runs for `/` at all. Ship both. See docs/DEPLOY.md.
+     `localhost` needs neither — it is already a secure context. -->
+<meta http-equiv="origin-trial" content="REPLACE_WITH_THE_TOKEN_FOR_THIS_ORIGIN" />
+
+<!-- Social preview. The act banners are already 1920x640, which is close
+     enough to the 1.91:1 every card wants, so no new asset is needed. -->
+<meta property="og:type" content="website" />
+<meta property="og:title" content="SINGULARITY, INC." />
+<meta property="og:description" content="A founder simulation where your own assistant plays the world against you. It writes the events, voices the rivals, turns the market — and you can take any of it away." />
+<meta property="og:image" content="assets/img/act4.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="SINGULARITY, INC." />
+<meta name="twitter:description" content="A founder simulation where your own assistant plays the world against you." />
+<meta name="twitter:image" content="assets/img/act4.jpg" />
+<meta name="theme-color" content="#05070b" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◈</text></svg>" />
+<link rel="stylesheet" href="styles/main.css" />
+<link rel="stylesheet" href="styles/components.css" />
+<link rel="stylesheet" href="styles/intro.css" />
+<link rel="stylesheet" href="styles/console.css" />
+</head>
+<body>
+  <div id="bg-layer"><canvas id="bg-canvas"></canvas></div>
+  <div id="app"></div>
+  <div id="screen-frame"></div>
+  <div id="modal-root"></div>
+  <div id="toast-root"></div>
+  <div id="fx-root"></div>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

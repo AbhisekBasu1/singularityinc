@@ -1,0 +1,18 @@
+{
+  "name": "singularity-inc",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A founder simulation where your own assistant plays the world against you.",
+  "type": "module",
+  "scripts": {
+    "start": "node tools/serve.js",
+    "dev": "node tools/serve.js",
+    "test": "node tools/lint.mjs && node tools/uitest.mjs && node tools/tutorialtest.mjs && node tools/fmttest.mjs && node tools/savetest.mjs && node tools/worldtest.mjs && node tools/webmcptest.mjs && node tools/choreo.mjs",
+    "evals": "node evals/select.mjs && node evals/baseline.mjs && node evals/capsfuzz.mjs",
+    "balance": "RUNS=3 DAYS=2000 node tools/balance.mjs",
+    "caps": "node tools/capsderive.mjs",
+    "shot": "node tools/shot.mjs",
+    "shot:world": "node tools/liveworld.mjs"
+  },
+  "license": "MIT"
+}
