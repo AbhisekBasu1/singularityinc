@@ -24,7 +24,7 @@ export const ALLOCATIONS = [
 
 export function focusMultiplier(S) {
   const f = S.founder.focus / Math.max(1, S.founder.focusMax);
-  return 0.45 + clamp(f, 0, 1) * 0.55;
+  return FOUNDER.FOCUS_EFFICIENCY_FLOOR + clamp(f, 0, 1) * FOUNDER.FOCUS_EFFICIENCY_RANGE;
 }
 
 export function normalizeAllocation(a) {
@@ -47,6 +47,7 @@ export function setAllocation(S, key, value) {
   if (otherSum <= 0) { const each = restTotal / others.length; others.forEach((k) => (a[k] = each)); }
   else others.forEach((k) => (a[k] = a[k] / otherSum * restTotal));
   markDirty();
+  emit('founder:allocation', { key, value: a[key], allocation: { ...a } });
   return a;
 }
 
@@ -57,13 +58,19 @@ export function founderOutput(S, m = computeMods(S)) {
   const sk = S.founder.skills;
   const hours = FOUNDER.MAX_HOURS;
   return {
-    code: a.build * hours * (0.42 + sk.engineering * 0.20) * m.codeRate * fm,
-    insight: a.users * hours * (0.16 + sk.growth * 0.055 + sk.vision * 0.03) * m.insightRate * fm,
-    awareness: a.growth * hours * (0.55 + sk.growth * 0.28) * fm,
-    reputation: a.growth * hours * (0.055 + sk.vision * 0.028) * m.repRate * fm,
+    code: a.build * hours * (FOUNDER.BUILD_HOUR_BASE
+      + sk.engineering * FOUNDER.BUILD_SKILL_RATE) * m.codeRate * fm,
+    insight: a.users * hours * (FOUNDER.INSIGHT_HOUR_BASE
+      + sk.growth * FOUNDER.INSIGHT_GROWTH_RATE + sk.vision * FOUNDER.INSIGHT_VISION_RATE)
+      * m.insightRate * fm,
+    awareness: a.growth * hours * (FOUNDER.AWARENESS_HOUR_BASE
+      + sk.growth * FOUNDER.AWARENESS_GROWTH_RATE) * fm,
+    reputation: a.growth * hours * (FOUNDER.REP_HOUR_BASE
+      + sk.vision * FOUNDER.REP_VISION_RATE) * m.repRate * fm,
     research: 0, // handled in research system via allocation
     focusDelta: (a.rest * FOUNDER.FOCUS_REGEN_PER_DAY * FOUNDER.REST_REGEN_MULT * m.focusRegen)
-              - ((1 - a.rest) * 38 * (1 + S.company.act * 0.06)),
+              - ((1 - a.rest) * FOUNDER.WORK_FOCUS_DRAIN
+                * (1 + S.company.act * FOUNDER.ACT_FOCUS_DRAIN_GROWTH)),
   };
 }
 
@@ -74,20 +81,24 @@ export function tickFounder(S, days, m = computeMods(S)) {
 
   if (!m.noBurnout) {
     if (S.founder.focus < FOUNDER.BURNOUT_THRESHOLD) {
-      S.founder.burnout = clamp(S.founder.burnout + 4.5 * days, 0, 100);
-      if (S.founder.burnout > 45 && chance(0.02 * days)) emit('founder:burnout', {});
+      S.founder.burnout = clamp(S.founder.burnout + FOUNDER.BURNOUT_GAIN_PER_DAY * days, 0, 100);
+      if (S.founder.burnout > FOUNDER.BURNOUT_EVENT_THRESHOLD
+          && chance(FOUNDER.BURNOUT_EVENT_CHANCE * days)) emit('founder:burnout', {});
     } else {
-      S.founder.burnout = Math.max(0, S.founder.burnout - 2.4 * days);
+      S.founder.burnout = Math.max(0, S.founder.burnout - FOUNDER.BURNOUT_RECOVERY_PER_DAY * days);
     }
     // The body stops asking. Forced recovery: the schedule reorganises itself.
     if (S.founder.burnout >= 100 && !S.founder.recovering) {
       S.founder.recovering = true;
       S.founder.preRecovery = { ...S.founder.allocation };
-      S.founder.allocation = { build: 0.05, users: 0.05, growth: 0.02, learn: 0.08, rest: 0.80 };
+      S.founder.allocation = { build: FOUNDER.RECOVERY_BUILD_SHARE,
+        users: FOUNDER.RECOVERY_USERS_SHARE, growth: FOUNDER.RECOVERY_GROWTH_SHARE,
+        learn: FOUNDER.RECOVERY_LEARN_SHARE, rest: FOUNDER.RECOVERY_REST_SHARE };
       markDirty();
       emit('founder:collapse', {});
     }
-    if (S.founder.recovering && S.founder.burnout <= 10 && S.founder.focus > S.founder.focusMax * 0.7) {
+    if (S.founder.recovering && S.founder.burnout <= FOUNDER.RECOVERY_END_BURNOUT
+        && S.founder.focus > S.founder.focusMax * FOUNDER.RECOVERY_END_FOCUS_SHARE) {
       S.founder.recovering = false;
       if (S.founder.preRecovery) { S.founder.allocation = S.founder.preRecovery; S.founder.preRecovery = null; }
       markDirty();
@@ -138,14 +149,16 @@ function directFloor(S, m, focusSpent) {
 
 export function actionWriteCode(S, m = computeMods(S)) {
   if (S.founder.focus < CODE.MANUAL_FOCUS_COST) return { ok: false, reason: 'focus' };
-  const raw = CODE.MANUAL_PER_CLICK * (0.8 + S.founder.skills.engineering * 0.42)
+  const raw = CODE.MANUAL_PER_CLICK * (FOUNDER.MANUAL_BASE
+    + S.founder.skills.engineering * FOUNDER.MANUAL_ENGINEERING_RATE)
             * m.codeRate * focusMultiplier(S);
   const amt = Math.max(raw, directFloor(S, m, CODE.MANUAL_FOCUS_COST));
   S.founder.focus -= CODE.MANUAL_FOCUS_COST;
   S.resources.code += amt;
   S.stats.linesManual += amt;
   S.stats.clicks++;
-  gainXp(S, 0.55);
+  gainXp(S, FOUNDER.MANUAL_XP);
+  emit('action:code', { amount: amt });
   return { ok: true, amount: amt };
 }
 
@@ -164,7 +177,8 @@ export function availableApproaches(S) {
 export function promptCost(S, m = computeMods(S), approach = currentApproach(S)) {
   return {
     focus: approach.focus,
-    cash: CODE.PROMPT_CASH_COST * approach.cashMult * (1 + S.founder.skills.prompting * 0.10),
+    cash: CODE.PROMPT_CASH_COST * approach.cashMult
+      * (1 + S.founder.skills.prompting * FOUNDER.PROMPT_SKILL_COST_RATE),
     insight: approach.insight || 0,
   };
 }
@@ -187,7 +201,7 @@ export function actionPromptAI(S, m = computeMods(S)) {
   let r = rand(), band = bands[bands.length - 1];
   for (const b of bands) { if (r < b.p) { band = b; break; } r -= b.p; }
 
-  let amount = base * band.out * (0.9 + rand() * 0.2);
+  let amount = base * band.out * (FOUNDER.PROMPT_ROLL_FLOOR + rand() * FOUNDER.PROMPT_ROLL_RANGE);
   let debt = CODE.PROMPT_DEBT * band.debt;
   amount *= focusMultiplier(S);
   amount = Math.max(amount, directFloor(S, m, c.focus) * band.out);
@@ -206,7 +220,7 @@ export function actionPromptAI(S, m = computeMods(S)) {
     S.founder.fitCredit = (S.founder.fitCredit || 0) + approach.fitBonus;
   }
   if (approach.breakthrough && chance(approach.breakthrough)) {
-    const amt = 5 + S.company.act * 6;
+    const amt = FOUNDER.BREAKTHROUGH_BASE + S.company.act * FOUNDER.BREAKTHROUGH_PER_ACT;
     S.resources.research += amt;
     extra = { type: 'breakthrough', amount: amt };
   }
@@ -218,7 +232,7 @@ export function actionPromptAI(S, m = computeMods(S)) {
       extra = { type: 'skill', skill: k };
     }
   }
-  gainXp(S, 1.15 * (approach.xpMult || 1));
+  gainXp(S, FOUNDER.PROMPT_XP * (approach.xpMult || 1));
   emit('action:prompt', { kind: band.kind, amount, debt, approach: approach.id, extra });
   return { ok: true, amount, debt, kind: band.kind, approach, extra };
 }
@@ -226,37 +240,44 @@ export function actionPromptAI(S, m = computeMods(S)) {
 export function setApproach(S, id) {
   const a = APPROACH_MAP[id];
   if (!a || !approachAvailable(S, a)) return false;
+  if (S.founder.approach === id) return true;
   S.founder.approach = id;
+  markDirty();
+  emit('founder:approach', { approach: a });
   return true;
 }
 
 export function actionTalkToUsers(S, m = computeMods(S)) {
-  const cost = 4.5;
+  const cost = FOUNDER.TALK_FOCUS_COST;
   if (S.founder.focus < cost) return { ok: false, reason: 'focus' };
   S.founder.focus -= cost;
-  const amt = (2.2 + S.founder.skills.growth * 0.6) * m.insightRate * focusMultiplier(S) * (0.7 + rand() * 0.7);
+  const amt = (FOUNDER.TALK_INSIGHT_BASE + S.founder.skills.growth * FOUNDER.TALK_GROWTH_RATE)
+    * m.insightRate * focusMultiplier(S)
+    * (FOUNDER.TALK_ROLL_FLOOR + rand() * FOUNDER.TALK_ROLL_RANGE);
   S.resources.insight += amt;
-  S.resources.reputation += 0.5;
+  S.resources.reputation += FOUNDER.TALK_REP;
   S.stats.clicks++;
-  gainXp(S, 0.8);
+  gainXp(S, FOUNDER.TALK_XP);
   emit('action:users', { amount: amt });
   return { ok: true, amount: amt };
 }
 
 export function actionPost(S, m = computeMods(S)) {
-  const cost = 3.2;
+  const cost = FOUNDER.POST_FOCUS_COST;
   if (S.founder.focus < cost) return { ok: false, reason: 'focus' };
   S.founder.focus -= cost;
   const skill = S.founder.skills.vision + S.founder.skills.growth;
   const roll = rand();
-  const viral = roll < clamp(0.045 + skill * 0.008 + S.resources.reputation / 4000, 0, 0.30);
-  const rep = (viral ? 22 : 1.4) * m.repRate * (0.6 + rand() * 0.9);
+  const viral = roll < clamp(FOUNDER.POST_VIRAL_BASE + skill * FOUNDER.POST_VIRAL_SKILL_RATE
+    + S.resources.reputation / FOUNDER.POST_VIRAL_REP_SCALE, 0, FOUNDER.POST_VIRAL_CAP);
+  const rep = (viral ? FOUNDER.POST_REP_VIRAL : FOUNDER.POST_REP_NORMAL) * m.repRate
+    * (FOUNDER.POST_ROLL_FLOOR + rand() * FOUNDER.POST_ROLL_RANGE);
   S.resources.reputation += rep;
   const p = S.products.find((x) => x.id === S.activeProductId);
-  if (p) p.awareness += viral ? 240 : 12;
+  if (p) p.awareness += viral ? FOUNDER.POST_AWARENESS_VIRAL : FOUNDER.POST_AWARENESS_NORMAL;
   if (viral) S.stats.viralHits++;
   S.stats.clicks++;
-  gainXp(S, viral ? 3 : 0.6);
+  gainXp(S, viral ? FOUNDER.POST_XP_VIRAL : FOUNDER.POST_XP_NORMAL);
   emit('action:post', { viral, rep });
   return { ok: true, viral, rep };
 }

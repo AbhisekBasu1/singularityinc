@@ -216,8 +216,11 @@ function scrollAnchorIntoView(st, tries = 0) {
   if (!st?.anchor) return;
   const el = document.querySelector(st.anchor);
   if (!el) { if (tries < 8) setTimeout(() => scrollAnchorIntoView(st, tries + 1), 90); return; }
-  if (isVisible(el)) return;
-  try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch { el.scrollIntoView(); }
+  if (isFullyVisible(el)) return;
+  // A partly clipped target only needs a small nudge; a target that is wholly
+  // off-screen is easier to understand when it lands in the middle.
+  if (isVisible(el) && nudgeFullyIntoView(el)) return;
+  try { el.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' }); } catch { el.scrollIntoView(); }
 }
 
 function advance() {
@@ -298,6 +301,34 @@ function tick() {
 function isVisible(el) {
   const r = el.getBoundingClientRect();
   return r.width > 4 && r.height > 4 && r.bottom > 0 && r.top < window.innerHeight;
+}
+
+// Intersecting the viewport is enough to draw the spotlight, but not enough to
+// teach from: the whole anchor needs to clear both the window and the scrolling
+// game surface. This catches panels whose last rows sit below `.main`.
+function isFullyVisible(el, inset = 12) {
+  const r = el.getBoundingClientRect();
+  const scroller = el.closest?.('.main');
+  const clip = scroller?.getBoundingClientRect?.();
+  const top = Math.max(0, clip?.top ?? 0) + inset;
+  const bottom = Math.min(window.innerHeight, clip?.bottom ?? window.innerHeight) - inset;
+  return r.width > 4 && r.height > 4 && r.top >= top && r.bottom <= bottom;
+}
+
+function nudgeFullyIntoView(el, inset = 12) {
+  const r = el.getBoundingClientRect();
+  const scroller = el.closest?.('.main');
+  const clip = scroller?.getBoundingClientRect?.();
+  const top = Math.max(0, clip?.top ?? 0) + inset;
+  const bottom = Math.min(window.innerHeight, clip?.bottom ?? window.innerHeight) - inset;
+  if (r.height > bottom - top) return false;
+  const delta = r.top < top ? r.top - top : r.bottom > bottom ? r.bottom - bottom : 0;
+  if (!delta) return false;
+  try {
+    if (scroller) scroller.scrollBy({ top: delta, behavior: 'smooth' });
+    else window.scrollBy({ top: delta, behavior: 'smooth' });
+    return true;
+  } catch { return false; }
 }
 
 // ── Layout ─────────────────────────────────────────────────────────────────

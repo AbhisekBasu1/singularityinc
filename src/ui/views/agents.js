@@ -4,6 +4,7 @@ import { fmt, money, pct, clamp } from '../../engine/format.js';
 import { MODELS, MODEL_ORDER, SPECIALTIES, TRAIT_MAP, LANES, AGENT_TOOLS, TOOL_MAP } from '../../data/agents.js';
 import { maxAgents, hireCost, availableModels, computeLaneOutput } from '../../systems/agents.js';
 import { computeMods, agentStats } from '../../systems/modifiers.js';
+import { AGENTS } from '../../data/balance.js';
 
 export function render(S) {
   const m = computeMods(S);
@@ -75,7 +76,8 @@ function agentCard(S, a, m, lanesAvail) {
     const mo = MODELS[id];
     return mo.tier > model.tier && (!mo.req || S.research.done[mo.req] || S.unlocks[mo.req]);
   })[0];
-  const upCost = nextModel ? Math.floor(600 * Math.pow(3.1, MODELS[nextModel].tier - 1)) : 0;
+  const upCost = nextModel ? Math.floor(AGENTS.UPGRADE_BASE_COST
+    * Math.pow(AGENTS.UPGRADE_COST_GROWTH, MODELS[nextModel].tier - 1)) : 0;
   const tools = AGENT_TOOLS.filter((t) => !t.req || S.research.done[t.req]);
 
   return `<div class="agent-card" style="--agent-color:${model.color};--agent-bg:${model.color}18">

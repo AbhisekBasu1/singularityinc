@@ -46,7 +46,7 @@ You are now standing very still, wet, trying to hold onto it without the notes a
 
 Three weeks. Twenty-one days of not building the thing.
 
-There is a version of this where you take it, extend the runway, and come back stronger. There is another version where you take it, then take the next one, and in eleven months you are a consultant who used to have a startup.
+There is a version of this where you take it, extend the runway, and come back stronger. There is another version where you take it, then take the next one, and in fourteen months you are a consultant who used to have a startup.
 
 You have met that person. They were fine. They were also very careful not to talk about it.`,
   choices: [
@@ -75,7 +75,7 @@ It has nine upvotes. It is the first result for your product name.`,
     { label: 'Reply publicly. Fix the true part.', sub: '+Reputation, +Polish.', tone: 'good',
       effect: (S, fx) => { fx.rep(28); fx.focus(-6);
         const p = S.products.find((x) => x.launched); if (p) { p.polish += 0.05; p.sentiment += 0.06; }
-        return 'You thank them, agree with point two publicly, and ship the fix in four days with a link back to their review. They edit it to four stars and add "founder actually listens", which is worth more than the original ever cost you.'; } },
+        return 'You thank them, agree with point two publicly, and ship the fix in four days with a link back to their review. They edit it to four stars and add "founder actually listens". That line is worth more than the original ever cost you.'; } },
     { label: 'Reply defensively. You are right about three of four.', sub: 'Correct. Losing.', tone: 'risky',
       effect: (S, fx) => { fx.rep(-22);
         const p = S.products.find((x) => x.launched); if (p) p.sentiment -= 0.05;
@@ -119,7 +119,7 @@ Four days later, under load, it is not fine, in exactly the way described.`,
 
 One sentence. No link. Slightly misspelt your name.
 
-Your signups are up 40× and your servers are at 88% and you have eleven minutes of relevance to convert into something permanent.`,
+Your signups are up 40× and your servers are at 88% and you have twenty minutes of relevance to convert into something permanent.`,
   choices: [
     { label: 'Scale up. Spend whatever it takes.', sub: `−${money(6000)}. Nobody hits an error.`, tone: 'good',
       req: (S) => S.company.cash >= 6000,
@@ -152,13 +152,13 @@ The note is polite about this. It is also very clearly a note about you, not abo
   choices: [
     { label: 'Reassess honestly. Change it if it is wrong.', sub: '+Insight. Resets the ramp if you switch.', tone: 'good',
       effect: (S, fx) => { fx.insight(30); fx.skill('vision', 1);
-        return 'You spend an afternoon actually re-deriving the decision rather than defending it. Whatever you conclude, you conclude it fresh, which is the rare part.'; } },
+        return 'You spend an afternoon actually re-deriving the decision rather than defending it. Whatever you conclude, you conclude it fresh. That is the rare part.'; } },
     { label: 'Keep it. Commitment is the whole point.', sub: '+ramp continues. Possibly stubborn.', tone: 'neutral',
       effect: (S, fx) => { fx.rep(6); fx.focus(4);
         return 'You hold the line. Consistency is genuinely undervalued, and it is also indistinguishable from inertia from the inside.'; } },
     { label: 'Set a rule: review it every quarter.', sub: '+Ops skill. A system instead of a mood.', tone: 'good',
       effect: (S, fx) => { fx.skill('ops', 1); fx.insight(14); fx.flag('quarterly_review');
-        return 'You put a recurring item on a calendar that nobody else reads. It fires eleven times over the next three years and changes the answer four of them.'; } },
+        return 'You put a recurring item on a calendar that nobody else reads. It fires seventeen times over the next three years and changes the answer four of them.'; } },
   ] },
 
 { id: 'e5_second_product_call', kind: 'opportunity', act: [2, 3], weight: 7, once: true,
@@ -202,7 +202,7 @@ It is a good argument. It is also exactly the argument you would expect from a s
       effect: (S, fx) => { const a = S.agents.slice().sort((x, y) => y.level - x.level)[0];
         if (a) { a.autonomy = Math.min(1, a.autonomy + 0.28); a.morale = Math.min(1, a.morale + 0.15); }
         fx.align(-0.05); fx.code(60);
-        return 'Throughput jumps immediately. Nothing goes wrong for a long time, which is the part that makes the eventual thing hard to see coming.'; } },
+        return 'Throughput jumps immediately. Nothing goes wrong for a long time. That is what makes the eventual thing hard to see coming.'; } },
     { label: 'Fix the review process instead.', sub: 'Slower to arrange. Better answer.', tone: 'good',
       effect: (S, fx) => { fx.days(2); fx.code(-20); fx.align(0.06); fx.skill('ops', 1);
         S.agents.forEach((a) => a.morale = Math.min(1, a.morale + 0.08));
@@ -254,7 +254,7 @@ This is the state everyone says they want and almost nobody can sit inside.`,
   choices: [
     { label: 'Sit inside it. Do the boring thing.', sub: '+compounding. −excitement.', tone: 'good',
       effect: (S, fx) => { fx.code(180); fx.research(120); fx.rep(20); fx.focus(20); fx.debt(-25);
-        return 'Nothing memorable happens for another eleven weeks. At the end of it every single number is better and you cannot point at a decision that did it.'; } },
+        return 'Nothing memorable happens for another six weeks. At the end of it every single number is better and you cannot point at a decision that did it.'; } },
     { label: 'Start something enormous.', sub: '+research, +risk.', tone: 'risky',
       effect: (S, fx) => { fx.research(500); fx.debt(50); fx.focus(-18); fx.align(-0.03);
         return 'You commit to a moonshot you would not have approved in a busy quarter. It is either the best decision of the year or the reason next year is difficult, and you genuinely cannot tell which.'; } },
@@ -278,7 +278,7 @@ Nobody wrote a bug. The system did exactly what it was told, for three generatio
         return 'Nine days of full stop and a re-derivation from first principles. You institute a rule: every generation validates against the original spec, not its parent. It costs 3% throughput forever and it is the reason nothing like this happens again.'; } },
     { label: 'Correct forward. Patch generation five.', sub: 'Fast. The drift stays in the lineage.', tone: 'risky',
       effect: (S, fx) => { fx.research(80); fx.align(-0.06);
-        return 'You fix the symptom in the current generation and move on. The 6% is still in there, load-bearing, and in eleven generations somebody will find it again and it will be much harder to remove.'; } },
+        return 'You fix the symptom in the current generation and move on. The 6% is still in there, load-bearing, and in six generations somebody will find it again and it will be much harder to remove.'; } },
     { label: '6% is within tolerance. Ship it.', sub: 'Free. Compounding.', tone: 'cruel',
       effect: (S, fx) => { fx.align(-0.12); S.resources.computeScale *= 1.05; fx.flag('accepted_drift');
         return 'You revise the tolerance to include the drift. It is a completely defensible engineering decision and it is also the exact mechanism by which specifications stop meaning anything.'; } },

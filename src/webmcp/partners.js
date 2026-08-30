@@ -110,16 +110,23 @@ export async function discover() {
 // the rest of the session, with the plug unable to recover it.
 const CALL_TIMEOUT_MS = 6000;
 
+const ABORTED = Symbol('aborted');
+const cancelledCall = () => ({ status: 'cancelled', why: 'the founder pressed stop',
+                               next: 'nothing from them was used' });
+
 export async function call(name, input = {}, signal) {
   const tool = discovered.find((t) => t.name === name);
   if (!tool) return { status: 'missing', name, next: 'the rival is not publishing that' };
+  if (signal?.aborted) return cancelledCall();
+  // `invoke` answers null both when the other side never replies and when this
+  // browser has no `executeTool` at all. Only the first is their fault.
+  if (!R.canInvoke()) {
+    return { status: 'unsupported', name,
+             next: 'this browser cannot call tools on another origin — carry on without them' };
+  }
 
   const ac = new AbortController();
-  const onAbort = () => ac.abort();
-  if (signal) {
-    if (signal.aborted) return { status: 'cancelled', why: 'stopped before it began' };
-    signal.addEventListener('abort', onAbort, { once: true });
-  }
+  let onAbort = null;
   let timer = null;
   try {
     const raw = await Promise.race([
@@ -127,7 +134,16 @@ export async function call(name, input = {}, signal) {
       new Promise((resolve) => {
         timer = setTimeout(() => { ac.abort(); resolve(null); }, CALL_TIMEOUT_MS);
       }),
+      // The founder's stop button wins over a reply that is still in flight:
+      // the call returns now, and whatever lands later is dropped. Without
+      // this a slow press office could answer after the plug was pulled.
+      new Promise((resolve) => {
+        if (!signal) return;
+        onAbort = () => { ac.abort(); resolve(ABORTED); };
+        signal.addEventListener('abort', onAbort, { once: true });
+      }),
     ]);
+    if (raw === ABORTED || signal?.aborted) return cancelledCall();
     if (raw == null) {
       return { status: 'timeout', name,
                next: `${origin} did not answer in ${CALL_TIMEOUT_MS / 1000}s — carry on without them` };
@@ -136,7 +152,7 @@ export async function call(name, input = {}, signal) {
     catch { return { status: 'unparseable', raw: String(raw).slice(0, 140) }; }
   } finally {
     if (timer) clearTimeout(timer);
-    if (signal) signal.removeEventListener('abort', onAbort);
+    if (signal && onAbort) signal.removeEventListener('abort', onAbort);
   }
 }
 
@@ -152,6 +168,9 @@ export function looksLikeInjection(text) { return INJECTION.test(String(text || 
 export async function readPress(which, { quiet = false, signal } = {}) {
   const r = await call('read_press_release', which ? { which } : {}, signal);
   if (r?.status !== 'ok') return r;
+  // Re-checked after the await: nothing that arrived after the stop button
+  // reaches the Wire, which is to say the save file.
+  if (signal?.aborted) return cancelledCall();
   const flagged = looksLikeInjection(r.body);
   // Their title, their length. Nothing from another origin goes into the feed —
   // which is to say into the save file — unbounded.

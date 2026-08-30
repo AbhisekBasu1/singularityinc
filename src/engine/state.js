@@ -4,7 +4,7 @@
 import { FOUNDER, ECON, TIME } from '../data/balance.js';
 import { reseed } from './rng.js';
 
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 
 export let S = null;              // the live state (module singleton)
 export function setState(next) { S = next; return S; }
@@ -32,6 +32,11 @@ export function newGame(opts = {}) {
       // Walkthrough progress: which chapters are finished, and whether the
       // player has turned the whole thing off.
       tutorial: { done: {}, seen: {}, off: false },
+      // The threshold asks this only where site tools are real. The handoff is
+      // part of onboarding, so remember whether this run invited an assistant
+      // and whether that one-time handoff has been resolved.
+      assistantChoice: 'none',       // 'play' | 'mute' | 'none'
+      assistantHandoffDone: true,
     },
     settings: {
       speed: 1,
@@ -48,6 +53,7 @@ export function newGame(opts = {}) {
       confirmBigMoves: true,
       feedDensity: 'normal',
       autoShip: false,
+      lateStart: null,          // 'act3' when the machine played the opening; legacy pays less
     },
     time: {
       day: 0,             // fractional days since founding
@@ -155,14 +161,22 @@ export function newGame(opts = {}) {
       doomClock: 0,           // narrative tension meter for Act IV/V
       // When an assistant is present it authors into the same deck the game
       // ships with. This is its ledger: what it has done, and how recently, so
-      // the rate limits survive a reload. Mode and the pending slot are
-      // deliberately absent — a save always reopens on the authored deck.
+      // the rate limits survive a reload. Decisions the assistant has not yet
+      // observed survive too. Mode and the pending slot are deliberately
+      // absent — a save always reopens on the authored deck.
       author: {
         muted: false,
         stats: { cards: 0, posts: 0, moves: 0, shocks: 0, pressure: 0, lines: 0, refused: 0,
                  ownWords: 0, slotsOffered: 0, slotsFilled: 0, slotsTimedOut: 0,
                  muted: 0, revokedByDoctrine: 0 },
         recent: { cardDays: [], postDays: [], shockDays: [], lineDays: [], taken: [] },
+        inbox: [],
+        // A compact, persisted account of what the founder and company did.
+        // Important beats also enter `inbox`; routine clicks are coalesced in
+        // `routinePending` so a live assistant sees the work without being
+        // interrupted once per click.
+        activity: [],
+        routinePending: null,
         seq: 1,
       },
     },
@@ -192,6 +206,7 @@ export function newGame(opts = {}) {
       researchDone: 0, eventsResolved: 0, daysSurvived: 0, viralHits: 0,
       competitorsCrushed: 0, roundsRaised: 0, peakValuation: 0, clicks: 0,
       bestQuality: 0, allNighters: 0, rivalsBeaten: 0, threadsResolved: 0,
+      lastShipDay: -99,      // read by the Relentless doctrine; was an undeclared `S._lastShipDay`
     },
     legacy,
     unlocks: {},           // feature-gate flags set by progression

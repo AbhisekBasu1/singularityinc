@@ -22,7 +22,7 @@ export const VIEWS = [
   { id: 'research', name: 'Research', navName: 'R&D', icon: '⌬', section: 'Company' },
   { id: 'market', name: 'Market', icon: '↗', section: 'Company' },
   { id: 'world', name: 'World', icon: '⊕', section: 'Empire', showLocked: true,
-    lockHint: 'Unlocks in **Act III**, when the environment stops being weather and starts being politics.',
+    lockHint: 'Unlocks in **Act III**, when governments start returning your calls.',
     req: (s) => s.company.act >= 3 },
   { id: 'story', name: 'Story', icon: '✎', section: 'Archive' },
   { id: 'legacy', name: 'Legacy', icon: '∞', section: 'Archive' },
@@ -30,8 +30,6 @@ export const VIEWS = [
 
 let currentView = 'desk';
 let viewModules = {};
-let lastFeedLen = 0;
-let unseenFeed = 0;
 
 export function setView(id) {
   endBoot();
@@ -91,6 +89,7 @@ export function buildShell() {
           <span class="feed-title">Wire</span>
           <span class="grow"></span>
           <span class="tiny dimmer mono" id="feed-count"></span>
+          <button class="feed-close" data-act="wire-toggle" aria-label="Close the Wire">\u2715</button>
         </div>
         <div class="feed-list" id="feed-list"></div>
       </aside>
@@ -229,6 +228,7 @@ export function paintTopbar() {
           <div class="stat-label" id="tb-day"></div>
         </div>
         <div class="speed-group" id="tb-speed"></div>
+        <span id="tb-wire"></span>
         <span id="tb-world"></span>
         <button class="btn btn-icon btn-ghost" data-act="help" aria-label="Manual" data-tip="Manual · <b>?</b>">?</button>
         <button class="btn btn-icon btn-ghost" data-act="settings" aria-label="Settings" data-tip="Settings">⚙</button>
@@ -281,6 +281,19 @@ export function paintTopbar() {
   const wc = document.getElementById('tb-world');
   if (wc) { const h = worldChip(); if (wc.__h !== h) { wc.__h = h; wc.innerHTML = h; } }
 
+  // The Wire goes with it. Below 1120px the rail is a drawer, and without a
+  // door the whole feed — including threads that are waiting on an answer —
+  // was simply not in the game at the width it is meant to be played at.
+  // The count is the point: it says how many decisions are behind the button.
+  const wr = document.getElementById('tb-wire');
+  if (wr) {
+    const open = S.feed.filter((f) => f.thread && !f.resolved).length;
+    const h = `<button class="tb-wire ${open ? 'needs' : ''}" data-act="wire-toggle"
+      aria-label="The Wire" data-tip="<b>The Wire</b><br>${open ? `${open} thread${open === 1 ? '' : 's'} waiting on you` : 'nothing waiting'}"
+      ><span class="tbw-dot"></span><span class="tbw-n">${open || '\u2014'}</span></button>`;
+    if (wr.__h !== h) { wr.__h = h; wr.innerHTML = h; }
+  }
+
   // Speed controls
   const sp = document.getElementById('tb-speed');
   const spKey = `${S.settings.paused}|${S.settings.speed}`;
@@ -308,7 +321,6 @@ export function paintNav() {
       return `<span class="nav-badge">!</span>`;
     }
     if (v.id === 'agents') {
-      const cap = 3 + (S.agents.length ? 0 : 0);
       if (S.agents.length === 0) return `<span class="nav-badge">!</span>`;
     }
     if (v.id === 'legacy') {
@@ -355,7 +367,6 @@ export function paintMain() {
   if (!mod) return;
   const main = document.getElementById('main');
   render(main, mod.render(S));
-  mod.after?.(S, main);
 }
 
 // ── Feed ───────────────────────────────────────────────────────────────────

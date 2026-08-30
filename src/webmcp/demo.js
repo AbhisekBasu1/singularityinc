@@ -111,6 +111,10 @@ function script() {
   return beats;
 }
 
+// The beats, for a test to check against the published surface without
+// waiting on the script's own pacing.
+export function plan() { return script(); }
+
 export async function run({ onBeat } = {}) {
   if (isRunning()) return { ok: false, reason: 'already running' };
   if (!R.ready()) return { ok: false, reason: 'no site tools in this browser' };

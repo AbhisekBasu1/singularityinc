@@ -73,7 +73,7 @@ e('ep_diluted', 44, (S) => S.company.equity.founder < 0.35,
 e('ep_projects', 42, (S) => Object.values(S.world.projectsBuilt || {}).reduce((a, b) => a + b, 0) >= 8,
   (S) => `The physical things outlast everything else: the plants, the fabs, the orbital lattice, the archive with the ten-thousand-year rating. Long after the software is a historical curiosity, those will still be there, humming, doing what they were told.`);
 e('ep_dividend', 75, (S) => !!S.narrative.flags.dividend,
-  (S) => `The dividend still pays. Four countries adopted the mechanism and then eleven and then it stopped being newsworthy, which is what success looks like for that kind of thing.`);
+  (S) => `The dividend still pays. Four countries adopted the mechanism and then thirty and then it stopped being newsworthy. That is what success looks like for that kind of thing.`);
 e('ep_framework', 73, (S) => !!S.narrative.flags.wrote_framework,
   (S) => `You wrote the framework. It has your fingerprints on every clause including the one that can shut you down, which your counsel begged you to strip and which is the reason the whole thing has legitimacy.`);
 

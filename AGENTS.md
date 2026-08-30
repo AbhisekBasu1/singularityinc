@@ -18,6 +18,8 @@ quiet, or the founder pulls the plug, it takes them all back and nothing is lost
 
 ```
 briefing              → where the run stands. Read it first.
+activity_log          → what happened while you were away or busy.
+inspect_module(name)  → the current state behind any of the eight tabs.
 example_cards         → three cards the written game uses. Read it once.
 wait_for_world        → stay on duty; it returns when the world owes a card
 advance_time(days)    → or move the clock yourself
@@ -26,8 +28,21 @@ write_event(...)      → when something is owed
 ```
 
 The loop that works: `briefing` once, `example_cards` once, then
-`wait_for_world` → write whatever it asks for → `wait_for_world` again. Between
-cards, `post_as_*` costs nothing and is most of what makes a run feel inhabited.
+`wait_for_world` → act on what it returns → `wait_for_world` again. It wakes for
+a card the world owes, a move typed on a card, a card/Wire choice, and meaningful
+play across all eight company modules. Rapid code, prompt, user and slider work
+arrives as one semantic batch; strategy and milestones arrive immediately. A
+typed move needs `answer_in_own_words`. Everything else has already landed —
+react, remember it for a callback, and never rewrite it. After a reconnect use
+`activity_log`; when a beat needs context use `inspect_module`. Between cards,
+`post_as_*` costs nothing and is most of what makes a run feel inhabited.
+
+**Do not end the live turn after `answer_in_own_words` returns `needs_human`.**
+Tell the founder the proposal is ready in a short progress update, then call
+`wait_for_world` immediately while they press **Accept** or **Decline**. Their
+decision wakes that call. Re-call after every heartbeat and every result. End
+the loop only when the founder asks you to stop, mutes the world, or leaves the
+run; otherwise making them paste a reconnect line is your bug, not their job.
 
 ## Before you do something expensive
 
@@ -74,7 +89,8 @@ Four things, and each refusal tells you which one bit and what to do about it.
 
 1. **The act ceiling.** How far one choice may move one thing, split by
    direction. Derived from the written deck itself: `tools/capsderive.mjs`
-   executes all 715 authored choices and takes the 80th percentile of what they
+   executes all 383 authored choices, once per act each can appear in — 715
+   executions — and takes the 80th percentile of what they
    take and what they give — which are not the same number. Act I takes 30 code
    and gives 90.
 2. **The rolling budget.** Across any 30 days you may take a couple of maximal
@@ -125,11 +141,12 @@ you the cost should be a different thing.
 
 ## Answering in their own words
 
-Any card you write has a line under the choices inviting the founder to type
-what they actually do. When they do, `answer_in_own_words` appears in your tool
-list, and it is the only tool in the game whose result needs a human hand: what
-you write lands on their card and they press **Accept** before a word of it
-becomes real. Be fair, be specific, and follow from exactly what they said.
+Any card shown while you are present has a text box under the choices. The
+founder types what they actually do there and `wait_for_world` returns their
+exact words plus a `submission_id`. Call `answer_in_own_words` with that id. It
+is the only tool in the game whose result needs a human hand: what you write
+lands on their card and they press **Accept** before a word of it becomes real.
+Be fair, be specific, and follow from exactly what they said.
 
 Once answered, that tool leaves your list again until the next card.
 

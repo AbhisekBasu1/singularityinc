@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>SINGULARITY, INC.</title>
 <meta name="description" content="A founder simulation where your own assistant plays the world against you." />
 
@@ -30,13 +30,14 @@
 <link rel="stylesheet" href="styles/components.css" />
 <link rel="stylesheet" href="styles/intro.css" />
 <link rel="stylesheet" href="styles/console.css" />
+<link rel="stylesheet" href="styles/hud.css" />
 </head>
 <body>
   <div id="bg-layer"><canvas id="bg-canvas"></canvas></div>
   <div id="app"></div>
   <div id="screen-frame"></div>
   <div id="modal-root"></div>
-  <div id="toast-root"></div>
+  <div id="toast-root" aria-live="polite"></div>
   <div id="fx-root"></div>
   <script type="module" src="src/main.js"></script>
 </body>

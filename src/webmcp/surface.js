@@ -32,19 +32,24 @@ export function configureScreen(tools) { screen = tools; }
 let partner = null;
 export function configurePartner(tools) { partner = tools; }
 
+// The native surface rejects an oversized configuration wholesale. Sixteen is
+// the current cross-client ceiling we have verified in the built-in browser;
+// staying one tool under would throw away useful capability, while exceeding
+// it makes even wait_for_world disappear. Required play tools and earned
+// powers win the hand. Teaching and screen-assist tools fill whatever remains.
+export const MAX_PUBLISHED_TOOLS = 16;
+
 // ── What should exist right now ─────────────────────────────────────────────
 
 export function desiredTools(S) {
   if (!S || S.world?.author?.muted) return [];
-  const out = ['briefing', 'advance_time', 'wait_for_world', 'write_event',
-               'example_cards', 'explain_term', 'aria_says', 'forecast'];
-  if (screen) out.push('show_module', 'spotlight_panel');
+  const out = ['briefing', 'activity_log', 'inspect_module', 'advance_time', 'wait_for_world',
+               'write_event', 'aria_says', 'forecast'];
 
   // One-shot: it exists only while there is something to answer.
   const active = S.narrative?.activeEvent;
   if (active && !active.outcome && !active.proposal) out.push('answer_in_own_words');
 
-  for (const id of metCharacters(S)) out.push('post_as_' + id);
   // Only while they can actually afford to do something. A rival between moves
   // has an empty pool, and a required enum with nothing in it is a tool that
   // cannot be called at all.
@@ -63,12 +68,34 @@ export function desiredTools(S) {
   if (act >= 3) out.push('market_weather');
   if (act >= 3 && !S.doctrines?.earned?.untouchable) out.push('regulator_pressure');
 
+  // Keep the rich one-person tools while the whole cast still fits. When the
+  // earned hand gets crowded, collapse them into one dynamic cast tool rather
+  // than dropping people the founder already knows.
+  const cast = metCharacters(S);
+  if (cast.length) {
+    if (out.length + cast.length <= MAX_PUBLISHED_TOOLS) {
+      for (const id of cast) out.push('post_as_' + id);
+    } else {
+      out.push('post_as_character');
+    }
+  }
+
+  // These are genuinely useful, but none is worth taking the *entire* WebMCP
+  // surface down. The order is the priority when only one or two slots remain.
+  const optional = ['example_cards', 'explain_term'];
+  if (screen) optional.push('show_module', 'spotlight_panel');
+  for (const name of optional) {
+    if (out.length >= MAX_PUBLISHED_TOOLS) break;
+    out.push(name);
+  }
+
   return out;
 }
 
 // ── Name → definition ───────────────────────────────────────────────────────
 
 export function templateFor(name) {
+  if (name === 'post_as_character') return T.post_as_character;
   if (name.startsWith('post_as_')) return T.voiceTool(name.slice(8));
   if (screen && (name === 'show_module' || name === 'spotlight_panel')) return screen[name];
   if (partner && (name === 'read_the_rival' || name === 'ask_the_rival')) return partner[name];

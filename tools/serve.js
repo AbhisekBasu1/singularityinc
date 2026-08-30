@@ -58,9 +58,12 @@ function handler(req, res) {
 
     let filePath = path.resolve(ROOT, '.' + (pathname.startsWith('/') ? pathname : '/' + pathname));
 
-    // A real containment check: the resolved path must be inside ROOT.
-    const rel = path.relative(ROOT, filePath);
-    if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    // A real containment check: the resolved path must be inside ROOT — and
+    // so must whatever a symlink inside ROOT actually points at.
+    const inside = (p) => { const rel = path.relative(ROOT, p); return !rel.startsWith('..') && !path.isAbsolute(rel); };
+    let real = filePath;
+    try { real = fs.realpathSync(filePath); } catch { /* missing: the stat below answers 404 */ }
+    if (!inside(filePath) || !inside(real)) {
       res.writeHead(403, { 'Content-Type': 'text/plain' });
       return res.end('403 forbidden');
     }

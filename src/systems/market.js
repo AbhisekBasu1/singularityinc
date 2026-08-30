@@ -22,24 +22,33 @@ export const MACRO = {
 };
 
 const MACRO_CHAIN = {
-  boom:       [['neutral', 0.55], ['tightening', 0.32], ['crash', 0.13]],
-  neutral:    [['boom', 0.35], ['tightening', 0.45], ['neutral', 0.2]],
-  tightening: [['crash', 0.34], ['neutral', 0.5], ['boom', 0.16]],
-  crash:      [['tightening', 0.6], ['neutral', 0.4]],
+  boom:       [['neutral', MARKET.BOOM_TO_NEUTRAL], ['tightening', MARKET.BOOM_TO_TIGHT],
+               ['crash', MARKET.BOOM_TO_CRASH]],
+  neutral:    [['boom', MARKET.NEUTRAL_TO_BOOM], ['tightening', MARKET.NEUTRAL_TO_TIGHT],
+               ['neutral', MARKET.NEUTRAL_STAYS]],
+  tightening: [['crash', MARKET.TIGHT_TO_CRASH], ['neutral', MARKET.TIGHT_TO_NEUTRAL],
+               ['boom', MARKET.TIGHT_TO_BOOM]],
+  crash:      [['tightening', MARKET.CRASH_TO_TIGHT], ['neutral', MARKET.CRASH_TO_NEUTRAL]],
 };
 
 export const RIVAL_PERSONALITIES = [
-  { id: 'blitz', name: 'Blitzscaler', icon: '⚡', growth: 1.9, burn: 2.4, quality: 0.7,
+  { id: 'blitz', name: 'Blitzscaler', icon: '⚡', growth: MARKET.BLITZ_GROWTH,
+    burn: MARKET.BLITZ_BURN, quality: MARKET.BLITZ_QUALITY,
     line: 'Growth at any cost. They will either win everything or vanish in eighteen months.' },
-  { id: 'craft', name: 'Craftsman', icon: '◈', growth: 0.7, burn: 0.7, quality: 1.7,
+  { id: 'craft', name: 'Craftsman', icon: '◈', growth: MARKET.CRAFT_GROWTH,
+    burn: MARKET.CRAFT_BURN, quality: MARKET.CRAFT_QUALITY,
     line: 'Slower, better, adored. Their users would riot for them.' },
-  { id: 'copycat', name: 'Fast Follower', icon: '⧉', growth: 1.2, burn: 1.0, quality: 0.9,
+  { id: 'copycat', name: 'Fast Follower', icon: '⧉', growth: MARKET.COPY_GROWTH,
+    burn: MARKET.COPY_BURN, quality: MARKET.COPY_QUALITY,
     line: 'They ship your roadmap two weeks after you do. Sometimes before.' },
-  { id: 'giant', name: 'Incumbent Division', icon: '▦', growth: 0.9, burn: 0.3, quality: 1.1,
+  { id: 'giant', name: 'Incumbent Division', icon: '▦', growth: MARKET.GIANT_GROWTH,
+    burn: MARKET.GIANT_BURN, quality: MARKET.GIANT_QUALITY,
     line: 'Backed by a trillion-dollar parent. They can lose money forever.' },
-  { id: 'zealot', name: 'Open-Source Zealot', icon: '⌘', growth: 1.4, burn: 0.2, quality: 1.2,
+  { id: 'zealot', name: 'Open-Source Zealot', icon: '⌘', growth: MARKET.ZEALOT_GROWTH,
+    burn: MARKET.ZEALOT_BURN, quality: MARKET.ZEALOT_QUALITY,
     line: 'They gave it away for free. Somehow that is working.' },
-  { id: 'shark', name: 'Predator', icon: '⚔', growth: 1.3, burn: 1.5, quality: 0.95,
+  { id: 'shark', name: 'Predator', icon: '⚔', growth: MARKET.SHARK_GROWTH,
+    burn: MARKET.SHARK_BURN, quality: MARKET.SHARK_QUALITY,
     line: 'They poach, litigate, and undercut. Nothing is beneath them.' },
 ];
 
@@ -47,7 +56,7 @@ export function spawnCompetitor(S, opts = {}) {
   const cat = opts.category || (S.products[0]?.category) || pick(CATEGORIES).id;
   const pers = opts.personality || pick(RIVAL_PERSONALITIES);
   const founder = opts.founder || personName();
-  const scale = opts.scale ?? (1 + S.company.act * 0.6);
+  const scale = opts.scale ?? (1 + S.company.act * MARKET.START_SCALE_PER_ACT);
   const c = {
     id: 'c' + S.market.competitorSeq++,
     name: opts.name || companyName(),
@@ -55,11 +64,11 @@ export function spawnCompetitor(S, opts = {}) {
     handle: handleFor(founder),
     category: cat,
     personality: pers.id,
-    users: (opts.users ?? randRange(80, 900)) * scale,
-    mrr: (opts.mrr ?? randRange(0, 4000)) * scale,
-    funding: (opts.funding ?? randRange(150e3, 4e6)) * scale,
-    quality: opts.quality ?? randRange(0.3, 1.1),
-    growth: randRange(0.02, 0.10) * pers.growth,
+    users: (opts.users ?? randRange(MARKET.START_USERS_MIN, MARKET.START_USERS_MAX)) * scale,
+    mrr: (opts.mrr ?? randRange(0, MARKET.START_MRR_MAX)) * scale,
+    funding: (opts.funding ?? randRange(MARKET.START_FUNDING_MIN, MARKET.START_FUNDING_MAX)) * scale,
+    quality: opts.quality ?? randRange(MARKET.START_QUALITY_MIN, MARKET.START_QUALITY_MAX),
+    growth: randRange(MARKET.START_GROWTH_MIN, MARKET.START_GROWTH_MAX) * pers.growth,
     threat: 0,
     day: S.time.day,
     status: 'active',
@@ -74,10 +83,12 @@ export function spawnCompetitor(S, opts = {}) {
 }
 
 export function updateThreat(S, c) {
-  const ours = Math.max(200, totalUsers(S));
-  const ourMrr = Math.max(200, totalMrr(S));
+  const ours = Math.max(MARKET.THREAT_BASELINE, totalUsers(S));
+  const ourMrr = Math.max(MARKET.THREAT_BASELINE, totalMrr(S));
   const uR = c.users / ours, mR = c.mrr / ourMrr;
-  c.threat = clamp((Math.log10(1 + uR * 3) + Math.log10(1 + mR * 3)) * 1.35, 0, 6);
+  c.threat = clamp((Math.log10(1 + uR * MARKET.THREAT_RATIO_WEIGHT)
+    + Math.log10(1 + mR * MARKET.THREAT_RATIO_WEIGHT)) * MARKET.THREAT_SCALE,
+  0, MARKET.THREAT_CAP);
   return c.threat;
 }
 
@@ -85,8 +96,9 @@ export function tickMarket(S, days, m = computeMods(S)) {
   const M = S.market;
   // Hype cycle: slow sine + noise, clamped
   M.hypePhase += days / MARKET.HYPE_PERIOD_DAYS * Math.PI * 2;
-  const base = 0.5 + Math.sin(M.hypePhase) * 0.30;
-  M.hype = clamp(M.hype * 0.985 + (base + gaussian(0, 0.03)) * 0.015, 0.05, 1);
+  const base = MARKET.HYPE_BASE + Math.sin(M.hypePhase) * MARKET.HYPE_AMPLITUDE;
+  M.hype = clamp(M.hype * MARKET.HYPE_RETENTION
+    + (base + gaussian(0, MARKET.HYPE_NOISE_SD)) * MARKET.HYPE_ADJUST_RATE, MARKET.HYPE_MIN, 1);
 
   // Macro regime
   M.macroDaysLeft -= days;
@@ -95,17 +107,20 @@ export function tickMarket(S, days, m = computeMods(S)) {
     const next = weightedPick(opts.map((o) => o[0]), opts.map((o) => o[1]));
     if (next !== M.macro) emit('macro:shift', { from: M.macro, to: next });
     M.macro = next;
-    M.macroDaysLeft = MARKET.MACRO_SHIFT_DAYS * randRange(0.6, 1.5);
+    M.macroDaysLeft = MARKET.MACRO_SHIFT_DAYS
+      * randRange(MARKET.MACRO_DURATION_MIN, MARKET.MACRO_DURATION_MAX);
   }
 
   // Competitor spawning
   const catSat = M.sectorSaturation;
   const spawnChance = days / MARKET.COMPETITOR_SPAWN_DAYS
-    * (0.5 + M.hype * 1.4)
-    * (S.company.act >= 2 ? 1.6 : 0.8)
-    * (M.macro === 'crash' ? 0.25 : M.macro === 'boom' ? 1.7 : 1)
+    * (MARKET.SPAWN_HYPE_BASE + M.hype * MARKET.SPAWN_HYPE_RATE)
+    * (S.company.act >= 2 ? MARKET.SPAWN_LATE_ACT_MULT : MARKET.SPAWN_EARLY_ACT_MULT)
+    * (M.macro === 'crash' ? MARKET.SPAWN_CRASH_MULT
+      : M.macro === 'boom' ? MARKET.SPAWN_BOOM_MULT : 1)
     * m.competitorGrowth;
-  if (chance(spawnChance) && M.competitors.filter((c) => c.status === 'active').length < 9) {
+  if (chance(spawnChance) && M.competitors.filter((c) => c.status === 'active').length
+      < MARKET.MAX_ACTIVE_COMPETITORS) {
     spawnCompetitor(S);
   }
 
@@ -116,20 +131,26 @@ export function tickMarket(S, days, m = computeMods(S)) {
     const pers = RIVAL_PERSONALITIES.find((p) => p.id === c.personality) || RIVAL_PERSONALITIES[0];
     const cat = CATEGORY_MAP[c.category] || CATEGORY_MAP.devtools;
     // Their ceiling is a slice of the category, shrunk by how much of it you hold.
-    const ceiling = Math.max(5000, cat.tam * (0.30 + c.quality * 0.10)
-      * clamp(1 - ourUsers / (cat.tam * 1.2), 0.06, 1));
+    const ceiling = Math.max(MARKET.CEILING_MIN,
+      cat.tam * (MARKET.CEILING_QUALITY_BASE + c.quality * MARKET.CEILING_QUALITY_RATE)
+      * clamp(1 - ourUsers / (cat.tam * MARKET.CEILING_PLAYER_TAM_MULT),
+        MARKET.CEILING_REMAINING_MIN, 1));
     const age = Math.max(1, S.time.day - c.day);
     // Growth decays as they mature — nobody grows 8%/day for five years.
-    let g = c.growth * m.competitorGrowth * (1 - c.users / ceiling) * (140 / (140 + age));
-    if (M.macro === 'crash') g -= 0.012;
-    if (M.macro === 'boom') g += 0.006;
+    let g = c.growth * m.competitorGrowth * (1 - c.users / ceiling)
+      * (MARKET.MATURITY_DAYS / (MARKET.MATURITY_DAYS + age));
+    if (M.macro === 'crash') g -= MARKET.CRASH_GROWTH_DRAG;
+    if (M.macro === 'boom') g += MARKET.BOOM_GROWTH_BONUS;
     c.users = clamp(c.users * (1 + g * days), 0, ceiling);
-    const rivalArpu = cat.basePrice * (0.35 + c.quality * 0.35);
-    c.mrr = c.users * 0.22 * rivalArpu * (0.7 + c.quality * 0.3);
-    c.funding -= c.users * 0.0007 * pers.burn * days;
-    c.funding += c.mrr / 30 * days * 0.25;
-    c.quality = clamp(c.quality + 0.0009 * pers.quality * days * (140 / (140 + age)), 0, 3.2);
-    if (c.funding < 0 && c.mrr < 25000) {
+    const rivalArpu = cat.basePrice
+      * (MARKET.RIVAL_ARPU_BASE + c.quality * MARKET.RIVAL_ARPU_QUALITY);
+    c.mrr = c.users * MARKET.RIVAL_PAID_CONVERSION * rivalArpu
+      * (MARKET.RIVAL_REVENUE_BASE + c.quality * MARKET.RIVAL_REVENUE_QUALITY);
+    c.funding -= c.users * MARKET.FUNDING_BURN_PER_USER * pers.burn * days;
+    c.funding += c.mrr / 30 * days * MARKET.FUNDING_REINVEST_SHARE;
+    c.quality = clamp(c.quality + MARKET.QUALITY_GAIN_PER_DAY * pers.quality * days
+      * (MARKET.MATURITY_DAYS / (MARKET.MATURITY_DAYS + age)), 0, MARKET.QUALITY_CAP);
+    if (c.funding < 0 && c.mrr < MARKET.FAILURE_MRR_CEILING) {
       c.status = 'dead';
       S.stats.competitorsCrushed++;
       emit('competitor:died', { competitor: c });
@@ -137,12 +158,12 @@ export function tickMarket(S, days, m = computeMods(S)) {
     updateThreat(S, c);
   }
   M.sectorSaturation = clamp(M.competitors.filter((c) => c.status === 'active')
-    .reduce((a, c) => a + c.threat, 0) / 16, 0, 1);
+    .reduce((a, c) => a + c.threat, 0) / MARKET.SATURATION_THREAT_SCALE, 0, 1);
 
   // Keep the ledger from growing forever on very long runs.
-  if (M.competitors.length > 40) {
+  if (M.competitors.length > MARKET.LEDGER_MAX) {
     const keep = M.competitors.filter((c) => c.status === 'active' || c.status === 'acquired');
-    const dead = M.competitors.filter((c) => c.status === 'dead').slice(-12);
+    const dead = M.competitors.filter((c) => c.status === 'dead').slice(-MARKET.LEDGER_DEAD_KEEP);
     M.competitors = [...keep, ...dead];
   }
 }
@@ -164,15 +185,22 @@ export function acquireCompetitor(S, id) {
   S.company.subsidiaries.push({ name: c.name, day: S.time.day, price, users: c.users, mrr: c.mrr });
   // Absorb their users and revenue into your lead product
   const p = S.products.find((x) => x.id === S.activeProductId) || S.products[0];
-  if (p) { p.users += c.users * 0.72; p.awareness += c.users * 0.02; }
+  if (p) {
+    p.users += c.users * MARKET.ACQUIRE_USER_SHARE;
+    p.awareness += c.users * MARKET.ACQUIRE_AWARENESS_PER_USER;
+  }
   emit('competitor:acquired', { competitor: c, price });
   return { ok: true, price };
 }
 
 export function acquisitionPrice(S, c) {
   const arr = c.mrr * 12;
-  const price = arr * 8 * (0.8 + S.market.hype * 0.6) + c.users * 16 + Math.max(0, c.funding) * 0.5;
+  const price = arr * MARKET.ACQUIRE_ARR_MULT
+    * (MARKET.ACQUIRE_HYPE_BASE + S.market.hype * MARKET.ACQUIRE_HYPE_RATE)
+    + c.users * MARKET.ACQUIRE_USER_VALUE
+    + Math.max(0, c.funding) * MARKET.ACQUIRE_FUNDING_SHARE;
   // Desperate companies are cheap; thriving ones demand a premium.
-  const desperation = c.funding < 0 ? 0.45 : 1 + clamp(c.threat / 6, 0, 1) * 0.6;
-  return Math.max(40000, price * desperation);
+  const desperation = c.funding < 0 ? MARKET.ACQUIRE_DISTRESSED_MULT
+    : 1 + clamp(c.threat / MARKET.THREAT_CAP, 0, 1) * MARKET.ACQUIRE_THREAT_PREMIUM;
+  return Math.max(MARKET.ACQUIRE_PRICE_MIN, price * desperation);
 }

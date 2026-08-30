@@ -1865,11 +1865,11 @@ html.reduced-motion .wc-status.live .wc-dot { animation: none; }
 .sl-world.ok { color: rgba(0,229,160,0.6); }
 .sl-world.off { color: var(--ink-5); }
 
-/* ── The fourth line on a card ────────────────────────────────────────────
-   Not a button. The control it points at is the chat box floating over the
-   bottom of the browser, which is somebody else's window. */
+/* ── The founder's own move ───────────────────────────────────────────────
+   The card is the input surface. A waiting WebMCP call carries the sentence
+   to the assistant; without one, the sentence remains safely on the card. */
 .choice-free {
-  cursor: default;
+  cursor: text;
   border-style: dashed !important;
   border-color: rgba(139,92,246,0.36) !important;
   background: rgba(139,92,246,0.045) !important;
@@ -1878,6 +1878,60 @@ html.reduced-motion .wc-status.live .wc-dot { animation: none; }
 .choice-free .choice-num { color: var(--violet); }
 .choice-free .choice-label { color: var(--ink-2); }
 .choice-free .choice-sub { color: var(--ink-4); }
+.own-words-slot:empty { display: none; }
+.own-words-main { flex: 1; min-width: 0; position: relative; z-index: 1; }
+.own-words-textarea {
+  display: block; width: 100%; min-height: 58px; max-height: 150px; resize: vertical;
+  margin-top: 8px; padding: 9px 11px; border: 1px solid rgba(139,92,246,0.34);
+  border-radius: 2px; outline: none; background: rgba(2,4,9,0.72);
+  color: var(--ink); font-size: 13px; line-height: 1.5; caret-color: var(--violet);
+  transition: border-color .16s, box-shadow .16s, background .16s;
+}
+.own-words-textarea::placeholder { color: var(--ink-5); }
+.own-words-textarea:focus {
+  border-color: rgba(139,92,246,0.8); background: rgba(4,6,13,0.92);
+  box-shadow: 0 0 0 2px rgba(139,92,246,0.12), 0 0 24px -10px rgba(139,92,246,0.9);
+}
+.own-words-footer {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px;
+}
+.own-words-status {
+  display: inline-flex; align-items: center; gap: 6px; min-width: 0;
+  color: var(--ink-4); font-family: var(--mono); font-size: 8.5px;
+  letter-spacing: .06em; line-height: 1.35; text-transform: uppercase;
+}
+.own-words-status i {
+  display: inline-block; width: 5px; height: 5px; flex: 0 0 5px;
+  border-radius: 50%; background: var(--ink-5); box-shadow: 0 0 0 transparent;
+}
+.own-words-status.live { color: color-mix(in srgb, var(--violet) 70%, var(--ink)); }
+.own-words-status.live i {
+  background: var(--violet); box-shadow: 0 0 10px rgba(139,92,246,0.9);
+  animation: ownWordsPulse 1.45s ease-in-out infinite;
+}
+.own-words-actions { display: inline-flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.own-words-link {
+  padding: 2px 0; border: 0; border-bottom: 1px solid rgba(139,92,246,0.3);
+  background: transparent; color: var(--ink-4); cursor: pointer;
+  font-family: var(--mono); font-size: 9px; letter-spacing: .04em;
+}
+.own-words-link:hover { color: var(--ink); border-color: var(--violet); }
+.own-words-quote {
+  margin-top: 7px; padding: 8px 10px; border-left: 2px solid rgba(139,92,246,0.62);
+  background: rgba(0,0,0,0.28); color: var(--ink-2); font-size: 12.5px;
+  line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.own-words-pending { cursor: default; }
+.own-words-pending .own-words-signal { animation: ownWordsPulse 1.45s ease-in-out infinite; }
+.own-words-in-flight .choice.reveal { opacity: .4; filter: saturate(.55); }
+.own-words-in-flight .choice.reveal.shown { opacity: .4; }
+.own-words-in-flight .choice.reveal:disabled { cursor: not-allowed; }
+@keyframes ownWordsPulse {
+  0%, 100% { opacity: .55; filter: drop-shadow(0 0 0 rgba(139,92,246,0)); }
+  50% { opacity: 1; filter: drop-shadow(0 0 6px rgba(139,92,246,.75)); }
+}
+html.reduced-motion .own-words-status.live i,
+html.reduced-motion .own-words-pending .own-words-signal { animation: none; }
 
 /* ── The world's answer, and the one human hand in the game ──────────────── */
 .proposal { display: flex; flex-direction: column; gap: 10px; }
@@ -1916,6 +1970,9 @@ html.reduced-motion .wc-status.live .wc-dot { animation: none; }
 }
 @media (max-width: 760px) {
   .sl-world { letter-spacing: 0.06em; padding: 1px 4px; }
+  .own-words-footer { align-items: stretch; flex-direction: column; gap: 8px; }
+  .own-words-send { width: 100%; }
+  .own-words-actions { justify-content: space-between; width: 100%; }
   .proposal-form { flex-direction: column-reverse; }
   .proposal-form .btn { width: 100%; }
 }

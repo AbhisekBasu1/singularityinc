@@ -1,16 +1,18 @@
 // ── RESEARCH ───────────────────────────────────────────────────────────────
 import { esc, bar } from '../dom.js';
+import { S as LIVE } from '../../engine/state.js';
 import { fmt, money, duration } from '../../engine/format.js';
 import { RESEARCH, RESEARCH_MAP, BRANCHES } from '../../data/research.js';
 import { isAvailable, isVisible, researchRatePerDay, researchProgressPct, etaDays, researchCost } from '../../systems/research.js';
 import { computeMods } from '../../systems/modifiers.js';
 import { computeLaneOutput } from '../../systems/agents.js';
 
-let branch = 'engineering';
-export function setBranch(b) { branch = b; }
-export function getBranch() { return branch; }
+// The open branch is view state on `S.ui`, not module memory (see world.js).
+export function setBranch(b) { if (LIVE) { LIVE.ui ??= {}; LIVE.ui.researchBranch = b; } }
+export function getBranch(S = LIVE) { return S?.ui?.researchBranch || 'engineering'; }
 
 export function render(S) {
+  const branch = getBranch(S);
   const m = computeMods(S);
   const { out: lanes } = computeLaneOutput(S, m);
   const rate = researchRatePerDay(S, lanes.research, m);

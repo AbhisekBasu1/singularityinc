@@ -103,11 +103,15 @@ export function revealLines(container, lines, { mode = 'fade', gap = 620, cps = 
 }
 
 /** Fade a set of already-rendered elements in, one after another. */
-export function stagger(nodes, { gap = 90, delay = 0 } = {}) {
+// `onShow(node)` fires as each node is revealed — in the same tick as the
+// class, so anything that must not be reachable before it is on screen (a
+// choice's tabindex, its aria-hidden) is lifted at exactly that moment.
+export function stagger(nodes, { gap = 90, delay = 0, onShow } = {}) {
   const list = Array.from(nodes);
-  if (REDUCED()) { list.forEach((n) => n.classList.add('shown')); return Promise.resolve(); }
+  const show = (n) => { n.classList.add('shown'); try { onShow?.(n); } catch {} };
+  if (REDUCED()) { list.forEach(show); return Promise.resolve(); }
   return new Promise((resolve) => {
-    list.forEach((n, i) => setTimeout(() => n.classList.add('shown'), delay + i * gap));
+    list.forEach((n, i) => setTimeout(() => show(n), delay + i * gap));
     setTimeout(resolve, delay + list.length * gap + 260);
   });
 }

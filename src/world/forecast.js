@@ -114,11 +114,3 @@ export async function forecast({ days = 30, changes = null } = {}, signal) {
 }
 
 // The difference, in the words a person would use.
-export function describe(before, after) {
-  const d = (k) => after[k] - before[k];
-  const dir = (n) => (n > 0 ? 'up' : n < 0 ? 'down' : 'flat');
-  return {
-    cash: dir(d('cash')), users: dir(d('users')), mrr: dir(d('mrr')),
-    alignment: dir(d('alignment')), heat: dir(d('heat')), approval: dir(d('approval')),
-  };
-}

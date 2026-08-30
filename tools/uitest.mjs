@@ -45,6 +45,7 @@ const views = {
 };
 const Shell = await import('../src/ui/shell.js');
 const Intro = await import('../src/ui/intro.js');
+const AssistantHandoff = await import('../src/ui/assistant-handoff.js');
 
 let fails = 0, checked = 0;
 function tryRender(name, fn) {
@@ -154,6 +155,9 @@ tryRender('advanced panel', () => { Intro.toggleAdvanced(); Intro.showIntro(3); 
 tryRender('config', () => { const c = Intro.getConfig();
   for (const k of ['founderName', 'companyName', 'archetype', 'category', 'difficulty', 'scenario'])
     if (!c[k]) throw new Error('config missing ' + k); });
+tryRender('assistant handoff ready', () => AssistantHandoff.bodyFor('ready', { company: 'Testco', count: 10 }));
+tryRender('assistant handoff connected', () => AssistantHandoff.bodyFor('connected', { company: 'Testco', count: 10, callName: 'briefing' }));
+tryRender('assistant handoff unavailable', () => AssistantHandoff.bodyFor('unavailable', { reason: 'no site tools' }));
 
 // Dump a sample of rendered HTML for eyeballing
 if (process.argv.includes('--dump')) {

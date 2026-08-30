@@ -2,6 +2,8 @@
 // LEGACY — the prestige layer. "New Timeline" resets the run; these persist.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { LATE_START } from './balance.js';
+
 export const LEGACY_PERKS = [
   { id: 'seed_capital', name: 'Seed Capital', max: 10, cost: (l) => 2 + l * 2, icon: '⌗',
     desc: (l) => `Start each timeline with +$${(l * 15000).toLocaleString()}.`,
@@ -50,7 +52,10 @@ export function computeLegacyGain(S) {
   const byEnding = S.ending && S.ending.id !== 'bankrupt' ? 12 : 0;
   const byAchieve = Math.floor(Object.keys(S.achievements).length / 4);
   const byDepth = Math.floor((S.stats.researchDone || 0) / 8);
-  return Math.max(1, byVal + byAct + byEnding + byAchieve + byDepth);
+  // A late start was played by the machine up to Act III; that much of the
+  // run was not the founder's, and the legacy reflects it.
+  const mult = S.settings?.lateStart ? LATE_START.LEGACY_MULT : 1;
+  return Math.max(1, Math.round((byVal + byAct + byEnding + byAchieve + byDepth) * mult));
 }
 
 // Founder archetypes — unlocked over time, each plays differently.

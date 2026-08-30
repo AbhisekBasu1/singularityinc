@@ -38,7 +38,6 @@ let generation = 0;
 const tools = new Map();             // name → { def, ac, token, fingerprint }
 let seq = 0;
 let mutex = Promise.resolve();
-const listeners = new Set();
 const log = [];                      // the last 40 calls, for the panel
 const LOG_MAX = 40;
 let busyDepth = 0;
@@ -51,14 +50,12 @@ export function init(context, { setBusy } = {}) {
   return !!mc;
 }
 export function ready() { return !!mc; }
-export function rootSignal() { return root.signal; }
 
-export function onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
+// The host hears about the surface through its own bus — the one channel, so
+// a UI cannot half-subscribe and miss the other half.
 function changed(action, name, extra) {
-  for (const fn of Array.from(listeners)) { try { fn({ action, name, count: tools.size, ...extra }); } catch {} }
-  emit('webmcp:tools', { action, name, count: tools.size });
+  emit('webmcp:tools', { action, name, count: tools.size, ...extra });
 }
-
 export const has = (n) => tools.has(n);
 export const list = () => [...tools.keys()];
 export const count = () => tools.size;
@@ -90,9 +87,12 @@ export async function mint(def) {
   // promise, so a revoke ten minutes from now is an unhandled rejection in the
   // middle of a take unless something is already listening.
   let settled = null;
-  if (p && typeof p.then === 'function') {
-    p.then(() => { settled ??= { ok: true }; },
-           (e) => { settled ??= { ok: false, error: String(e?.name || e) }; });
+  // Normalised once: a bare thenable with only `then` is a valid return here,
+  // and `.catch` on it is a TypeError.
+  const registration = p && typeof p.then === 'function' ? Promise.resolve(p) : null;
+  if (registration) {
+    registration.then(() => { settled ??= { ok: true }; },
+                      (e) => { settled ??= { ok: false, error: String(e?.name || e) }; });
   } else {
     settled = { ok: true };
   }
@@ -101,7 +101,10 @@ export async function mint(def) {
   // promise resolves on success or stays pending until the signal aborts, and
   // awaiting the second kind hangs forever. Give it a turn of the event loop:
   // a duplicate name rejects immediately, which is the case worth catching.
-  await Promise.race([p.catch(() => {}), tick()]);
+  // (An implementation that returns nothing at all was handled just above —
+  // and then dereferenced here, which turned the one case this branch exists
+  // for into a TypeError that took the whole boot with it.)
+  await Promise.race([registration ? registration.catch(() => {}) : Promise.resolve(), tick()]);
   if (settled && settled.ok === false && settled.error !== 'AbortError') {
     return { ok: false, error: settled.error };
   }
@@ -141,6 +144,7 @@ export async function discover(fromOrigins) {
   catch { return []; }
 }
 
+export function canInvoke() { return typeof mc?.executeTool === 'function'; }
 export async function invoke(tool, input = {}, signal) {
   if (!mc?.executeTool) return null;
   try { return await mc.executeTool(tool, input, signal ? { signal } : {}); }
@@ -186,6 +190,10 @@ function wrap(def, token) {
       }
       if (signal?.aborted) return cancelled('the user stopped you while this was waiting its turn');
       const merged = mergeSignals(signal, root.signal);
+      // Completion is logged below, but onboarding needs the arrival edge: a
+      // long-poll may not complete for a minute even though the assistant is
+      // already here. Emit only after validation and every stale/abort check.
+      emit('webmcp:call:start', { name: def.name, at: Date.now() });
       return def.execute(parsed.value, { signal: merged });
     };
 
@@ -284,18 +292,33 @@ function coerce(path, val, spec) {
     if (typeof n !== 'number' || !Number.isFinite(n)) {
       problems.push({ path, rule: 'type', fix: 'a number', got: typeof val });
     } else {
-      let v = t === 'integer' ? Math.round(n) : n;
-      if (spec.minimum !== undefined && v < spec.minimum) v = spec.minimum;
-      if (spec.maximum !== undefined && v > spec.maximum) v = spec.maximum;
-      return { value: v, problems };
+      const v = t === 'integer' ? Math.round(n) : n;
+      // Out of range is refused with the bound, not silently clamped: a
+      // clamped value changes what the call means without telling the caller,
+      // and the caller never learns where the ceiling is.
+      if ((spec.minimum !== undefined && v < spec.minimum) || (spec.maximum !== undefined && v > spec.maximum)) {
+        const lo = spec.minimum, hi = spec.maximum;
+        const range = lo !== undefined && hi !== undefined ? `between ${lo} and ${hi}`
+                    : lo !== undefined ? `at least ${lo}` : `at most ${hi}`;
+        problems.push({ path, rule: 'range', fix: range, got: String(v),
+                        limit: hi !== undefined && v > hi ? hi : lo });
+      } else {
+        return { value: v, problems };
+      }
     }
   } else if (t === 'string') {
     if (typeof val !== 'string') {
       problems.push({ path, rule: 'type', fix: 'a string', got: typeof val });
     } else if (spec.enum && !spec.enum.includes(val)) {
       problems.push({ path, rule: 'enum', fix: `one of: ${spec.enum.slice(0, 12).join(', ')}`, got: val.slice(0, 30) });
+    } else if (spec.maxLength && [...val].length > spec.maxLength) {
+      // Cutting text to fit shows the user half a sentence, and hides the
+      // ceiling from the caller for ever. Refuse with the number instead —
+      // counted in code points, as JSON Schema's maxLength is, not UTF-16 units.
+      problems.push({ path, rule: 'too_long', fix: `at most ${spec.maxLength} characters`,
+                      got: `${[...val].length} characters`, limit: spec.maxLength });
     } else {
-      return { value: spec.maxLength ? val.slice(0, spec.maxLength) : val, problems };
+      return { value: val, problems };
     }
   } else if (t === 'boolean') {
     // "false" is a string, and a string is truthy. Coercing it to `true` is the
@@ -344,7 +367,6 @@ function record(name, args, result, ms) {
   };
   log.unshift(entry);
   if (log.length > LOG_MAX) log.pop();
-  for (const fn of Array.from(listeners)) { try { fn({ action: 'call', name, entry, count: tools.size }); } catch {} }
   emit('webmcp:call', entry);
   return entry;
 }
@@ -360,13 +382,4 @@ function summariseArgs(args) {
     if (parts.length >= 4) break;
   }
   return parts.join(' · ');
-}
-
-// Tests need a clean slate between cases.
-export function generationOf() { return generation; }
-
-export function _reset() {
-  tools.clear(); log.length = 0; listeners.clear();
-  seq = 0; logSeq = 0; busyDepth = 0; mutex = Promise.resolve(); generation = 0;
-  root = new AbortController(); mc = null; onBusy = null;
 }

@@ -1,26 +1,31 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN — bootstrap, input wiring, render loop.
 // ─────────────────────────────────────────────────────────────────────────────
-import { S, setState, activeProduct } from './engine/state.js';
-import { on, emit } from './engine/bus.js';
-import { fmt, money, pct } from './engine/format.js';
+import { S, activeProduct } from './engine/state.js';
+import { on } from './engine/bus.js';
+import { fmt, money } from './engine/format.js';
 import * as Game from './game.js';
 import * as Loop from './engine/loop.js';
 import * as Save from './engine/save.js';
-import { onAction, onKey, onSlider, isDragging, render, esc, md, slider as sliderHtml, tipOpen } from './ui/dom.js';
+import { onAction, onKey, onSlider, isDragging, esc, md, tipOpen } from './ui/dom.js';
 import { toast, floatFromEvent, shake } from './ui/toast.js';
 import * as Modal from './ui/modal.js';
 import * as Shell from './ui/shell.js';
 import * as Intro from './ui/intro.js';
 import * as Tutorial from './ui/tutorial.js';
+import { showHelp } from './ui/manual.js';
+import { showSettings } from './ui/settings.js';
+import * as Dialogs from './ui/dialogs.js';
 import * as Nemesis from './systems/nemesis.js';
 import { showEnding as showEndingScreen } from './ui/ending.js';
 import { startBackground, setBackgroundEnabled } from './ui/background.js';
 import * as MCP from './webmcp/index.js';
 import * as World from './world/author.js';
 import * as WorldConsole from './ui/author.js';
+import * as AssistantHandoff from './ui/assistant-handoff.js';
 import { screenTools } from './webmcp/tools.js';
 import * as Demo from './webmcp/demo.js';
+import * as Autoplay from './systems/autoplay.js';
 import { play as sfx, setEnabled as setAudio, initAudio, setVolume, setAmbient } from './ui/audio.js';
 
 import * as DeskView from './ui/views/desk.js';
@@ -34,29 +39,24 @@ import * as LegacyView from './ui/views/legacy.js';
 
 import { actionWriteCode, actionPromptAI, actionTalkToUsers, actionPost, setAllocation,
          spendSkillPoint, setApproach } from './systems/founder.js';
-import { setPrice, totalUsers, totalMrr, createProduct, featureCost } from './systems/product.js';
-import { hireAgent, fireAgent, assignLane, upgradeModel, buyTool, rollCandidate, maxAgents, hireCost } from './systems/agents.js';
-import { startResearch, availableResearch } from './systems/research.js';
+import { setPrice, setPricing, featureCost } from './systems/product.js';
+import { fireAgent, assignLane, upgradeModel } from './systems/agents.js';
+import { startResearch } from './systems/research.js';
 import { acquireCompetitor } from './systems/market.js';
 import { resolveThread } from './systems/feed.js';
 import { startProject } from './systems/projects.js';
 import { engage as engageRegion, courtRegion } from './systems/regions.js';
 import { commit as doCommit } from './systems/commitments.js';
-import { askAria } from './systems/aria.js';
-import { availableRounds, raiseOffer, acceptRound, ROUND_TYPES } from './systems/economy.js';
-import { resolveChoice, dismissEvent } from './systems/narrative.js';
+import { resolveChoice, dismissEvent, repairEventHistory } from './systems/narrative.js';
 import { markDirty } from './systems/modifiers.js';
-import { LEGACY_MAP, LEGACY_PERKS } from './data/legacy.js';
+import { LEGACY_MAP } from './data/legacy.js';
 import { DIRECTIVE_MAP, directiveStrength } from './data/directives.js';
-import { CATEGORIES, CATEGORY_MAP } from './data/products.js';
-import { AGENT_TOOLS, TOOL_MAP, MODELS, SPECIALTIES, TRAIT_MAP } from './data/agents.js';
-import { productName } from './data/names.js';
+import { MODELS } from './data/agents.js';
 import { CODE_SINK_MAP } from './data/codesinks.js';
-import { KEYS, GLOSSARY, ACT_GUIDE, FOOTNOTES } from './data/manual.js';
-import { CHARACTERS } from './data/characters.js';
 import { KIND_TEXT } from './data/approaches.js';
 import { ENDINGS, triggerEnding } from './systems/progression.js';
 import { PROJECT_MAP } from './data/projects.js';
+import { PLATFORM } from './data/platform.js';
 
 Shell.registerViews({
   desk: DeskView, product: ProductView, agents: AgentsView, research: ResearchView,
@@ -64,7 +64,6 @@ Shell.registerViews({
 });
 
 let inGame = false;
-let pendingEventShown = null;
 
 // ═══ BOOT ═══════════════════════════════════════════════════════════════════
 startBackground();
@@ -80,30 +79,71 @@ onAction('choose-cat', (d, el) => { sfx('choose'); Intro.chooseCategory(d.v, el)
 onAction('toggle-adv', () => { sfx('click'); Intro.toggleAdvanced(); });
 onAction('pick-diff', (d) => { sfx('click'); Intro.setDraft('difficulty', d.v); });
 onAction('pick-scen', (d) => { sfx('click'); Intro.setDraft('scenario', d.v); });
+onAction('pick-assistant', (d) => { sfx('click'); Intro.setDraft('assistant', d.v); });
+onAction('pick-start', (d) => { sfx('click'); Intro.setDraft('start', d.v); });
 
 onAction('start-game', async () => {
   const cfg = Intro.getConfig();
   sfx('act');
-  const curtain = Intro.curtain([
-    `<span class="curtain-mono">${esc(cfg.companyName)}</span>`,
-    'The repository is empty.',
-    'Nobody is waiting on you.',
-  ]);
+  const late = cfg.start === 'act3';
+  const lines = [`<span class="curtain-mono">${esc(cfg.companyName)}</span>`];
+  if (late) lines.push('The first year is already written.', 'You walk in at Act III.');
+  else lines.push('The repository is empty.', 'Nobody is waiting on you.');
+  if (cfg.assistant === 'play') lines.push('Your assistant is at the table.');
+  const curtain = Intro.curtain(lines);
   await Intro.wait(1500);
-  Game.startNewGame(cfg);
+  if (!late) Game.startNewGame(cfg);
+  // The late start: the machine plays the garage and the machine while the
+  // curtain is up, and the founder walks in with the world's whole hand dealt.
+  const ff = late ? Autoplay.lateStart(() => Game.startNewGame(cfg)) : null;
   enterGame();
   await curtain;
-  toast({ icon: '⌘', title: 'Write something.', sub: 'Q writes code. W prompts the machine.', kind: 'good', ms: 7000 });
+  nudge.entry = true;
+  nudgeWorld();
+  if (ff) {
+    toast({ icon: '★', title: `Act ${ff.act}, day ${ff.day}.`, kind: 'good', ms: 9000,
+      sub: 'The first year was played for you; the Log has all of it.' });
+  } else toast({ icon: '⌘', title: 'Write something.', sub: 'Q writes code. W prompts the machine.', kind: 'good', ms: 7000 });
 });
 
 onAction('continue-game', () => {
   const s = Game.continueGame();
   if (!s) { toast({ icon: '⚠', title: 'No save found.' }); Intro.showIntro(0); return; }
   enterGame();
+  nudge.entry = true;
+  nudgeWorld();
 });
+
+// The AI choice ends in a real handoff, not a disappearing notification. It
+// waits for three independent things: the editor curtain, the tool surface,
+// and First Light. Whichever finishes last opens the final onboarding beat.
+let nudge = { boot: false, tutorial: false, entry: false, done: false };
+function nudgeWorld() {
+  if (nudge.done || !nudge.boot || !nudge.tutorial || !nudge.entry || !inGame || Tutorial.isActive()) return;
+  if (Modal.isModalOpen() || S.narrative.activeEvent) return;
+  if (!AssistantHandoff.shouldOffer()) { nudge.done = true; return; }
+  if (AssistantHandoff.openHandoff()) nudge.done = true;
+}
+
+function assistantHandoffPending() {
+  return S?.meta?.assistantChoice === 'play'
+    && !S.meta.assistantHandoffDone
+    && !S.world?.author?.muted;
+}
 
 function enterGame() {
   inGame = true;
+  // Older own-words saves could journal a once-only card without marking it
+  // seen, so the deck immediately dealt the same card again. Repair that proof
+  // before deciding whether an open card should be restored to the screen.
+  const repairedNarrative = repairEventHistory(S);
+  if (repairedNarrative.changed) Save.save(S);
+  nudge = { boot: false, tutorial: false, entry: false, done: false };
+  AssistantHandoff.reset();
+  // A restored save can return between First Light and the assistant handoff.
+  // Keep it on the same frozen beat instead of letting the deck take a card
+  // during the two seconds in which the shell and tool surface boot.
+  if (assistantHandoffPending()) S.tutorialHold = true;
   // A card that was open when the game was saved holds the clock — `loop.js`
   // will not advance while `activeEvent` is set — and nothing was putting it
   // back on screen. Continuing a run that was saved mid-card left the game
@@ -126,7 +166,7 @@ function enterGame() {
   Tutorial.registerShell({
     setView: Shell.setView,
     getView: Shell.getView,
-    onEnd: () => { Shell.paintMain(); Shell.paintTopbar(); Shell.paintNav(); Shell.paintStatus(); },
+    onEnd: () => { Shell.paintMain(); Shell.paintTopbar(); Shell.paintNav(); Shell.paintStatus(); nudge.tutorial = true; nudgeWorld(); },
   });
   // The first lesson waits for the power-on to finish so it is not competing
   // with the staggered animations for attention.
@@ -137,7 +177,13 @@ function enterGame() {
     // the opening story card. Whether the walkthrough runs or not, the hold has
     // to be released here or the game never starts.
     const started = !Modal.isModalOpen() && !S.narrative.activeEvent && Tutorial.maybeAutoStart();
-    if (!started && S.tutorialHold && !Tutorial.isActive()) S.tutorialHold = false;
+    // If an assistant handoff is still owed, its modal will atomically replace
+    // this hold with `modalBlocking`. Releasing here creates a small race in
+    // which the opening deck card can land behind the curtain first.
+    if (!started && S.tutorialHold && !Tutorial.isActive() && !assistantHandoffPending()) {
+      S.tutorialHold = false;
+    }
+    if (!started) { nudge.tutorial = true; nudgeWorld(); }
   }, 1900);
   bootWorld();
   if (redrawOpenCard && S.narrative.activeEvent && !S.narrative.activeEvent.outcome) {
@@ -162,7 +208,20 @@ let worldMounted = false;
 let redrawOpenCard = false;
 function bootWorld() {
   Shell.registerWorldChip(() => WorldConsole.statusChip());
-  Modal.setFreeTextProvider(() => World.authorMode() === 'agent' && !S?.world?.author?.muted);
+  Modal.setFreeTextProvider(() => World.founderInputState(S));
+  Modal.setOwnWordsHandlers({
+    submit: (text) => {
+      const r = World.submitFounderWords(S, text);
+      if (r.ok) { sfx('choose'); Save.save(S); }
+      return r;
+    },
+    cancel: () => {
+      const r = World.cancelFounderWords(S);
+      if (r.ok) { sfx('click'); Save.save(S); }
+      return r;
+    },
+    reconnect: () => AssistantHandoff.copyResumeLine(),
+  });
   Modal.setProposalHandlers({
     accept: () => {
       const r = World.acceptProposal(S);
@@ -180,12 +239,18 @@ function bootWorld() {
   if (!worldMounted) {
     worldMounted = true;
     WorldConsole.mountAuthor();
+    AssistantHandoff.mount();
     on('world:immunity', ({ doctrine, tool, tone, key, line, name }) => {
       toast({ icon: '\u26e8', kind: 'good', ms: 6500,
         title: `**${name}** — the world lost something`,
         sub: line + (tool ? ` (${tool})` : tone ? ` (${tone})` : key ? ` (${key})` : '') });
     });
     on('world:card', () => { Shell.paintStatus(); });
+    // Presence and long-poll heartbeats change only the tiny live line in the
+    // card form. `refreshFreeText` preserves a draft and its focus in place.
+    on('world:wait', () => Modal.refreshFreeText());
+    on('world:mode', () => Modal.refreshFreeText());
+    on('world:founder-input', () => Modal.refreshFreeText());
     // A press release from another origin with an instruction hidden in it is
     // the one security beat worth showing rather than writing down.
     on('partner:injection', ({ title }) => {
@@ -216,7 +281,10 @@ function bootWorld() {
         show: (o) => Tutorial.spotlight(o),
       },
     }),
-  }).then(() => { WorldConsole.paintAuthor(); Shell.paintStatus(); });
+  }).then(() => {
+    WorldConsole.paintAuthor(); Shell.paintStatus();
+    nudge.boot = true; nudgeWorld();
+  });
 }
 
 onAction('mute-world', () => {
@@ -253,6 +321,15 @@ onAction('demo-run', () => {
 });
 onAction('demo-stop', () => { sfx('click'); Demo.stop(); });
 
+// Below 1120px the Wire rail becomes a drawer over the right edge. It is the
+// same element either way — `paintFeed` keeps writing into the same `#feed-list`
+// and the thread buttons keep their delegated action — so there is no second
+// copy to go stale and no duplicate ids.
+onAction('wire-toggle', () => {
+  sfx('click');
+  document.getElementById('app')?.classList.toggle('wire-open');
+});
+
 onAction('author-dialog', () => {
   sfx('click');
   Modal.dialog({ title: 'The world', wide: true,
@@ -260,10 +337,56 @@ onAction('author-dialog', () => {
     actions: [{ label: 'Close' }] });
 });
 
+// The title panel's doors. `assistant-link` below is the long form. Repeat the
+// host check at the action boundary so a stale title screen cannot hand the app
+// back to itself, and never let an unsupported protocol fail without a word.
+function openChatGPT() {
+  if (Intro.assistantMode() === 'hosted') {
+    toast({ icon: '\u25c8', title: 'You are already in ChatGPT',
+      sub: 'Press Begin, then say “play the world” in this chat once the run starts.', kind: 'good' });
+    return false;
+  }
+  const before = location.href;
+  try {
+    location.href = MCP.deepLinks().app;
+    setTimeout(() => {
+      if (location.href === before && document.hasFocus?.()) {
+        toast({ icon: '\u26a0', title: 'ChatGPT did not open', sub: 'Use Copy link instead.', kind: 'warn' });
+      }
+    }, 1200);
+    return true;
+  } catch {
+    toast({ icon: '\u26a0', title: 'Could not open ChatGPT', sub: 'Use Copy link instead.', kind: 'warn' });
+    return false;
+  }
+}
+onAction('assistant-open', () => { sfx('prompt'); openChatGPT(); });
+onAction('assistant-copy', () => {
+  sfx('click');
+  navigator.clipboard?.writeText(MCP.deepLinks().app).then(
+    () => toast({ icon: '\u2713', title: 'Link copied', sub: 'Paste it into ChatGPT to open the game there.', kind: 'good' }),
+    () => toast({ icon: '\u26a0', title: 'Could not copy', sub: MCP.deepLinks().app, kind: 'warn', ms: 9000 }));
+});
+
 onAction('assistant-link', () => {
   sfx('prompt');
   const links = MCP.deepLinks();
   const cap = MCP.capability();
+  const hosted = Intro.assistantMode() === 'hosted';
+  const actions = [{ label: 'Copy the opening line', fn: () => {
+    navigator.clipboard?.writeText(MCP.HIRE_PROMPT).then(
+      () => toast({ icon: '\u2713', title: 'Copied', sub: 'Paste it into the chat once the run begins.', kind: 'good' }),
+      () => {});
+  }, keepOpen: true }];
+  if (hosted) actions.push({ label: 'Got it', cls: 'btn-primary' });
+  else actions.push(
+    { label: 'Copy the link', fn: () => {
+        navigator.clipboard?.writeText(links.app).then(
+          () => toast({ icon: '\u2713', title: 'Link copied', kind: 'good' }),
+          () => {});
+      }, keepOpen: true },
+    { label: 'Open ChatGPT', cls: 'btn-primary', fn: openChatGPT },
+  );
   Modal.dialog({ title: 'Play with your assistant', wide: true,
     body: `<div class="small" style="line-height:1.75;color:var(--ink-2)">
       <p style="margin:0 0 12px">You play the founder. Your own assistant plays the world against you —
@@ -274,19 +397,14 @@ onAction('assistant-link', () => {
         <div class="small"><b class="${cap.tier === 'native' ? 'c-green' : cap.tier === 'legacy' ? 'c-amber' : 'c-red'}">${esc(cap.label)}</b>
         ${cap.reason ? ' &middot; ' + esc(cap.reason) : ' &middot; site tools are available here'}</div>
       </div>
+      ${hosted ? `<div class="panel" style="padding:12px;margin-bottom:12px;color:var(--ink-2)">
+        <b class="c-green">You are already in ChatGPT.</b> Close this, press Begin, and say
+        <i>play the world</i> in this chat after the run opens.</div>` : ''}
       <div class="tiny dim" style="line-height:1.7">
-        Works in the <b>ChatGPT desktop app's built-in browser</b> on GPT-5.6 Sol or Terra — Luna has site
-        tools switched off — or in <b>Chrome 149+</b>. Not the ChatGPT web app, the extension, or Codex CLI.
-        Enterprise and Edu workspaces are excluded.
+        Works in <b>${esc(PLATFORM.app)}</b> on ${esc(PLATFORM.presets)} — ${esc(PLATFORM.presetsOff)} —
+        or in <b>${esc(PLATFORM.browser)}</b>. ${esc(PLATFORM.not)}
       </div></div>`,
-    actions: [
-      { label: 'Copy the link', fn: () => {
-          navigator.clipboard?.writeText(links.app).then(
-            () => toast({ icon: '\u2713', title: 'Link copied', kind: 'good' }),
-            () => {});
-        }, keepOpen: true },
-      { label: 'Open ChatGPT', cls: 'btn-primary', fn: () => { try { location.href = links.app; } catch {} } },
-    ] });
+    actions });
 });
 
 // ── Speed / view ───────────────────────────────────────────────────────────
@@ -322,7 +440,7 @@ const ACTION_FNS = {
     if (r.ok) {
       floatFromEvent(e, `+${fmt(r.rep, 1)}`, r.viral ? 'var(--amber)' : 'var(--ink-2)');
       sfx(r.viral ? 'viral' : 'post');
-      if (r.viral) toast({ icon: '↗', title: 'It went off.', sub: 'Six hundred thousand views and counting.', kind: 'good' });
+      if (r.viral) toast({ icon: '↗', title: 'It left your hands.', sub: 'People are arguing about it in a language you do not speak.', kind: 'good' });
     }
     return r;
   },
@@ -370,6 +488,10 @@ onAction('spend-code', (d, el) => {
   markDirty();
   sfx(d.v === 'refactor' ? 'insight' : d.v === 'harden' ? 'ship' : 'research');
   toast({ icon: k.icon, title: k.name, sub: outcome.replace(/\*\*/g, ''), kind: 'good', ms: 4200 });
+  World.observeFounderAction(S, {
+    surface: 'desk', action: 'spend_code', summary: `${k.name}: ${outcome.replace(/\*\*/g, '')}`,
+    details: { use: k.name, code: price },
+  });
   Shell.paintMain(); Shell.paintTopbar();
 });
 
@@ -385,7 +507,14 @@ onAction('ship', () => {
   Shell.paintMain();
 });
 
-onAction('toggle-autoship', () => { S.settings.autoShip = S.settings.autoShip === false; Shell.paintMain(); });
+onAction('toggle-autoship', () => {
+  S.settings.autoShip = S.settings.autoShip === false;
+  World.observeFounderAction(S, {
+    surface: 'desk', action: 'set_auto_ship', summary: `turned auto-ship ${S.settings.autoShip ? 'on' : 'off'}`,
+    details: { enabled: S.settings.autoShip },
+  });
+  Shell.paintMain();
+});
 
 onAction('launch', () => {
   const p = activeProduct(S);
@@ -425,6 +554,11 @@ onAction('directive', (d) => {
     S.company.directiveSince = S.time.day;
     markDirty(); sfx('choose');
     const dir = DIRECTIVE_MAP[d.v];
+    World.observeFounderAction(S, {
+      surface: 'desk', action: 'set_directive',
+      summary: `set standing order to ${dir?.name || d.v}`,
+      details: { directive: d.v, name: dir?.name },
+    });
     if (dir && dir.id !== 'none') toast({ icon: dir.icon, title: `**${dir.name}**`, sub: dir.desc, kind: 'good', ms: 4200 });
     Shell.paintMain();
   };
@@ -440,74 +574,12 @@ onAction('skill', (d) => { if (spendSkillPoint(S, d.v)) Shell.paintMain(); });
 
 // ── Product ────────────────────────────────────────────────────────────────
 onAction('price', (d) => { const p = activeProduct(S); if (p) setPrice(S, p, p.price * Number(d.v)); Shell.paintMain(); });
-onAction('pricing', (d) => { const p = activeProduct(S); if (p) { p.pricing = d.v; markDirty(); } Shell.paintMain(); });
+onAction('pricing', (d) => { const p = activeProduct(S); if (p) setPricing(S, p, d.v); Shell.paintMain(); });
 onAction('select-product', (d) => { S.activeProductId = d.v; Shell.paintMain(); });
-onAction('new-product', () => {
-  const cost = 25000 * Math.pow(2.4, S.products.length - 1);
-  Modal.dialog({ title: 'New product line', wide: true,
-    body: `<div class="small dim mb16">A second product diversifies revenue and opens new markets — but splits your build capacity. Cost: <b class="c-amber">${money(cost)}</b>.</div>
-      <div class="grid grid-auto" style="gap:10px">${CATEGORIES.map((c) => `
-        <button class="pick-card" style="--pick-color:${c.color}" data-newprod="${c.id}">
-          <div class="pick-icon" style="color:${c.color}">${c.icon}</div>
-          <div class="pick-name">${esc(c.name)}</div>
-          <div class="pick-desc">${esc(c.tagline)}</div>
-        </button>`).join('')}</div>`,
-    actions: [] });
-  document.querySelectorAll('[data-newprod]').forEach((b) => b.addEventListener('click', () => {
-    if (S.company.cash < cost) { toast({ icon: '$', title: 'Not enough cash.', kind: 'bad' }); return; }
-    S.company.cash -= cost;
-    const p = createProduct(S, { name: productName(), category: b.dataset.newprod });
-    S.activeProductId = p.id;
-    Modal.closeModal();
-    toast({ icon: '◈', title: `Started **${p.name}**`, sub: 'A second bet. Build it.', kind: 'good' });
-    Shell.paintMain();
-  }));
-});
+onAction('new-product', () => Dialogs.showNewProduct());
 
 // ── Agents ─────────────────────────────────────────────────────────────────
-let candidates = null;
-onAction('recruit', () => {
-  if (S.agents.length >= maxAgents(S)) { toast({ icon: '⚠', title: 'Roster is full.', sub: 'Research more orchestration capacity.', kind: 'bad' }); return; }
-  candidates = [rollCandidate(S), rollCandidate(S), rollCandidate(S)];
-  showRecruit();
-});
-
-function showRecruit() {
-  const cost = hireCost(S);
-  Modal.dialog({ title: 'Recruiting', wide: true,
-    body: `<div class="small dim mb16">Three candidates. Same price. Traits are permanent — read them carefully.
-      <span class="dim">Cost: <b class="c-amber">${money(cost)}</b>.</span></div>
-      <div class="grid grid-3" style="gap:10px">
-        ${candidates.map((c, i) => {
-          const model = MODELS[c.model], spec = SPECIALTIES[c.spec];
-          return `<button class="pick-card" style="--pick-color:${model.color}" data-cand="${i}">
-            <div class="row g8"><span class="agent-avatar" style="--agent-color:${model.color};--agent-bg:${model.color}18;width:32px;height:32px;flex:0 0 32px;font-size:14px">${spec.icon}</span>
-              <div><div class="pick-name" style="font-size:14px;font-family:var(--mono)">${esc(c.name)}</div>
-              <div class="tiny dim">${esc(spec.name)} · <span style="color:${model.color}">${esc(model.name)}</span></div></div></div>
-            <div class="col g4 mt8">
-              ${c.traits.map((tid) => { const t = TRAIT_MAP[tid];
-                return `<div class="trait-chip ${t.good ? 'good' : 'bad'}" style="white-space:normal;text-align:left">
-                  <b>${t.icon} ${esc(t.name)}</b> — ${esc(t.desc)}</div>`; }).join('')}
-            </div>
-          </button>`;
-        }).join('')}
-      </div>
-      <div class="row g8 mt16"><button class="btn btn-ghost btn-sm" data-reroll>⟳ Reroll all (free)</button></div>`,
-    actions: [] });
-  document.querySelectorAll('[data-cand]').forEach((b) => b.addEventListener('click', () => {
-    const c = candidates[Number(b.dataset.cand)];
-    const r = hireAgent(S, c);
-    if (r.ok) {
-      Modal.closeModal();
-      toast({ icon: '◉', title: `**${c.name}** is online.`, sub: `${SPECIALTIES[c.spec].name} · ${MODELS[c.model].name}`, kind: 'good' });
-      Shell.paintMain(); Shell.paintNav();
-    } else if (r.reason === 'cash') toast({ icon: '$', title: 'Not enough cash.', kind: 'bad' });
-  }));
-  document.querySelector('[data-reroll]')?.addEventListener('click', () => {
-    candidates = [rollCandidate(S), rollCandidate(S), rollCandidate(S)];
-    showRecruit();
-  });
-}
+onAction('recruit', () => Dialogs.openRecruit());
 
 onAction('fire-agent', (d) => {
   const a = S.agents.find((x) => x.id === d.v);
@@ -528,25 +600,7 @@ onAction('upgrade-agent', (d, el) => {
   Shell.paintMain();
 });
 
-onAction('agent-tools', (d) => {
-  const a = S.agents.find((x) => x.id === d.v);
-  if (!a) return;
-  const avail = AGENT_TOOLS.filter((t) => !t.req || S.research.done[t.req]);
-  Modal.dialog({ title: `${a.name} — tooling`, wide: true,
-    body: `<div class="grid grid-2" style="gap:10px">${avail.map((t) => {
-      const owned = a.tools.includes(t.id);
-      return `<div class="panel" style="padding:13px;border-color:${owned ? 'rgba(0,229,160,.3)' : 'var(--line)'}">
-        <div class="row between mb4"><span class="row g6"><span class="c-cyan">${t.icon}</span><span class="bold small">${esc(t.name)}</span></span>
-          ${owned ? '<span class="pill green">installed</span>' : `<span class="mono tiny">${money(t.cost)}</span>`}</div>
-        <div class="tiny dim">${esc(t.desc)}</div>
-        ${owned ? '' : `<button class="btn btn-sm btn-block mt8" data-buytool="${t.id}" ${S.company.cash < t.cost ? 'disabled' : ''}>Install</button>`}
-      </div>`; }).join('') || '<div class="empty">No tools researched yet.</div>'}</div>`,
-    actions: [] });
-  document.querySelectorAll('[data-buytool]').forEach((b) => b.addEventListener('click', () => {
-    const r = buyTool(S, a.id, b.dataset.buytool);
-    if (r.ok) { Modal.closeModal(); toast({ icon: '⚙', title: `Installed on ${a.name}`, kind: 'good' }); Shell.paintMain(); }
-  }));
-});
+onAction('agent-tools', (d) => Dialogs.showAgentTools(d.v));
 
 // ── Research ───────────────────────────────────────────────────────────────
 onAction('research', (d) => {
@@ -564,11 +618,31 @@ onAction('queue', (d, el, e) => {
     const next = S.research.queue.shift();
     startResearch(S, next);
   }
+  World.observeFounderAction(S, {
+    surface: 'research', action: 'edit_research_queue',
+    summary: `${i >= 0 ? 'removed' : 'queued'} research ${d.v}`,
+    details: { research: d.v, queued: i < 0, queueLength: S.research.queue.length }, routine: true,
+  });
   sfx('click');
   Shell.paintMain(); Shell.paintNav();
 });
-onAction('unqueue', (d) => { S.research.queue.splice(Number(d.v), 1); Shell.paintMain(); });
-onAction('cancel-research', () => { S.research.active = null; S.research.progress = 0; Shell.paintMain(); Shell.paintNav(); });
+onAction('unqueue', (d) => {
+  const removed = S.research.queue.splice(Number(d.v), 1)[0];
+  if (removed) World.observeFounderAction(S, {
+    surface: 'research', action: 'edit_research_queue', summary: `removed research ${removed} from the queue`,
+    details: { research: removed, queued: false, queueLength: S.research.queue.length }, routine: true,
+  });
+  Shell.paintMain();
+});
+onAction('cancel-research', () => {
+  const stopped = S.research.active;
+  S.research.active = null; S.research.progress = 0;
+  if (stopped) World.observeFounderAction(S, {
+    surface: 'research', action: 'cancel_research', summary: `cancelled research ${stopped}`,
+    details: { research: stopped },
+  });
+  Shell.paintMain(); Shell.paintNav();
+});
 
 // ── Market ─────────────────────────────────────────────────────────────────
 onAction('acquire', (d) => {
@@ -585,38 +659,7 @@ onAction('acquire', (d) => {
       } }] });
 });
 
-onAction('raise', (d) => {
-  const rt = ROUND_TYPES.find((x) => x.id === d.v);
-  if (!rt) return;
-  const offer = raiseOffer(S, rt);
-  Modal.dialog({ title: `${rt.name} term sheet`, wide: false,
-    body: `<div class="col g12">
-      <div class="small dim">${esc(rt.desc)}</div>
-      <div class="grid grid-2" style="gap:10px">
-        <div class="stat-tile"><div class="stat-tile-label">Raise</div><div class="stat-tile-value c-green">${money(offer.amount)}</div></div>
-        <div class="stat-tile"><div class="stat-tile-label">Post-money</div><div class="stat-tile-value c-amber">${money(offer.post)}</div></div>
-        <div class="stat-tile"><div class="stat-tile-label">Dilution</div><div class="stat-tile-value c-red">${pct(offer.dilution, 1)}</div></div>
-        <div class="stat-tile"><div class="stat-tile-label">You keep</div><div class="stat-tile-value">${pct(S.company.equity.founder * (1 - offer.dilution), 1)}</div></div>
-      </div>
-      <div class="tiny dim">Money buys time and speed. It costs a permanent share of everything that follows — including the ending.</div>
-    </div>`,
-    actions: [
-      { label: 'Walk away', cls: 'btn-ghost' },
-      { label: 'Push for better terms', cls: '', fn: () => {
-        const better = { ...offer, amount: offer.amount * 1.15, dilution: offer.dilution * 0.82 };
-        const ok = Math.random() < 0.55 + S.founder.skills.sales * 0.02;
-        if (ok) { acceptRound(S, better); toast({ icon: '⌗', title: 'They blinked.', sub: `${money(better.amount)} at ${pct(better.dilution, 1)} dilution.`, kind: 'good' }); }
-        else { toast({ icon: '⚠', title: 'They walked.', sub: 'The round is off. Try again later.', kind: 'bad' });
-          S.narrative.cooldowns['_raise_' + rt.id] = S.time.day + 60; }
-        Shell.paintMain(); Shell.paintTopbar();
-      } },
-      { label: 'Sign', cls: 'btn-primary', fn: () => {
-        acceptRound(S, offer);
-        toast({ icon: '⌗', title: `${rt.name} closed`, sub: `${money(offer.amount)} in the bank.`, kind: 'good', ms: 5000 });
-        Shell.paintMain(); Shell.paintTopbar();
-      } },
-    ] });
-});
+onAction('raise', (d) => Dialogs.showRaise(d.v));
 
 // ── World / projects / endings ─────────────────────────────────────────────
 onAction('project', (d) => {
@@ -661,6 +704,10 @@ onAction('buy-perk', (d) => {
   S.legacy.perks[d.v] = lvl + 1;
   Save.saveLegacy(S.legacy);
   markDirty();
+  World.observeFounderAction(S, {
+    surface: 'legacy', action: 'buy_legacy_perk', summary: `upgraded legacy perk ${p.name} to ${lvl + 1}`,
+    details: { perk: p.name, level: lvl + 1, cost }, notify: false,
+  }, { notify: false });
   toast({ icon: p.icon, title: `${p.name} → ${lvl + 1}`, kind: 'good' });
   Shell.paintMain();
 });
@@ -717,151 +764,13 @@ onAction('thread', (d, el) => {
 });
 
 // ── Ask ARIA ───────────────────────────────────────────────────────────────
-onAction('ask-aria', () => {
-  const r = askAria(S);
-  const char = CHARACTERS.aria;
-  sfx('prompt');
-  Modal.dialog({ title: 'ARIA', wide: true,
-      body: `<div class="row g14 mb16" style="align-items:flex-start">
-          ${char?.img ? `<div class="event-portrait" style="width:52px;height:52px;flex:0 0 52px;border-color:${char.color}44">
-            <img src="${char.img}" alt="" onerror="this.parentElement.style.display='none'"/></div>` : ''}
-          <div class="small" style="color:var(--ink-2);line-height:1.6;font-style:italic">${esc(r.opener)}</div>
-        </div>
-        <div class="col g10">
-          ${r.findings.map((f, i) => `
-            <div class="panel" style="padding:13px;border-left:2px solid ${sevColor(f.severity)}">
-              <div class="row g8 mb4">
-                <span class="mono tiny" style="color:${sevColor(f.severity)};font-weight:700">${String(i + 1).padStart(2, '0')}</span>
-                <span class="small bold">${esc(f.title)}</span>
-              </div>
-              <div class="tiny dim" style="line-height:1.6">${md(f.text)}</div>
-            </div>`).join('') || '<div class="empty">Nothing material. That is rarer than it sounds.</div>'}
-        </div>
-        <div class="small dim mt16" style="font-style:italic;line-height:1.6">${esc(r.closer)}</div>`,
-      actions: [{ label: 'Thanks', cls: 'btn-primary' }] });
-});
+onAction('ask-aria', () => Dialogs.showAria());
+
 function pickLine(kind) {
   const set = KIND_TEXT[kind] || ['Done.'];
   return set[Math.floor(Math.random() * set.length)];
 }
 
-function sevColor(s) {
-  return s >= 85 ? 'var(--red)' : s >= 65 ? 'var(--amber)' : s >= 40 ? 'var(--cyan)' : 'var(--ink-3)';
-}
-
-// ── Help ───────────────────────────────────────────────────────────────────
-const MANUAL_TABS = [
-  { id: 'walk', name: 'Walkthroughs' },
-  { id: 'keys', name: 'Keys' },
-  { id: 'terms', name: 'Glossary' },
-  { id: 'run', name: 'The run' },
-];
-let manualTab = 'walk';
-
-function manualBody() {
-  if (manualTab === 'walk') return manualWalk();
-  if (manualTab === 'keys') return manualKeys();
-  if (manualTab === 'run') return manualRun();
-  return manualTerms();
-}
-
-function manualWalk() {
-  const rows = Tutorial.chapterStatus();
-  return `<div class="col g8">
-    <div class="small dim mb4">Short, anchored tours of the interface. Each one runs where it applies and holds the clock while it does.</div>
-    ${rows.map((c, i) => {
-      const state = c.done ? 'done' : c.available ? 'ready' : 'later';
-      return `<div class="man-row ${state}">
-        <span class="man-idx">${String(i + 1).padStart(2, '0')}</span>
-        <span class="man-text">
-          <span class="man-name">${esc(c.name)}</span>
-          <span class="man-sub">${esc(c.sub)} · ${c.steps} steps</span>
-        </span>
-        <span class="man-state">${c.done ? 'complete' : c.available ? 'available' : 'not yet'}</span>
-        <button class="btn btn-sm ${c.available ? '' : 'btn-ghost'}" data-man="run:${c.id}"
-          ${c.available ? '' : 'disabled'}>${c.done ? 'Replay' : 'Start'}</button>
-      </div>`;
-    }).join('')}
-    <div class="divider"></div>
-    <div class="row between">
-      <span class="small dim">Offer walkthroughs automatically</span>
-      <button class="btn btn-sm ${Tutorial.isDisabled() ? '' : 'on'}" data-man="toggle" style="min-width:52px">${Tutorial.isDisabled() ? 'OFF' : 'ON'}</button>
-    </div>
-  </div>`;
-}
-
-function manualKeys() {
-  return `<div class="col g8">
-    ${KEYS.map(([k, name, note]) => `<div class="row g10" style="align-items:flex-start">
-      <kbd class="kbd">${esc(k)}</kbd>
-      <span style="min-width:0"><span class="small bold">${esc(name)}</span>
-        ${note ? `<span class="tiny dim" style="display:block;line-height:1.45">${esc(note)}</span>` : ''}</span>
-    </div>`).join('')}
-    <div class="divider"></div>
-    ${FOOTNOTES.map((f) => `<div class="tiny dimmer" style="line-height:1.5">${esc(f)}</div>`).join('')}
-  </div>`;
-}
-
-function manualTerms() {
-  return `<div class="small dim mb12">Every term below is also a hover. Anywhere the interface prints one of these words as a label, resting on it gives you this definition.</div>
-  <div class="man-terms">
-    ${GLOSSARY.map((g) => `<div class="man-group">
-      <div class="man-group-title">${esc(g.group)}</div>
-      ${g.items.map(([n, d]) => `<div class="man-term">
-        <div class="man-term-name">${esc(n)}</div>
-        <div class="man-term-def">${esc(d)}</div>
-      </div>`).join('')}
-    </div>`).join('')}
-  </div>`;
-}
-
-function manualRun() {
-  const act = S?.company.act || 1;
-  return `<div class="col g8">
-    <div class="small dim mb4">Five acts. Each one changes what the game is about, and the previous act's habits stop working.</div>
-    ${ACT_GUIDE.map((a) => `<div class="man-act ${a.act === act ? 'on' : a.act < act ? 'past' : ''}">
-      <div class="man-act-head">
-        <span class="man-act-num">ACT ${['','I','II','III','IV','V'][a.act]}</span>
-        <span class="man-act-name">${esc(a.name)}</span>
-        ${a.act === act ? '<span class="man-act-here">you are here</span>' : ''}
-      </div>
-      <div class="man-act-line">${esc(a.line)}</div>
-      <div class="man-act-row"><span class="man-k">do</span>${esc(a.goal)}</div>
-      <div class="man-act-row"><span class="man-k">watch</span>${esc(a.watch)}</div>
-    </div>`).join('')}
-  </div>`;
-}
-
-function showHelp() {
-  const el = Modal.dialog({ title: 'Manual', wide: true,
-    body: `<div class="man-tabs" id="man-tabs">
-      ${MANUAL_TABS.map((t) => `<button class="branch-tab ${manualTab === t.id ? 'on' : ''}" data-man="tab:${t.id}">${esc(t.name)}</button>`).join('')}
-    </div>
-    <div id="man-body">${manualBody()}</div>`,
-    actions: [{ label: 'Close', cls: 'btn-primary' }] });
-
-  const repaint = () => {
-    const tabs = el.querySelector('#man-tabs');
-    const body = el.querySelector('#man-body');
-    if (!tabs || !body) return;
-    tabs.querySelectorAll('[data-man^="tab:"]').forEach((b) =>
-      b.classList.toggle('on', b.dataset.man === 'tab:' + manualTab));
-    body.innerHTML = manualBody();
-  };
-
-  el.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-man]');
-    if (!b) return;
-    const v = b.dataset.man;
-    if (v.startsWith('tab:')) { manualTab = v.slice(4); sfx('click'); repaint(); return; }
-    if (v === 'toggle') { Tutorial.setDisabled(!Tutorial.isDisabled()); sfx('click'); repaint(); return; }
-    if (v.startsWith('run:')) {
-      const id = v.slice(4);
-      Modal.closeModal();
-      setTimeout(() => Tutorial.start(id), 220);
-    }
-  });
-}
 // Hitting back. The feud is the only system where the world acts on you every
 // few days, so it is the one that most needs an answer.
 onAction('counter', (d, el) => {
@@ -889,54 +798,7 @@ onKey('a', () => { if (inGame && !Modal.isModalOpen()) document.querySelector('[
 onKey('/', () => { if (inGame && !Modal.isModalOpen()) showHelp(); });
 
 // ── Settings ───────────────────────────────────────────────────────────────
-onAction('settings', () => {
-  Modal.dialog({ title: 'Settings', wide: false,
-    body: `<div class="col g12">
-      ${toggle('sound', 'Sound', S.settings.sound)}
-      ${toggle('ambient', 'Ambient bed', S.settings.ambient !== false)}
-      <div class="row between g12">
-        <span class="small">Volume</span>
-        <div style="flex:1;max-width:180px">${sliderHtml('volume', S.settings.volume ?? 0.55, 'var(--green)')}</div>
-      </div>
-      ${toggle('autosave', 'Autosave', S.settings.autosave)}
-      ${toggle('particles', 'Background motion', S.settings.particles)}
-      ${toggle('reducedMotion', 'Reduce motion', S.settings.reducedMotion)}
-      ${toggle('highContrast', 'High contrast', S.settings.highContrast)}
-      ${toggle('confirmBigMoves', 'Confirm large decisions', S.settings.confirmBigMoves)}
-      <div class="divider"></div>
-      <button class="btn btn-sm btn-ghost btn-block" data-act="assistant-link">Play with your assistant</button>
-      <button class="btn btn-sm btn-ghost btn-block" data-act="help">Manual — keys, glossary, walkthroughs</button>
-      <div class="divider"></div>
-      <div class="row g8">
-        <button class="btn btn-sm" data-set="export">Copy save to clipboard</button>
-        <button class="btn btn-sm" data-set="import">Import save</button>
-      </div>
-      <div class="row g8">
-        <button class="btn btn-sm btn-danger" data-set="reset">Abandon this run</button>
-      </div>
-      <div class="tiny dimmer">Saves live in your browser's local storage. Exporting gives you a portable string.</div>
-    </div>`, actions: [] });
-  document.querySelectorAll('[data-toggle]').forEach((b) => b.addEventListener('click', () => {
-    const k = b.dataset.toggle; S.settings[k] = !S.settings[k];
-    if (k === 'sound') { setAudio(S.settings.sound);
-      if (S.settings.sound) { initAudio(); sfx('click'); if (S.settings.ambient !== false) setAmbient(true, () => S?.company.act || 1); } }
-    if (k === 'ambient') setAmbient(S.settings.ambient !== false && S.settings.sound !== false, () => S?.company.act || 1);
-    if (k === 'reducedMotion') document.documentElement.classList.toggle('reduced-motion', !!S.settings.reducedMotion);
-    if (k === 'highContrast') document.documentElement.classList.toggle('high-contrast', !!S.settings.highContrast);
-    if (k === 'particles') setBackgroundEnabled(S.settings.particles);
-    b.classList.toggle('on'); b.textContent = S.settings[k] ? 'ON' : 'OFF';
-  }));
-  document.querySelectorAll('[data-set]').forEach((b) => b.addEventListener('click', async () => {
-    const k = b.dataset.set;
-    if (k === 'export') { await navigator.clipboard.writeText(Save.exportSave(S)); toast({ icon: '⌗', title: 'Save copied.', kind: 'good' }); }
-    if (k === 'import') { const v = prompt('Paste save string:'); if (v && Save.importSave(v)) { location.reload(); } }
-    if (k === 'reset') { if (confirm('Abandon this run? Legacy points are kept.')) { Save.clearSave(); location.reload(); } }
-  }));
-});
-function toggle(key, label, val) {
-  return `<div class="row between"><span class="small">${label}</span>
-    <button class="btn btn-sm ${val ? 'on' : ''}" data-toggle="${key}" style="min-width:52px">${val ? 'ON' : 'OFF'}</button></div>`;
-}
+onAction('settings', showSettings);
 
 // The intro says "click to skip". Nothing was listening, so it did not.
 // Capture phase, so a click on a beat control skips the reveal first and the
@@ -952,16 +814,17 @@ onSlider((key, value) => {
   if (!S) return;
   const [kind, id] = key.split(':');
   if (kind === 'alloc') { setAllocation(S, id, value); Shell.paintMain(); }
-  if (kind === 'volume') {
-    S.settings.volume = value; setVolume(value);
-    const el = document.querySelector('[data-slider="volume"]');
-    if (el) { el.querySelector('.slider-fill').style.width = (value * 100) + '%';
-              el.querySelector('.slider-knob').style.left = (value * 100) + '%'; }
-    return;
-  }
+  if (kind === 'volume') { S.settings.volume = value; setVolume(value); return; }
   if (kind === 'autonomy') {
     const a = S.agents.find((x) => x.id === id);
-    if (a) { a.autonomy = value; markDirty(); Shell.paintMain(); }
+    if (a) {
+      a.autonomy = value; markDirty();
+      World.observeFounderAction(S, {
+        surface: 'agents', action: 'set_agent_autonomy', summary: `set ${a.name} autonomy to ${Math.round(value * 100)}%`,
+        details: { agent: a.name, autonomy: value }, routine: true,
+      });
+      Shell.paintMain();
+    }
   }
 });
 
@@ -971,7 +834,7 @@ onKey('q', (e) => triggerAction('code', e));
 onKey('w', (e) => triggerAction('prompt', e));
 onKey('e', (e) => triggerAction('users', e));
 onKey('r', (e) => triggerAction('post', e));
-onKey('s', () => { if (inGame) { Game.doShipFeature(S); Shell.paintMain(); } });
+onKey('s', () => { if (inGame && !Modal.isModalOpen()) { Game.doShipFeature(S); Shell.paintMain(); } });
 for (let i = 1; i <= 9; i++) {
   onKey(String(i), () => {
     if (S?.narrative.activeEvent && !S.narrative.activeEvent.outcome) {
@@ -995,6 +858,11 @@ onKey('enter', () => {
 onKey('arrowright', () => { if (!inGame) document.querySelector('[data-act="beat-next"]')?.click(); });
 onKey('arrowleft', () => { if (!inGame) document.querySelector('[data-act="beat-back"]')?.click(); });
 onKey('escape', () => {
+  if (AssistantHandoff.isOpen()) { AssistantHandoff.dismiss(); return; }
+  const app = document.getElementById('app');
+  if (app?.classList.contains('wire-open') && !Modal.isModalOpen()) {
+    app.classList.remove('wire-open'); return;
+  }
   if (Modal.isModalOpen() && !S?.narrative.activeEvent) { Modal.closeModal(); return; }
   if (!inGame) document.querySelector('[data-act="beat-back"]')?.click();
 });
@@ -1018,10 +886,10 @@ Modal.setEventHandlers({
     Modal.showOutcome(S.narrative.activeEvent, r?.outcome, r?.effects);
     Shell.paintTopbar();
   },
-  dismiss: () => { dismissEvent(S); Modal.closeModal(); pendingEventShown = null; Shell.paintMain(); Shell.paintNav(); },
+  dismiss: () => { dismissEvent(S); Modal.closeModal(); Shell.paintMain(); Shell.paintNav(); },
 });
 
-on('event:present', (ev) => { pendingEventShown = ev.id; sfx('event'); Modal.showEvent(ev); });
+on('event:present', (ev) => { sfx('event'); Modal.showEvent(ev); });
 on('objective', (o) => { sfx('money'); toast({ icon: '✓', title: `**${o.title}**`, sub: 'Objective complete', kind: 'good', ms: 3400 }); });
 on('agent:hired', () => sfx('hire'));
 on('project:started', () => sfx('project'));
@@ -1125,7 +993,6 @@ on('game:continue', ({ offline }) => {
     ${offline.waiting > 0 ? `<div class="brief-wait">${offline.waiting} thread${offline.waiting === 1 ? '' : 's'} in the Wire are still waiting on an answer.</div>` : ''}
   `, actions: [{ label: 'Get back to work', cls: 'btn-primary' }] });
 });
-function tileHtml(l, v) { return `<div class="stat-tile"><div class="stat-tile-label">${l}</div><div class="stat-tile-value">${v}</div></div>`; }
 
 // ═══ RENDER LOOP ════════════════════════════════════════════════════════════
 let lastMain = 0, lastTop = 0, lastFeed = 0, lastNav = 0, lastStatus = 0, lastTut = 0;
@@ -1140,142 +1007,18 @@ on('frame', () => {
   if (now - lastStatus > 420) { lastStatus = now; Shell.paintStatus(); }
   if (now - lastTut > 1500) {
     lastTut = now;
-    if (!Modal.isModalOpen() && !S.narrative.activeEvent && !Tutorial.isActive()) Tutorial.maybeAutoStart();
+    if (!Modal.isModalOpen() && !S.narrative.activeEvent && !Tutorial.isActive()) {
+      Tutorial.maybeAutoStart();
+      nudgeWorld();
+    }
   }
 });
 
 // Dev harness: ?dev=1&cat=devtools&arch=hacker&days=400&view=research&event=e_first_user
+// It is its own module, fetched only when asked for — nothing in it ships to a
+// player who did not put `dev=1` in the address bar.
 const Q = new URLSearchParams(location.search);
 if (Q.has('setup')) Intro.showIntro(Number(Q.get('setup')) || 0);
-else if (Q.has('dev')) { devBoot(Q); }
-else { Intro.showTitle({ cold: Q.has('cold') ? true : null }); }
-
-function devBoot(q) {
-  Game.startNewGame({
-    founderName: q.get('founder') || 'Alex Rivera',
-    companyName: q.get('company') || 'Meridian',
-    archetype: q.get('arch') || 'hacker',
-    category: q.get('cat') || 'devtools',
-    productName: q.get('company') || 'Meridian',
-    difficulty: q.get('diff') || 'standard',
-    scenario: q.get('scen') || 'none',
-  });
-  enterGame();
-  const days = Number(q.get('days') || 0);
-  if (days > 0) {
-    devSimulate(days);
-  }
-  if (q.get('view')) Shell.setView(q.get('view'));
-  if (q.get('wtab')) WorldView.setWorldTab(q.get('wtab'));
-  if (q.get('event')) {
-    import('./data/events.js').then(({ EVENT_MAP }) => {
-      const e = EVENT_MAP[q.get('event')];
-      if (e) import('./systems/narrative.js').then((N) => N.presentEvent(S, e));
-    });
-  }
-  if (q.get('end')) {
-    const e = ENDINGS.find((x) => x.id === q.get('end'));
-    if (e) { S.ending = { id: e.id, name: e.name, tone: e.tone, day: Math.floor(S.time.day) }; showEnding(e); }
-  }
-  if (q.has('aria')) setTimeout(() => document.querySelector('[data-act="ask-aria"]')?.click(), 60);
-  if (q.get('dlg')) setTimeout(() => {
-    const map = { recruit: '[data-act="recruit"]', raise: '[data-act="raise"]', tools: '[data-act="agent-tools"]',
-      newprod: '[data-act="new-product"]', settings: '[data-act="settings"]' };
-    document.querySelector(map[q.get('dlg')] || '')?.click();
-  }, 80);
-  if (q.has('help')) setTimeout(() => showHelp(), 60);
-  if (q.get('tut')) setTimeout(() => Tutorial.start(q.get('tut'), { from: Number(q.get('tstep') || 0) }), 300);
-  if (q.get('regions')) devRegions(Number(q.get('regions')) || 0);
-  if (q.has('feud')) devFeud();
-  if (q.has('career')) devCareer();
-  if (q.has('brief')) setTimeout(() => emit('game:continue', { offline: {
-    days: 3.4, from: Math.max(0, Math.floor(S.time.day) - 3), to: Math.floor(S.time.day),
-    gained: { cash: 4.1e6, users: 128000, mrr: 92000, valuation: 8.4e8, features: 3, research: 2, incidents: 1 },
-    waiting: 2,
-    headlines: S.feed.slice(0, 5).map((f) => ({ type: f.type, tone: f.tone || '', day: f.day, text: f.text, author: f.author || '' })),
-  } }), 400);
-  if (q.has('pause')) S.settings.paused = true;
-  Shell.paintMain(); Shell.paintTopbar(); Shell.paintNav(); Shell.paintFeed();
-}
-
-// Dev harness: a plausible career ledger, for looking at the panel.
-function devCareer() {
-  const runs = [
-    ['bankrupt', 'Out Of Runway', 'bad', 'hacker', 'devtools', 'Northwind', 3.1e6, 214, 1, 7],
-    ['acquired', 'The Responsible Outcome', 'neutral', 'hustler', 'consumer', 'Palegrove', 9.4e9, 512, 3, 34],
-    ['steward', 'The Steward', 'good', 'researcher', 'agents', 'Cinderpath', 2.2e12, 1043, 5, 88],
-    ['sovereign', 'The Sovereign', 'dark', 'operator', 'b2b', 'Ninefold', 41e12, 1218, 5, 126],
-  ];
-  S.legacy.log = runs.map(([ending, endingName, tone, archetype, category, company, valuation, day, act, gain], i) => ({
-    run: i + 1, day, ending, endingName, tone, archetype, category, company,
-    valuation, users: valuation / 4200, act, difficulty: i > 1 ? 'brutal' : 'standard',
-    scenario: 'none', gain, seconds: 3600 * (i + 2),
-  }));
-  S.legacy.runs = runs.length;
-  Shell.paintMain();
-}
-
-// Dev harness: force a rivalry so the dossier can be seen without waiting for
-// one to develop naturally.
-function devFeud() {
-  Promise.all([import('./systems/nemesis.js'), import('./systems/market.js')]).then(([N, M]) => {
-    let list = M.activeCompetitors(S);
-    if (!list.length) { M.spawnCompetitor(S, { scale: 90, quality: 1.4 }); list = M.activeCompetitors(S); }
-    const c = list.sort((a, b) => b.threat - a.threat)[0];
-    c.day = S.time.day - 200;
-    c.users = Math.max(c.users, totalUsers(S) * 0.7);
-    c.mrr = Math.max(c.mrr, totalMrr(S) * 0.6);
-    const n = N.nemesisState(S);
-    n.id = c.id; n.since = Math.max(0, S.time.day - 180); n.grudge = 2.1; n.moves = [];
-    for (let i = 0; i < 4; i++) N.runMove(S, c);
-    S.market.priceSiege = 18;
-    Shell.paintMain(); Shell.paintFeed();
-  });
-}
-
-// Dev harness: plant presence so the tactical display can be seen with a board
-// in progress rather than an empty one.
-function devRegions(n) {
-  import('../src/systems/regions.js').catch(() => import('./systems/regions.js')).then((R) => {
-    R.initRegions(S);
-    import('./data/regions.js').then(({ REGIONS, STAGES }) => {
-      REGIONS.slice(0, n).forEach((r, i) => {
-        const st = S.world.regions[r.id];
-        st.stage = STAGES[Math.min(STAGES.length - 1, 1 + (i % 4))].id;
-        st.stance = 0.55 + (i % 4) * 0.1;
-      });
-      Shell.paintMain();
-    });
-  });
-}
-
-// Deterministic-ish fast-forward used only by the dev harness.
-function devSimulate(days) {
-  const wasRealtime = S.meta.realtime;
-  S.meta.realtime = false;   // let the fast-forward draw events freely
-  const step = () => {
-    for (let i = 0; i < 3; i++) {
-      if (S.founder.focus > 30 && S.company.cash > 200) ACTION_FNS.prompt({ clientX: 0, clientY: 0 });
-      else if (S.founder.focus > 5) ACTION_FNS.code({ clientX: 0, clientY: 0 });
-    }
-    const p = activeProduct(S);
-    for (let i = 0; i < 3; i++) { const r = Game.doShipFeature(S); if (!r.ok) break; }
-    if (p && !p.launched && p.features.length >= 4) Game.doLaunch(S);
-    if (!S.research.active) {
-      const av = availableResearch(S).sort((a, b) => a.cost - b.cost);
-      if (av.length) startResearch(S, av[0].id);
-    }
-    if (S.agents.length < maxAgents(S) && S.company.cash > hireCost(S) * 3) hireAgent(S, rollCandidate(S));
-    if (S.company.directive === 'none') { S.company.directive = 'ship'; S.company.directiveSince = S.time.day; markDirty(); }
-    if (S.narrative.activeEvent && !S.narrative.activeEvent.outcome) {
-      const ch = S.narrative.activeEvent.choices || [];
-      const ENDERS = /Take it\. Life-changing|Take it\. This is a good outcome|Honour it\. You said a number/;
-      let idx = ch.findIndex((c) => !ENDERS.test(c.label));
-      resolveChoice(S, idx < 0 ? 0 : idx); dismissEvent(S); Modal.closeModal();
-    }
-  };
-  for (let d = 0; d < days; d++) { step(); Loop.simulate(1); }
-  S.meta.realtime = wasRealtime;
-  if (S.narrative.activeEvent) { dismissEvent(S); Modal.closeModal(); }
-  Shell.paintMain(); Shell.paintTopbar(); Shell.paintNav(); Shell.paintFeed();
-}
+else if (Q.has('dev')) {
+  import('./dev.js').then((D) => D.devBoot(Q, { enterGame, showEnding }));
+} else { Intro.showTitle({ cold: Q.has('cold') ? true : null }); }

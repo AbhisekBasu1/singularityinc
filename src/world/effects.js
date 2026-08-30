@@ -105,11 +105,6 @@ export function describeEffects(effects = {}) {
 // The net effect on one key across a whole choice — used by the protected-key
 // rule, which forbids a card that is adverse on the same axis whichever button
 // the founder presses.
-export function netOn(choice, key) {
-  const v = choice?.effects?.[key];
-  return Number.isFinite(v) ? v : 0;
-}
-
 // Heat is the one key where "up" is bad. Everything else reads the normal way.
 export const ADVERSE_WHEN_POSITIVE = new Set(['heat', 'debt']);
 

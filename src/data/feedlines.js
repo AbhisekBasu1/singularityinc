@@ -36,7 +36,7 @@ export const SOCIAL = {
     '{founder} has shipped more this quarter than my last three employers combined',
     'the {product} changelog is better content than most tech newsletters',
     'PSA: {product} added the thing you\'ve been asking for. yes that one.',
-    'switched from {rival} to {product}. the migration took eleven minutes.',
+    'switched from {rival} to {product}. the migration took twenty-six minutes.',
   ],
   big: [
     '{company} is now doing {mrr}/mo. one person. I need to lie down.',

@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // THE LOOP — real-time accumulator → in-game days → daily simulation pass.
 // ─────────────────────────────────────────────────────────────────────────────
-import { TIME, CODE, WORLD } from '../data/balance.js';
+import { TIME, CODE, WORLD, FLOWS } from '../data/balance.js';
 import { S } from './state.js';
 import { emit } from './bus.js';
 import { computeMods, markDirty } from '../systems/modifiers.js';
@@ -49,10 +49,10 @@ export function start() {
   watchdog = setInterval(() => {
     if (!running) return;
     const now = performance.now();
-    if (now - lastAdvance < 400) return;      // rAF is doing its job
-    advance(now);
+    if (now - lastAdvance < TIME.WATCHDOG_IDLE_MS) return; // rAF is doing its job
+    safeAdvance(now);
     emit('frame', 0);
-  }, 250);
+  }, TIME.WATCHDOG_INTERVAL_MS);
 }
 export function stop() {
   running = false;
@@ -63,7 +63,8 @@ export function stop() {
 
 // Shared advance step, driven by whichever clock source got here first.
 function advance(now) {
-  const dtReal = Math.min(1.0, Math.max(0, (now - lastFrame) / 1000));
+  const gapReal = Math.max(0, (now - lastFrame) / 1000);
+  const dtReal = Math.min(TIME.MAX_FRAME_DT_S, gapReal);
   lastFrame = now;
   lastAdvance = now;
   // `toolBusy` is held for the duration of any mutating tool call. Without it
@@ -71,26 +72,53 @@ function advance(now) {
   // arrives against a world one tick older than the one it was written for.
   // It lives here rather than on the state object because a save taken while
   // it was true would reload into a game whose clock never starts.
-  if (!S || S.settings.paused || S.narrative.activeEvent || S.modalBlocking
-      || S.tutorialHold || toolBusy) return dtReal;
+  if (advanceBlocked()) return dtReal;
   const speed = TIME.SPEEDS[clamp(S.settings.speed - 1, 0, TIME.SPEEDS.length - 1)] || 1;
+  if (gapReal > TIME.WAKE_GAP_S) {
+    let remaining = Math.min(gapReal, TIME.MAX_WAKE_CATCHUP_S) * speed / TIME.DAY_SECONDS;
+    while (remaining > 0 && !advanceBlocked()) {
+      const step = Math.min(TIME.WAKE_CHUNK_DAYS, remaining);
+      simulate(step);
+      S.meta.playSeconds += step * TIME.DAY_SECONDS / speed;
+      remaining -= step;
+    }
+    return dtReal;
+  }
   acc += dtReal * speed;
   S.meta.playSeconds += dtReal;
   const dayStep = 1 / TIME.DAY_SECONDS;
   let guard = 0;
-  while (acc >= 1 / TIME.TICK_HZ && guard++ < 600) {
+  while (acc >= 1 / TIME.TICK_HZ && guard++ < TIME.MAX_TICKS_PER_ADVANCE) {
     acc -= 1 / TIME.TICK_HZ;
     simulate(dayStep / TIME.TICK_HZ);
   }
-  if (guard >= 600) acc = 0;   // never let a long stall queue up unbounded work
+  if (guard >= TIME.MAX_TICKS_PER_ADVANCE) acc = 0; // never queue unbounded work
   return dtReal;
+}
+
+function advanceBlocked() {
+  return !S || S.settings.paused || S.narrative.activeEvent || S.modalBlocking
+    || S.tutorialHold || toolBusy;
+}
+
+// A throw inside a tick used to end the game: the rAF was re-armed after the
+// call that threw, so the loop simply stopped, and the watchdog threw the same
+// way every 250ms. The frame survives it now, and says so once per message.
+let lastTickError = '';
+function safeAdvance(now) {
+  try { return advance(now); }
+  catch (e) {
+    const msg = String(e?.message || e);
+    if (msg !== lastTickError) { lastTickError = msg; console.error('[tick]', e); }
+    lastFrame = now; lastAdvance = now;
+    return 0;
+  }
 }
 
 function frame(now) {
   if (!running) return;
-  const dtReal = advance(now);
-  emit('frame', dtReal);
-  rafId = requestAnimationFrame(frame);
+  try { emit('frame', safeAdvance(now)); }
+  finally { if (running) rafId = requestAnimationFrame(frame); }
 }
 
 // Advance the world by `days` (fractional). Also used for offline catch-up.
@@ -103,28 +131,30 @@ export function simulate(days, opts = {}) {
 
   // ── Continuous flows ──────────────────────────────────────────────────────
   const fo = tickFounder(S, days, m);
-  const { out: lanes, side } = computeLaneOutput(S, m);
+  const laneOutput = computeLaneOutput(S, m);
+  const { out: lanes, side } = laneOutput;
 
   const codeGain = (fo.code + lanes.build * CODE.AGENT_CODE_MULT) * days;
   S.resources.code += codeGain;
-  S.resources.insight += (fo.insight + side.insight + lanes.growth * 0.10) * days;
-  S.resources.reputation += (fo.reputation + side.rep + lanes.growth * 0.055) * days;
+  S.resources.insight += (fo.insight + side.insight + lanes.growth * FLOWS.GROWTH_INSIGHT_PER_WORK) * days;
+  S.resources.reputation += (fo.reputation + side.rep + lanes.growth * FLOWS.GROWTH_REP_PER_WORK) * days;
 
   // Tech debt from agents; ops pays it down
   const debtGain = side.debt * days;
-  const debtPaid = (lanes.ops * 0.62 + m['+debtDecay']) * days;
+  const debtPaid = (lanes.ops * FLOWS.OPS_DEBT_PER_WORK + m['+debtDecay']) * days;
   S.resources.techDebt = clamp(S.resources.techDebt + debtGain - debtPaid, 0, m.debtCap);
 
   // Ops raises the reliability the system tends toward, rather than patching it directly.
   const prod = S.products.find((p) => p.id === S.activeProductId) || S.products[0];
-  S._opsRelBonus = Math.min(0.30, Math.sqrt(Math.max(0, lanes.ops)) * 0.030);
+  S._opsRelBonus = Math.min(FLOWS.OPS_RELIABILITY_CAP,
+    Math.sqrt(Math.max(0, lanes.ops)) * FLOWS.OPS_RELIABILITY_SCALE);
   // Growth lane feeds awareness
-  if (prod) prod.awareness += (fo.awareness + lanes.growth * 1.9) * days * m.userMult;
+  if (prod) prod.awareness += (fo.awareness + lanes.growth * FLOWS.GROWTH_AWARENESS_PER_WORK) * days * m.userMult;
 
   // Compute & data. Self-replicating fabs compound multiplicatively over time.
   if (S.unlocks.compute) {
     if (m.computeCompound) {
-      S.resources.computeGrowth = Math.min(4e5,
+      S.resources.computeGrowth = Math.min(FLOWS.COMPUTE_GROWTH_CAP,
         (S.resources.computeGrowth || 1) * Math.pow(1 + m.computeCompound, days));
     }
     S.resources.computeCap = Math.max(0,
@@ -137,15 +167,19 @@ export function simulate(days, opts = {}) {
       (m['+energyCap'] + (S.resources.energyGranted || 0))
       * m.energyCapMult * (S.resources.energyScale || 1));
   }
-  S.resources.data += (m['+dataRate'] + totalUsers(S) * 0.00008) * days;
-  if (S.unlocks.influence) S.resources.influence += (m['+influenceRate'] + S.resources.reputation * 0.0015) * days;
+  S.resources.data += (m['+dataRate'] + totalUsers(S) * FLOWS.DATA_PER_USER_DAY) * days;
+  if (S.unlocks.influence) S.resources.influence += (m['+influenceRate']
+    + S.resources.reputation * FLOWS.INFLUENCE_PER_REP_DAY) * days;
 
   // Alignment drift
-  const alignTarget = clamp(0.5 + (S.research.done.constitutional_ai ? 0.25 : 0)
-    + (S.research.done.interpretability ? 0.15 : 0) - avgAutonomy(S) * 0.35, 0, 1);
+  const alignTarget = clamp(FLOWS.ALIGN_BASE_TARGET
+    + (S.research.done.constitutional_ai ? FLOWS.ALIGN_CONSTITUTIONAL_BONUS : 0)
+    + (S.research.done.interpretability ? FLOWS.ALIGN_INTERPRETABILITY_BONUS : 0)
+    - avgAutonomy(S) * FLOWS.ALIGN_AUTONOMY_DRAG, 0, 1);
   if (m.directiveAlign) S.resources.alignment = clamp(S.resources.alignment + m.directiveAlign * days, 0, 1);
   S.resources.alignment = Math.max(m.alignFloor,
-    clamp(S.resources.alignment + ((alignTarget - S.resources.alignment) * 0.02 + side.alignDelta) * days, 0, 1));
+    clamp(S.resources.alignment + ((alignTarget - S.resources.alignment)
+      * FLOWS.ALIGN_CONVERGENCE_PER_DAY + side.alignDelta) * days, 0, 1));
 
   // Products
   for (const p of S.products) tickProduct(S, p, days, m);
@@ -170,7 +204,7 @@ export function simulate(days, opts = {}) {
     if (S.resources.code >= cost && (S.settings.autoShip ?? true)) {
       S.resources.code -= cost;
       shipFeature(S, prod);
-      gainXp(S, 4 + prod.features.length * 0.5);
+      gainXp(S, FLOWS.AUTO_SHIP_XP_BASE + prod.features.length * FLOWS.AUTO_SHIP_XP_PER_FEATURE);
     }
   }
 
@@ -179,7 +213,7 @@ export function simulate(days, opts = {}) {
   // ── Day boundary ──────────────────────────────────────────────────────────
   const newDay = Math.floor(S.time.day);
   let guard = 0;
-  while (newDay > S.time.lastDayProcessed && guard++ < 3000) {
+  while (newDay > S.time.lastDayProcessed && guard++ < TIME.MAX_DAY_BOUNDARIES) {
     S.time.lastDayProcessed++;
     onDayBoundary(S, S.time.lastDayProcessed, m);
   }
@@ -193,7 +227,7 @@ export function simulate(days, opts = {}) {
 // toward a share of global GDP rather than growing without limit.
 function applyEconomicSaturation(S) {
   const gdp = WORLD.GDP_2027 * Math.pow(1 + WORLD.GDP_GROWTH, S.time.day / 360);
-  const capMonthly = gdp * 0.034 / 12;
+  const capMonthly = gdp * FLOWS.GDP_REVENUE_SHARE / 12;
   let total = 0;
   for (const p of S.products) if (p.launched) total += p.mrr;
   if (total <= 0) return;
@@ -245,7 +279,7 @@ function onDayBoundary(S, day, m) {
 
   // Interest / debt service
   if (S.company.debtOwed > 0) {
-    const pay = S.company.debtOwed * 0.0012;
+    const pay = S.company.debtOwed * FLOWS.DEBT_SERVICE_DAILY;
     S.company.debtOwed -= pay;
     if (S.company.debtOwed < 1) S.company.debtOwed = 0;
   }
@@ -260,11 +294,11 @@ export function offlineCatchUp(S) {
   const now = Date.now();
   const elapsedSec = Math.max(0, (now - (S.meta.lastRealTime || now)) / 1000);
   S.meta.lastRealTime = now;
-  if (elapsedSec < 45) return null;
+  if (elapsedSec < TIME.OFFLINE_MIN_SECONDS) return null;
   if (computeMods(S).noOffline) return null;   // One Take: nothing happens while you are away
   const hours = Math.min(elapsedSec / 3600, TIME.MAX_OFFLINE_HOURS);
   const days = TIME.MAX_OFFLINE_DAYS * (1 - Math.exp(-hours / TIME.OFFLINE_HALFLIFE_H));
-  if (days < 0.5) return null;
+  if (days < TIME.OFFLINE_MIN_DAYS) return null;
   const capped = elapsedSec;
   const before = {
     cash: S.company.cash, users: totalUsers(S), mrr: totalMrr(S),
@@ -275,8 +309,8 @@ export function offlineCatchUp(S) {
   // Simulate in chunks for stability
   let remaining = days;
   let guard = 0;
-  while (remaining > 0 && guard++ < 4000) {
-    const step = Math.min(0.25, remaining);
+  while (remaining > 0 && guard++ < TIME.OFFLINE_MAX_CHUNKS) {
+    const step = Math.min(TIME.OFFLINE_CHUNK_DAYS, remaining);
     simulate(step, { offline: true });
     remaining -= step;
   }

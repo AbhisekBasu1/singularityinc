@@ -23,7 +23,8 @@ export function initRace(S) {
   S.world.race = {
     started: S.time.day,
     labs: Object.fromEntries(LABS.map((l) => [l.id, {
-      progress: 4 + rand() * 7, momentum: 1, alive: true, funded: true, safety: l.safety,
+      progress: RACE.START_PROGRESS_BASE + rand() * RACE.START_PROGRESS_RANGE,
+      momentum: 1, alive: true, funded: true, safety: l.safety,
     }])),
     beats: {},
     crossed: null,
@@ -38,13 +39,17 @@ export function initRace(S) {
 export function playerCapability(S) {
   let p = 0;
   for (const k of INTELLIGENCE_KEYS) {
-    if (S.research.done[k]) p += (RESEARCH_MAP[k]?.tier || 1) * 0.95;
+    if (S.research.done[k]) p += (RESEARCH_MAP[k]?.tier || 1) * RACE.NODE_TIER_VALUE;
   }
-  p += Math.min(26, Math.log10(1 + (S.resources.computeCap || 0)) * 4.4);
-  p += Math.min(5, Math.log10(1 + (S.resources.data || 0)) * 1.1);
-  p += Math.min(8, S.agents.filter((a) => ['inhouse', 'recursive', 'transcendent'].includes(a.model)).length * 1.6);
-  if (S.research.done.recursive_self_improvement) p *= 1.20;
-  if (S.research.done.ascension_protocol) p *= 1.18;
+  p += Math.min(RACE.COMPUTE_CAPABILITY_CAP,
+    Math.log10(1 + (S.resources.computeCap || 0)) * RACE.COMPUTE_CAPABILITY_RATE);
+  p += Math.min(RACE.DATA_CAPABILITY_CAP,
+    Math.log10(1 + (S.resources.data || 0)) * RACE.DATA_CAPABILITY_RATE);
+  p += Math.min(RACE.AGENT_CAPABILITY_CAP,
+    S.agents.filter((a) => ['inhouse', 'recursive', 'transcendent'].includes(a.model)).length
+      * RACE.AGENT_CAPABILITY_RATE);
+  if (S.research.done.recursive_self_improvement) p *= RACE.RECURSIVE_CAPABILITY_MULT;
+  if (S.research.done.ascension_protocol) p *= RACE.ASCENSION_CAPABILITY_MULT;
   return Math.max(0, p);
 }
 
@@ -55,20 +60,21 @@ export function playerCapability(S) {
 export function pushTarget(S) {
   let t = 0;
   const str = directiveStrength(S);
-  if (S.company.directive === 'ascend') t += 0.42 * str;
-  else if (S.company.directive === 'deep') t += 0.17 * str;
+  if (S.company.directive === 'ascend') t += RACE.ASCEND_DIRECTIVE_PUSH * str;
+  else if (S.company.directive === 'deep') t += RACE.DEEP_DIRECTIVE_PUSH * str;
   if (S.agents.length) {
     const onFrontier = S.agents.filter((a) => a.lane === 'research' || a.lane === 'moonshot').length;
-    t += Math.min(0.22, (onFrontier / S.agents.length) * 0.30);
+    t += Math.min(RACE.AGENT_PUSH_CAP, (onFrontier / S.agents.length) * RACE.AGENT_PUSH_RATE);
   }
-  t += Math.min(0.12, (S.founder.allocation?.learn || 0) * 0.40);
+  t += Math.min(RACE.FOUNDER_PUSH_CAP,
+    (S.founder.allocation?.learn || 0) * RACE.FOUNDER_PUSH_RATE);
   const built = S.world.projectsBuilt || {};
-  for (const k of FRONTIER_PROJECTS) if (built[k]) t += 0.045;
-  t = Math.min(t, 0.88);
+  for (const k of FRONTIER_PROJECTS) if (built[k]) t += RACE.PROJECT_PUSH;
+  t = Math.min(t, RACE.INTENTIONAL_PUSH_CAP);
   // Safety is a speed limit. You are permitted to decline to observe it.
-  t += (1 - clamp(S.resources.alignment ?? 0.5, 0, 1)) * 0.14;
-  if (S.narrative.flags.moratorium) t *= 0.25;      // you agreed to stop
-  if (S.narrative.flags.frozen_weights) t *= 0.15;  // you stopped, on purpose
+  t += (1 - clamp(S.resources.alignment ?? 0.5, 0, 1)) * RACE.MISALIGN_PUSH_RATE;
+  if (S.narrative.flags.moratorium) t *= RACE.MORATORIUM_PUSH_MULT; // you agreed to stop
+  if (S.narrative.flags.frozen_weights) t *= RACE.FROZEN_PUSH_MULT; // you stopped, on purpose
   return clamp(t, 0, 1);
 }
 
@@ -117,7 +123,8 @@ export function tickRace(S, days, m = computeMods(S)) {
     const st = r.labs[l.id];
     if (!st?.alive) continue;
     // Rivals accelerate when behind (they can see your papers) and when hype is high.
-    const behind = clamp((mine - st.progress) / 45, -0.5, 0.8);
+    const behind = clamp((mine - st.progress) / RACE.CATCHUP_DISTANCE,
+      RACE.CATCHUP_MIN, RACE.CATCHUP_MAX);
     // The whole field speeds up as the science matures.
     const raceDays = S.time.day - (r.started || 0);
     // And once you are visibly close, the field sprints. Measured before this
@@ -128,19 +135,22 @@ export function tickRace(S, days, m = computeMods(S)) {
     // safe.
     const sprint = 1 + Math.max(0, mine - RACE.SPRINT_FROM) / (100 - RACE.SPRINT_FROM)
                      * RACE.SPRINT_GAIN;
-    let rate = l.base * (1 + raceDays / 2600) * (1 + behind * 0.60) * sprint
-             * (0.7 + S.market.hype * 0.6) * m.competitorGrowth * (m.rivalRace || 1);
-    if (S.research.done.standards_body) rate *= 0.78;
-    if (S.narrative.flags.moratorium) rate *= 0.45;
-    if (S.narrative.flags.opened_weights) rate *= 1.35;
-    if (S.narrative.flags.published_traces) rate *= 1.12;
-    rate *= 1 + gaussian(0, l.volatility) * 0.35;
+    let rate = l.base * (1 + raceDays / RACE.MATURITY_DAYS)
+             * (1 + behind * RACE.CATCHUP_RATE) * sprint
+             * (RACE.HYPE_BASE + S.market.hype * RACE.HYPE_RATE)
+             * m.competitorGrowth * (m.rivalRace || 1);
+    if (S.research.done.standards_body) rate *= RACE.STANDARDS_MULT;
+    if (S.narrative.flags.moratorium) rate *= RACE.MORATORIUM_RIVAL_MULT;
+    if (S.narrative.flags.opened_weights) rate *= RACE.OPEN_WEIGHTS_MULT;
+    if (S.narrative.flags.published_traces) rate *= RACE.TRACE_PUBLISH_MULT;
+    rate *= 1 + gaussian(0, l.volatility) * RACE.VOLATILITY_SCALE;
     // Once somebody crosses, the race is decided; nobody else "arrives".
-    const ceiling = r.crossed ? 99 : 100;
+    const ceiling = r.crossed ? RACE.POST_CROSS_CEILING : 100;
     st.progress = clamp(st.progress + Math.max(0, rate) * days, 0, ceiling);
 
     // A lab can stall out or be shut down.
-    if (st.progress > 20 && chance(0.00025 * days * (1 - l.safety))) {
+    if (st.progress > RACE.LAB_FAILURE_PROGRESS
+        && chance(RACE.LAB_FAILURE_CHANCE * days * (1 - l.safety))) {
       st.alive = false;
       pushFeed(S, { type: 'news', author: '', tone: 'good',
         text: `**${l.name}** halts frontier work after an internal incident.` });

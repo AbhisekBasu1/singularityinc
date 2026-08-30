@@ -4,9 +4,12 @@
 
 .stage {
   height: 100%; width: 100%; overflow-y: auto; overflow-x: hidden;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: center; align-items: safe center; justify-content: center;
   position: relative; padding: 32px 24px;
 }
+/* `safe center`: content taller than the viewport scrolls from its top instead
+   of centring and losing its head above the fold. The plain `center` before it
+   is the fallback for a browser that does not know the keyword. */
 .stage::before {
   content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
   background-image: url('../assets/img/title_bg.jpg');
@@ -192,7 +195,8 @@
 .tc-icon { width: 20px; text-align: center; font-size: 16px; }
 
 .adv-toggle {
-  margin-top: 20px; font-size: 12px; color: var(--ink-3);
+  display: block; margin: 20px 0 0;   /* its own line, whichever blocks follow it */
+  font-size: 12px; color: var(--ink-3);
   border-bottom: 1px dashed var(--line-2); padding-bottom: 2px; transition: color .15s;
 }
 .adv-toggle:hover { color: var(--ink); }
@@ -260,4 +264,265 @@
 .curtain-mono {
   font-family: var(--mono); font-size: 0.72em; letter-spacing: 0.24em;
   text-transform: uppercase; color: var(--green);
+}
+
+/* ── The world, on the title ──────────────────────────────────────────────
+   The headline feature, first screen. Reads as an instrument panel rather
+   than a marketing card: a violet rail, mono labels, the tools as chips. */
+.title-webmcp {
+  position: relative; margin: 26px auto 0; max-width: 640px; text-align: left;
+  padding: 16px 18px 15px 20px;
+  border: 1px solid var(--edge); border-left: 2px solid var(--violet); border-radius: 0;
+  background: linear-gradient(180deg, rgba(139,92,246,0.09), rgba(139,92,246,0.03));
+}
+.title-webmcp::after {
+  content: ''; position: absolute; right: -1px; top: -1px; width: 10px; height: 10px;
+  border-top: 1px solid var(--edge-hot); border-right: 1px solid var(--edge-hot);
+}
+.wm-kicker {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--violet);
+}
+.wm-mark { font-size: 12px; }
+.wm-lead { font-size: 13.5px; line-height: 1.65; color: var(--ink-2); margin: 10px 0 0; }
+.wm-lead.dim { color: var(--ink-3); font-size: 12.5px; margin-top: 8px; }
+.wm-lead b { color: var(--ink); font-weight: 600; }
+.wm-status {
+  display: flex; align-items: center; gap: 8px; margin-top: 14px; padding-top: 12px;
+  border-top: 1px solid var(--etch);
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ink-3);
+}
+.wm-dot { width: 7px; height: 7px; background: var(--ink-5); flex: 0 0 7px; }
+.wm-dot.on { background: var(--green); box-shadow: 0 0 9px var(--green); }
+.wm-dot.on + .wm-state { color: var(--green); }
+.wm-tier { margin-left: auto; color: var(--ink-4); }
+.wm-reason { font-size: 11.5px; line-height: 1.55; color: var(--ink-3); margin-top: 6px; }
+.wm-label {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--ink-4); margin-top: 12px;
+}
+.wm-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.wm-tool {
+  font-family: var(--mono); font-size: 11px; color: var(--cyan); padding: 3px 7px;
+  border: 1px solid rgba(77,208,225,0.28); background: rgba(77,208,225,0.06); cursor: default;
+}
+.wm-laters { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font-size: 11.5px; color: var(--ink-3); line-height: 1.5; }
+.wm-later b { font-family: var(--mono); font-weight: 500; color: var(--ink-2); }
+.wm-cta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
+.wm-say { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+.wm-say b { color: var(--green); font-weight: 600; }
+@media (max-width: 520px) {
+  .title-webmcp { padding: 14px 14px 13px 16px; }
+  .wm-tier { display: none; }
+}
+/* A 900px-tall desktop is the common one, and the panel must not push Begin
+   below the fold there. Under this height the panel tightens and the "earned
+   by play" line steps aside — the How-it-works dialog still carries it. */
+@media (max-height: 960px) {
+  .title-sub { margin-top: 14px; }
+  .title-sub.dim2 { margin-top: 8px; }
+  .title-webmcp { margin-top: 16px; padding: 12px 16px 12px 18px; }
+  .wm-lead { font-size: 12.5px; margin-top: 7px; line-height: 1.55; }
+  .wm-lead.dim { margin-top: 5px; }
+  .wm-status { margin-top: 10px; padding-top: 9px; }
+  .wm-label { margin-top: 8px; }
+  .wm-tools { margin-top: 5px; }
+  .wm-laters, .wm-label-later { display: none; }
+  .wm-cta { margin-top: 10px; }
+  .title-actions { margin-top: 18px; }
+  .title-legacy { margin-top: 16px; }
+  .title-foot { margin-top: 14px; }
+}
+
+/* ── The question at the threshold ────────────────────────────────────────
+   Two answers, both real, only in a browser with site tools. The recommended
+   one is lit; the other is a plain plate. Square, like everything else. */
+.assistant-pick { margin-top: 22px; text-align: left; }
+.ap-kicker {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--violet);
+}
+.ap-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ap-opt {
+  display: flex; flex-direction: column; gap: 6px; text-align: left;
+  padding: 12px 14px; border: 1px solid var(--edge); border-radius: 0;
+  background: rgba(255,255,255,0.02); color: var(--ink-3); cursor: pointer;
+  transition: border-color .16s, background .16s, color .16s;
+}
+.ap-opt b { font-size: 13.5px; color: var(--ink-2); font-weight: 600; }
+.ap-opt span { font-size: 11.5px; line-height: 1.5; }
+.ap-opt span i { color: var(--ink-2); font-style: italic; }
+.ap-opt:hover { border-color: var(--line-2, var(--edge)); background: rgba(255,255,255,0.04); color: var(--ink-2); }
+.ap-opt.on {
+  border-color: var(--violet); background: rgba(139,92,246,0.12); color: var(--ink-2);
+  box-shadow: inset 2px 0 0 var(--violet);
+}
+.ap-opt.on b { color: var(--ink); }
+.ap-handoff {
+  margin-top: 8px; padding: 11px 13px 10px; border: 1px solid rgba(139,92,246,0.32);
+  background: linear-gradient(100deg, rgba(139,92,246,0.11), rgba(77,208,225,0.035));
+  box-shadow: inset 2px 0 0 var(--violet);
+}
+.aph-k {
+  margin-bottom: 7px; font-family: var(--mono); font-size: 9px; letter-spacing: .18em;
+  color: var(--violet); font-weight: 700;
+}
+.aph-flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1.15fr; align-items: center; gap: 7px; }
+.aph-flow span { font-size: 10.5px; line-height: 1.42; color: var(--ink-3); }
+.aph-flow span b {
+  display: inline-grid; place-items: center; width: 17px; height: 17px; margin-right: 4px;
+  border: 1px solid rgba(139,92,246,.45); color: var(--violet); font: 700 8.5px var(--mono);
+}
+.aph-flow span em { color: var(--ink); font-style: normal; }
+.aph-flow > i { color: var(--ink-5); font-size: 10px; }
+.aph-note { margin-top: 7px; font-size: 9.75px; line-height: 1.45; color: var(--ink-4); }
+@media (max-width: 560px) {
+  .ap-row { grid-template-columns: 1fr; }
+  .aph-flow { grid-template-columns: 1fr; gap: 5px; }
+  .aph-flow > i { display: none; }
+}
+
+/* ── Seen it: the panel steps back ──────────────────────────────────────── */
+.title-webmcp.brief { padding-top: 12px; padding-bottom: 12px; }
+.title-webmcp.brief .wm-status { margin-top: 10px; padding-top: 0; border-top: 0; }
+.wm-say.dim { flex-basis: 100%; font-size: 11.5px; color: var(--ink-4); }
+
+/* ── Where the run starts ───────────────────────────────────────────────────
+   This is a real product choice, not an unexplained title-screen shortcut.
+   Both doors say what the player will actually see on the other side. */
+.start-pick { margin-top: 18px; text-align: left; }
+.start-row { display: grid; grid-template-columns: 1fr 1.35fr; gap: 8px; }
+.start-opt {
+  display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 10px 12px;
+  text-align: left; border: 1px solid var(--edge); border-radius: 0;
+  background: rgba(255,255,255,0.02); color: var(--ink-3);
+  transition: border-color .16s, background .16s, color .16s;
+}
+.start-opt b { font-size: 12.5px; color: var(--ink-2); font-weight: 600; }
+.start-opt span { font-size: 10.75px; line-height: 1.45; }
+.start-opt span i { color: var(--violet); font-style: normal; white-space: nowrap; }
+.start-opt:hover { border-color: var(--line-2); background: rgba(255,255,255,0.04); color: var(--ink-2); }
+.start-opt.on {
+  border-color: var(--ac); background: color-mix(in srgb, var(--ac) 10%, transparent);
+  color: var(--ink-2); box-shadow: inset 2px 0 0 var(--ac);
+}
+.start-opt.on b { color: var(--ink); }
+@media (max-width: 560px) { .start-row { grid-template-columns: 1fr; } }
+
+/* ── The actual handoff ────────────────────────────────────────────────────
+   It follows First Light when the AI world was chosen. This is deliberately a
+   proper dialog rather than another toast: the page can publish tools, but a
+   player has to originate the chat turn that uses them. */
+.assistant-handoff-modal { --kind-color: var(--violet); }
+.assistant-handoff { display: flex; flex-direction: column; gap: 16px; }
+.ah-hero { display: grid; grid-template-columns: 74px 1fr; align-items: center; gap: 18px; }
+.ah-signal {
+  width: 72px; height: 72px; display: grid; place-items: center; position: relative;
+  border: 1px solid rgba(139,92,246,.42); background: rgba(139,92,246,.08);
+  color: var(--violet); box-shadow: inset 0 0 28px rgba(139,92,246,.10), 0 0 30px rgba(139,92,246,.08);
+}
+.ah-signal::before, .ah-signal::after {
+  content: ''; position: absolute; inset: 8px; border: 1px solid rgba(139,92,246,.26);
+  animation: ahOrbit 7s linear infinite;
+}
+.ah-signal::after { inset: 16px; border-color: rgba(77,208,225,.25); animation-direction: reverse; animation-duration: 4.5s; }
+.ah-signal span { font-size: 24px; filter: drop-shadow(0 0 9px currentColor); }
+@keyframes ahOrbit { to { transform: rotate(360deg); } }
+.ah-kicker { font: 700 9.5px var(--mono); letter-spacing: .2em; color: var(--violet); }
+.ah-title { margin-top: 5px; font-size: 24px; font-weight: 680; letter-spacing: -.025em; color: var(--ink); }
+.ah-copy { margin-top: 7px; max-width: 650px; font-size: 13px; line-height: 1.6; color: var(--ink-3); }
+.ah-copy b { color: var(--ink-2); font-weight: 650; }
+.ah-copy code { font: 11px var(--mono); color: var(--cyan); }
+.ah-instruction {
+  display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 5px 18px;
+  padding: 14px 16px; border: 1px solid rgba(0,229,160,.34);
+  background: linear-gradient(100deg, rgba(0,229,160,.09), rgba(139,92,246,.06));
+  box-shadow: inset 3px 0 0 var(--green);
+}
+.ah-label { grid-column: 1 / -1; font: 700 8.5px var(--mono); letter-spacing: .19em; color: var(--green); }
+.ah-instruction strong { font: 600 22px var(--mono); letter-spacing: -.02em; color: var(--ink); }
+.ah-hint { align-self: center; font-size: 10.5px; color: var(--ink-4); }
+.ah-route {
+  display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; align-items: stretch; gap: 8px;
+}
+.ah-route > span {
+  min-width: 0; padding: 10px 11px; border: 1px solid var(--line);
+  background: rgba(255,255,255,.018); color: var(--ink-3); font-size: 10.5px; line-height: 1.4;
+}
+.ah-route > span b {
+  float: left; display: grid; place-items: center; width: 20px; height: 20px; margin: 0 8px 3px 0;
+  border: 1px solid rgba(139,92,246,.4); color: var(--violet); font: 700 9px var(--mono);
+}
+.ah-route small { display: block; margin-bottom: 2px; font: 700 8px var(--mono); letter-spacing: .14em; color: var(--ink-2); }
+.ah-route > i { align-self: center; color: var(--ink-5); font-size: 10px; }
+.ah-route .done { border-color: rgba(0,229,160,.25); color: var(--ink-2); }
+.ah-route .done b { border-color: rgba(0,229,160,.35); color: var(--green); }
+.ah-route .live { border-color: rgba(77,208,225,.35); background: rgba(77,208,225,.055); color: var(--ink-2); }
+.ah-route .live b { border-color: rgba(77,208,225,.4); color: var(--cyan); }
+.ah-live {
+  display: flex; align-items: center; gap: 8px; min-height: 20px;
+  font: 650 8.5px var(--mono); letter-spacing: .14em; color: var(--ink-4);
+}
+.ah-live i { width: 6px; height: 6px; flex: 0 0 6px; background: var(--violet); box-shadow: 0 0 8px var(--violet); animation: ahPulse 1.3s ease-in-out infinite; }
+.ah-live.on { color: var(--green); }
+.ah-live.on i { background: var(--green); box-shadow: 0 0 9px var(--green); }
+.ah-live.off i { background: var(--ink-4); box-shadow: none; animation: none; }
+@keyframes ahPulse { 50% { opacity: .28; transform: scale(.72); } }
+.assistant-handoff.connected .ah-signal { border-color: rgba(0,229,160,.5); color: var(--green); background: rgba(0,229,160,.08); }
+.assistant-handoff.connected .ah-kicker { color: var(--green); }
+.assistant-handoff.unavailable .ah-signal { color: var(--ink-4); border-color: var(--line-2); background: rgba(255,255,255,.025); box-shadow: none; }
+.assistant-handoff.unavailable .ah-kicker { color: var(--ink-4); }
+.ah-reason { padding: 10px 12px; border: 1px solid var(--line); background: rgba(255,255,255,.02); font-size: 11px; line-height: 1.5; color: var(--ink-3); }
+html.reduced-motion .ah-signal::before, html.reduced-motion .ah-signal::after, html.reduced-motion .ah-live i { animation: none; }
+@media (max-width: 620px) {
+  .ah-hero { grid-template-columns: 48px 1fr; gap: 12px; }
+  .ah-signal { width: 48px; height: 48px; }
+  .ah-signal::after { display: none; }
+  .ah-title { font-size: 19px; }
+  .ah-copy { font-size: 12px; }
+  .ah-instruction { grid-template-columns: 1fr; }
+  .ah-instruction strong { font-size: 18px; }
+  .ah-hint { display: none; }
+  .ah-route { grid-template-columns: 1fr; gap: 5px; }
+  .ah-route > i { display: none; }
+  .ah-route > span { padding: 8px 10px; }
+}
+@media (max-height: 620px) {
+  .assistant-handoff { gap: 10px; }
+  .ah-signal { width: 52px; height: 52px; }
+  .ah-hero { grid-template-columns: 54px 1fr; gap: 12px; }
+  .ah-title { font-size: 20px; }
+  .ah-copy { margin-top: 4px; line-height: 1.45; }
+  .ah-instruction { padding: 10px 12px; }
+  .ah-route > span { padding: 7px 9px; }
+}
+
+/* The threshold has four real decisions on it. At the in-app browser's common
+   720px height, keep the primary action on the first glass without shrinking
+   any of the earlier, simpler beats. */
+@media (max-height: 760px) {
+  .threshold-beat .beat-chrome { margin-bottom: 18px; }
+  .threshold-beat .threshold-lines { font-size: 20px; line-height: 1.22; }
+  .threshold-beat .threshold-lines .tw-line { margin-bottom: 9px; }
+  .threshold-beat .threshold-card { margin-top: 15px; padding: 11px 14px; gap: 7px; }
+  .threshold-beat .tc-row { font-size: 12.5px; gap: 8px; }
+  .threshold-beat .tc-icon { font-size: 13px; }
+  .threshold-beat .assistant-pick { margin-top: 12px; }
+  .threshold-beat .ap-kicker { margin-bottom: 5px; }
+  .threshold-beat .ap-opt { padding: 8px 11px; gap: 3px; }
+  .threshold-beat .ap-opt b { font-size: 12.25px; }
+  .threshold-beat .ap-opt span { font-size: 10.25px; line-height: 1.35; }
+  .threshold-beat .ap-handoff { padding: 8px 10px 7px; }
+  .threshold-beat .aph-k { margin-bottom: 5px; }
+  .threshold-beat .aph-flow span { font-size: 9.5px; line-height: 1.3; }
+  .threshold-beat .aph-note { margin-top: 5px; font-size: 8.75px; }
+  .threshold-beat .start-pick { margin-top: 10px; }
+  .threshold-beat .adv-label { margin-bottom: 5px; }
+  .threshold-beat .start-opt { padding: 7px 10px; gap: 3px; }
+  .threshold-beat .start-opt b { font-size: 11.5px; }
+  .threshold-beat .start-opt span { font-size: 9.75px; line-height: 1.32; }
+  .threshold-beat .beat-next { margin-top: 12px; }
+  .threshold-beat .beat-note { margin-top: 7px; font-size: 10.5px; }
 }

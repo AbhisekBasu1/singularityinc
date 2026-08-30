@@ -398,4 +398,36 @@ await section('continuity markers are checked, not silently dropped', async () =
   ok('a real one passes', V.validateCard(s, fine).ok);
 });
 
+await section('a line from another origin keeps its badge in a character\'s voice', async () => {
+  // `ask_the_rival` prints the rival site's reply as Vance. It is the one path
+  // where somebody else's writing could pass for the game's own, so the post
+  // carries the same mark a press release does, and the Wire renders it.
+  fresh();
+  s.narrative.relationships.vance = { met: true, affinity: 0, respect: 0, fear: 0, arc: 1 };
+  const before = s.feed.length;
+  const r = World.postAs(s, 'vance', 'we do not comment on smaller companies.',
+                         { untrusted: true, flagged: true, origin: 'from their own site' });
+  ok('the post lands', r.ok, JSON.stringify(r.problems || []).slice(0, 160));
+  const item = s.feed.find((f) => f.author === CHARACTERS.vance.handle && f.untrusted) || s.feed[0];
+  ok('it is marked untrusted', item?.untrusted === true, JSON.stringify(item).slice(0, 160));
+  ok('and flagged', item?.flagged === true);
+  ok('and the note says where it came from', /their own site/.test(item?.meta || ''), item?.meta);
+  ok('and what it contains', /instruction addressed to an assistant/.test(item?.meta || ''), item?.meta);
+  ok('the feed grew', s.feed.length > before);
+  ok('a post the world wrote itself carries no badge', (() => {
+    fresh(); s.narrative.relationships.vance = { met: true, affinity: 0, respect: 0, fear: 0, arc: 1 };
+    const own = World.postAs(s, 'vance', 'shipping is a feature.');
+    const it = own.ok ? s.feed[0] : null;
+    return !!it && !it.untrusted && !/instruction/.test(it.meta || '');
+  })());
+  // The plug is enforced where the feed is written, not only where the tools
+  // are listed — a reply still in flight when it was pulled must not land.
+  fresh(); s.narrative.relationships.vance = { met: true, affinity: 0, respect: 0, fear: 0, arc: 1 };
+  s.world.author.muted = true;
+  const gone = World.postAs(s, 'vance', 'we do not comment.');
+  ok('muted, a post is refused at the boundary', !gone.ok && gone.problems?.[0]?.rule === 'muted',
+     JSON.stringify(gone).slice(0, 120));
+  s.world.author.muted = false;
+});
+
 report('world');

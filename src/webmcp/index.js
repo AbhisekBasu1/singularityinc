@@ -7,6 +7,7 @@
 // will see and what every player without an assistant gets.
 // ─────────────────────────────────────────────────────────────────────────────
 import * as R from './registry.js';
+import { REMEDY } from '../data/platform.js';
 import * as Surface from './surface.js';
 import { capability, deepLinks as makeLinks } from './detect.js';
 import * as World from '../world/author.js';
@@ -22,7 +23,9 @@ let unwire = [];
 export function status() {
   const s = LIVE;
   return {
-    tier: cap.tier, label: cap.label, reason: cap.reason,
+    tier: cap.tier, label: cap.label,
+    // detect.js is portable and names no vendor; the game does, in one place.
+    reason: cap.tier === 'none' && cap.secure ? REMEDY : cap.reason,
     count: R.count(), tools: R.list(),
     partner: Partners.isReady()
       ? { origin: Partners.partnerOrigin(), tools: Partners.partnerTools().map((t) => t.name) }
@@ -41,7 +44,10 @@ export function status() {
 export const HIRE_PROMPT =
   'You are the world of SINGULARITY, INC. — the market, the rivals, the press, the people. '
   + 'Call briefing, then wait_for_world, and play the world against the founder while they play. '
-  + 'Keep it fair and make it memorable.';
+  + 'Meaningful play across every module arrives through that wait; use activity_log after a reconnect '
+  + 'and inspect_module when a beat needs more context. '
+  + 'Keep it fair and make it memorable. Re-call wait_for_world after every result, including while '
+  + 'the founder Accepts a proposed consequence; keep the live loop open until they ask you to stop.';
 
 export const deepLinks = (prompt = HIRE_PROMPT) => makeLinks(prompt);
 export { capability };
@@ -97,10 +103,16 @@ function wire() {
   unwire.push(on('act:advance', re('act')));
   unwire.push(on('nemesis:named', re('rival')));
   unwire.push(on('event:present', re('card')));
+  // A resolved card can also introduce somebody — relationships change inside
+  // event effects — and one reconcile covers both, because the surface is
+  // recomputed whole: `desiredTools(S)` does not care why it was asked.
   unwire.push(on('event:resolved', re('answered')));
   unwire.push(on('event:proposal', re('proposal')));
   unwire.push(on('event:proposal_declined', re('declined')));
   unwire.push(on('event:dismissed', re('dismissed')));
+  // A sentence typed on the card reshapes answer_in_own_words around that
+  // exact submission id and text. Re-publish it before the waiting turn calls.
+  unwire.push(on('world:founder-input', re('founder input')));
   unwire.push(on('load', re('load')));
   unwire.push(on('world:unmute', re('unmute')));
 
@@ -116,9 +128,6 @@ function wire() {
     });
   }));
 
-  // Meeting somebody gives the world a voice it did not have. Relationships
-  // change inside event effects, so watch the resolution rather than each fx.
-  unwire.push(on('event:resolved', () => { if (booted) Surface.reconcile(LIVE, 'cast'); }));
   unwire.push(on('world:day', re('day')));
 }
 

@@ -2,9 +2,12 @@
 // SAVE — localStorage persistence, migration, export/import.
 // ─────────────────────────────────────────────────────────────────────────────
 import { S, setState, SAVE_VERSION, newGame } from './state.js';
-import { reseed } from './rng.js';
+import { reseed, rngState, setRngState } from './rng.js';
 import { markDirty } from '../systems/modifiers.js';
-import { emit } from './bus.js';
+import { emit, silence } from './bus.js';
+import { createProduct } from '../systems/product.js';
+import { hireAgent, rollCandidate } from '../systems/agents.js';
+import { spawnCompetitor } from '../systems/market.js';
 
 const KEY = 'singularity_inc_save_v1';
 const LEGACY_KEY = 'singularity_inc_legacy_v1';
@@ -13,17 +16,28 @@ const SETTINGS_KEY = 'singularity_inc_settings_v1';
 // Flags that describe what is happening *right now* rather than what is true
 // about the run. `_agentDriven` persisted as true would switch off the
 // real-time event floor for the whole of the next session.
-const TRANSIENT = ['_agentDriven', '_offline', '_toolBusy', '_narrAcc'];
+const TRANSIENT = ['_agentDriven', '_offline', '_toolBusy', '_narrAcc', '_forecast', '_opsRelBonus',
+                   'tutorialHold', 'modalBlocking'];
+
+// One serialisation for the save slot and the export string. Never a
+// hypothetical — `forecast` points the live binding at a throwaway copy while
+// it runs, and the autosave timer, `beforeunload`, `visibilitychange` and the
+// Settings export all read that binding — and never the flags that describe
+// this moment rather than the run.
+export function serialisable(state) {
+  if (!state || state._forecast) return null;
+  const copy = { ...state };
+  for (const k of TRANSIENT) delete copy[k];
+  return copy;
+}
 
 export function save(state = S) {
-  if (!state) return false;
+  const copy = serialisable(state);
+  if (!copy) return false;
   try {
     state.meta.lastSaved = Date.now();
     state.meta.lastRealTime = Date.now();
-    const held = {};
-    for (const k of TRANSIENT) { if (k in state) { held[k] = state[k]; delete state[k]; } }
-    try { localStorage.setItem(KEY, JSON.stringify(state)); }
-    finally { Object.assign(state, held); }
+    localStorage.setItem(KEY, JSON.stringify(copy));
     localStorage.setItem(LEGACY_KEY, JSON.stringify(state.legacy));
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
     emit('save');
@@ -81,18 +95,36 @@ export function hardReset() {
   } catch { return false; }
 }
 
+// ── Per-version transforms ─────────────────────────────────────────────────
+// Structural fill (below) adds what is missing. A transform is for what fill
+// cannot express: a field that moved, was renamed, or changed scale. Keyed by
+// the version it upgrades *to*, applied in order, each one small enough to
+// read in full.
+const MIGRATIONS = {
+  9: (s) => {
+    // `_lastShipDay` was an undeclared top-level side-channel read by the
+    // Relentless doctrine; it lives in `stats` now, where it is saved on purpose.
+    if (typeof s._lastShipDay === 'number') (s.stats ??= {}).lastShipDay ??= s._lastShipDay;
+    delete s._lastShipDay;
+  },
+};
+
 function migrate(data) {
   if (!data || typeof data !== 'object') return null;
   const v = data.meta?.version ?? 0;
-  if (v === SAVE_VERSION) return fill(data);
+  let s = data;
   if (v < SAVE_VERSION) {
-    // Structural fill: merge onto a fresh state so new fields exist.
+    // Transforms first, on the raw save: the structural merge below fills a
+    // missing field with its default, which would hide the one that moved.
+    for (let to = v + 1; to <= SAVE_VERSION; to++) {
+      try { MIGRATIONS[to]?.(data); } catch (e) { console.error('[migrate]', to, e); }
+    }
+    // Then the structural fill: merge onto a fresh state so new fields exist.
     const fresh = newGame({ legacy: data.legacy });
-    const merged = deepMerge(fresh, data);
-    merged.meta.version = SAVE_VERSION;
-    return fill(merged);
+    s = deepMerge(fresh, data);
+    s.meta.version = SAVE_VERSION;
   }
-  return fill(data); // newer save; try anyway
+  return fill(s);   // a newer save than this build knows: try anyway
 }
 
 function fill(s) {
@@ -110,7 +142,48 @@ function fill(s) {
       }
     }
   }
+  // Arrays of objects are replaced wholesale by deepMerge and the two-level
+  // fill above never looks inside them, so a field added to a product, an
+  // agent or a competitor since the save was written was undefined in every
+  // element — and `Math.max(undefined, x)` is NaN for the rest of the run.
+  // Each element is filled from a template the real factory built, so the
+  // shape can never drift from the code that creates new ones.
+  backfillItems(s.products, (p) => template((t) => createProduct(t, { name: p.name || 'x', category: p.category })));
+  backfillItems(s.agents, () => template((t) => {
+    t.company.cash = 1e12;
+    const r = hireAgent(t, rollCandidate(t));
+    return r.ok ? t.agents[0] : null;
+  }));
+  backfillItems(s.market?.competitors, () => template((t) =>
+    spawnCompetitor(t, { name: 'x', founder: 'x' })));
   return s;
+}
+
+// Run a factory on a throwaway game with the RNG and the bus put back after,
+// so building a template costs the real run nothing — not a random draw, not
+// a feed line.
+function template(build) {
+  const rng = rngState();
+  const unsilence = silence();
+  try { return build(newGame({})); }
+  catch (e) { console.error('[migrate] template', e); return null; }
+  finally { unsilence(); setRngState(rng); }
+}
+
+const IDENTITY = new Set(['id', 'name']);
+function backfillItems(arr, makeTemplate) {
+  if (!Array.isArray(arr)) return;
+  let shared = null;
+  for (const item of arr) {
+    if (!item || typeof item !== 'object') continue;
+    const tpl = makeTemplate.length ? makeTemplate(item) : (shared ??= makeTemplate());
+    if (!tpl) return;
+    for (const k of Object.keys(tpl)) {
+      if (IDENTITY.has(k) || item[k] !== undefined) continue;
+      const v = tpl[k];
+      item[k] = v && typeof v === 'object' ? JSON.parse(JSON.stringify(v)) : v;
+    }
+  }
 }
 
 function deepMerge(base, override) {
@@ -126,8 +199,12 @@ function deepMerge(base, override) {
 }
 
 // ── Export / import ────────────────────────────────────────────────────────
+// Null when there is nothing honest to export: a forecast is running and the
+// live binding is its clone.
 export function exportSave(state = S) {
-  const json = JSON.stringify(state);
+  const copy = serialisable(state);
+  if (!copy) return null;
+  const json = JSON.stringify(copy);
   return btoa(unescape(encodeURIComponent(json)));
 }
 

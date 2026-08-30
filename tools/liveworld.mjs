@@ -217,8 +217,13 @@ try {
   for (let i = 0; i < 10; i++) {
     const btn = await page.$('[data-act="start-game"], [data-act="beat-next"], [data-act="choose-arch"], [data-act="choose-cat"], [data-act="new-game"]');
     if (!btn) break;
+    const action = await btn.getAttribute('data-act');
     await btn.click().catch(() => {});
     await page.waitForTimeout(340);
+    // start-game is asynchronous while the curtain plays. Clicking it again
+    // used to create overlapping runs that could deal the opening deck card
+    // before this test reached the tool surface.
+    if (action === 'start-game') break;
   }
   await page.waitForTimeout(1400);
   ok('the game is on screen', !!(await page.$('#world-console')));
@@ -230,12 +235,45 @@ try {
   const titled = await page.evaluate((ns) => ns.every((n) => !!window.__mcp.title(n)), names);
   ok('every one has a title', titled);
   console.log(`    ${names.length} tools: ${names.join(', ')}`);
+
+  // Choosing the assistant during setup now ends onboarding with an explicit
+  // handoff. The page cannot initiate a chat turn, so it holds the clock until
+  // the first real WebMCP call arrives (or the founder chooses the deck).
+  for (let i = 0; i < 60 && !(await page.$('.assistant-handoff')); i++) {
+    await page.waitForTimeout(120);
+  }
+  const handoffBefore = await page.evaluate(() => ({
+    shown: !!document.querySelector('.assistant-handoff'),
+    day: window.S.time.day,
+    hold: window.S.modalBlocking,
+    done: window.S.meta.assistantHandoffDone,
+    copy: document.querySelector('.assistant-handoff')?.textContent || '',
+  }));
+  ok('the assistant handoff is the final onboarding beat', handoffBefore.shown);
+  ok('it gives the founder the opening line', /play the world/i.test(handoffBefore.copy));
+  ok('and explicitly holds the clock', handoffBefore.hold === 'assistant-handoff', String(handoffBefore.hold));
+  await page.waitForTimeout(700);
+  const heldDay = await page.evaluate(() => window.S.time.day);
+  ok('the company does not age while the chat is waiting',
+     Math.abs(heldDay - handoffBefore.day) < 0.001,
+     `${handoffBefore.day.toFixed(3)} → ${heldDay.toFixed(3)}`);
   await shoot('world-01-booted');
 
   console.log('\n── briefing, through executeTool ──');
   const brief = await page.evaluate(() => window.__mcp.call('briefing', {}));
   ok('it answers', brief.status === 'ok', JSON.stringify(brief).slice(0, 160));
   ok('and fits the platform cap', JSON.stringify(brief).length <= 1500, `${JSON.stringify(brief).length} chars`);
+  await page.waitForTimeout(1450);
+  const handoffAfter = await page.evaluate(() => ({
+    shown: !!document.querySelector('.assistant-handoff'),
+    hold: window.S.modalBlocking,
+    done: window.S.meta.assistantHandoffDone,
+    mode: window.__status().mode,
+  }));
+  ok('the first valid call completes the handoff',
+     handoffAfter.done && handoffAfter.mode === 'agent', JSON.stringify(handoffAfter));
+  ok('the handoff releases the glass and its clock hold',
+     !handoffAfter.shown && !handoffAfter.hold, JSON.stringify(handoffAfter));
 
   console.log('\n── the world writes a card, and it is on the glass ──');
   const wrote = await page.evaluate(() => window.__mcp.call('write_event', {
@@ -258,21 +296,36 @@ try {
     return {
       title: document.querySelector('.event-title')?.textContent || '',
       choices: document.querySelectorAll('#event-choices .choice:not(.choice-free)').length,
-      freeLine: !!document.querySelector('.choice-free'),
+      freeForm: !!document.querySelector('form.own-words-form'),
+      textarea: !!document.querySelector('.own-words-textarea'),
+      sendDisabled: document.querySelector('.own-words-send')?.disabled,
       visible: el.getBoundingClientRect().height > 100,
     };
   });
   ok('the card modal is rendered', !!card, 'no #event-modal on screen');
   ok('with its title', card?.title?.includes('forum'), card?.title);
   ok('and both choices', card?.choices === 2, String(card?.choices));
-  ok('and the line pointing at the chat box', !!card?.freeLine);
+  ok('and a real free-form route on the card', !!card?.freeForm && !!card?.textarea);
+  ok('whose send button waits for an actual move', card?.sendDisabled === true);
   await shoot('world-02-card');
 
   console.log('\n── answering in your own words ──');
-  const proposed = await page.evaluate(() => window.__mcp.call('answer_in_own_words', {
+  await page.evaluate(() => { window.__founderWait = window.__mcp.call('wait_for_world'); });
+  await page.waitForTimeout(60);
+  const founderMove = 'I call the author and invite them to test the fix beside me.';
+  await page.fill('.own-words-textarea', founderMove);
+  ok('typing enables Send to world', !(await page.$eval('.own-words-send', (el) => el.disabled)));
+  await page.click('.own-words-send');
+  const heard = await page.evaluate(() => window.__founderWait);
+  ok('the waiting world receives the move', heard.status === 'founder_said', JSON.stringify(heard).slice(0, 180));
+  ok('word for word', heard.founder_words === founderMove, heard.founder_words);
+  ok('the card becomes a live waiting state', await page.$('.own-words-pending'));
+
+  const proposed = await page.evaluate((submissionId) => window.__mcp.call('answer_in_own_words', {
+    submission_id: submissionId,
     outcome: 'You reply at 2am with a numbered list of your own. The author edits their post to link it.',
     tone: 'risky', effects: { rep: 5, focus: -6 },
-  }));
+  }), heard.submission_id);
   ok('it needs a human hand', proposed.status === 'needs_human', JSON.stringify(proposed).slice(0, 180));
   await page.waitForTimeout(600);
   const prop = await page.evaluate(() => ({
@@ -401,7 +454,10 @@ try {
   // wrong the page appears to hang for a minute at a time and nobody would ever
   // find out from a headless test.
   await page.evaluate(() => { window.S.settings.speed = 4; window.S.settings.paused = false; });
-  const waitStart = await page.evaluate(() => window.S.time.day);
+  // A priority card is legal from day 0.12 and opens the moment its real-time
+  // floor passes; if that lands inside the window below, the clock stops for
+  // a card and the check misreads it as a frozen clock. Restart the floor.
+  const waitStart = await page.evaluate(() => { window.S.narrative.lastEventReal = Date.now(); return window.S.time.day; });
   const pending = await page.evaluate(() => {
     window.__waitDone = null;
     window.__mcp.call('wait_for_world', {}).then((r) => { window.__waitDone = r; });
@@ -455,9 +511,23 @@ try {
   await page.evaluate(() => {
     window.S.world.author.recent.cardDays = [];
     window.S.narrative.lastEventReal = 0;
+    // Zeroing the floor lets the deck's own opening card through as well, and
+    // it raced the script's card for the screen. Make it ineligible instead:
+    // its `when` checks this flag, and nothing else in the deck is due.
+    window.S.narrative.flags.opened = true;
+    window.S.narrative.nextEventDay = window.S.time.day + 5000;
     window.S.settings.paused = false;
   });
-  const runBtn = await page.$('[data-act="demo-run"]');
+  let runBtn = await page.$('[data-act="demo-run"]');
+  let demoDialog = false;
+  // At the in-app browser's narrow width the rail is intentionally hidden.
+  // Open the same World console from the topbar, just as a player does.
+  if (runBtn && !(await runBtn.isVisible())) {
+    await page.click('[data-act="author-dialog"]');
+    await page.waitForTimeout(350);
+    runBtn = await page.$('.world-console.in-dialog [data-act="demo-run"]');
+    demoDialog = true;
+  }
   ok('the button is there', !!runBtn);
   if (runBtn) {
     await runBtn.click();
@@ -492,6 +562,10 @@ try {
     await page.evaluate(() => document.querySelector('[data-act="demo-stop"]')?.click());
     await page.waitForTimeout(400);
     ok('and it can be stopped', !(await page.$('[data-act="demo-stop"]')));
+    if (demoDialog) {
+      await page.evaluate(() => document.querySelector('#generic-modal [data-dlg]')?.click());
+      await page.waitForTimeout(300);
+    }
   }
   await page.evaluate(() => { window.S.settings.paused = true; });
   ok('the glass is clear for the next beat', await clearCard());
@@ -610,15 +684,20 @@ try {
     for (let i = 0; i < 10; i++) {
       const b = await p2.$('[data-act="start-game"], [data-act="beat-next"], [data-act="choose-arch"], [data-act="choose-cat"], [data-act="new-game"]');
       if (!b) break;
+      const action = await b.getAttribute('data-act');
       await b.click().catch(() => {});
       await p2.waitForTimeout(320);
+      if (action === 'start-game') break;
     }
-    await p2.waitForTimeout(1200);
+    for (let i = 0; i < 60 && !(await p2.$('.assistant-handoff')); i++) {
+      await p2.waitForTimeout(120);
+    }
     console.log(`  · ${label}`);
     ok(`  the game is playable`, !!(await p2.$('#world-console')));
     ok(`  the surface is registered anyway`, (await p2.evaluate(() => window.__mcp.count())) >= 7);
     ok(`  boot did not wait for it`, Date.now() - t0 < 25000, `${Date.now() - t0}ms`);
     ok(`  briefing still answers`, (await p2.evaluate(() => window.__mcp.call('briefing', {}))).status === 'ok');
+    await p2.waitForTimeout(1450);
     ok(`  no other origin is claimed`, !(await p2.$('.wc-partner')));
     ok(`  and its tools are not published`,
        !(await p2.evaluate(() => window.__mcp.names())).some((n) => n.includes('rival')));

@@ -39,6 +39,13 @@ export function startNewGame(opts) {
   reserveName(opts.productName);
   s.settings.difficulty = opts.difficulty || legacy?.lastDifficulty || 'standard';
   s.settings.scenario = opts.scenario || 'none';
+  s.meta.assistantChoice = opts.assistant === 'play' || opts.assistant === 'mute'
+    ? opts.assistant : 'none';
+  s.meta.assistantHandoffDone = s.meta.assistantChoice !== 'play';
+  // Chosen at the threshold in a browser with site tools: start on the written
+  // world. Same flag the plug sets, so the surface publishes nothing and the
+  // World console offers it back.
+  if (opts.assistant === 'mute') s.world.author.muted = true;
   applyDifficulty(s);
   applyArchetype(s, opts.archetype || 'hacker');
   applyLegacyStart(s);

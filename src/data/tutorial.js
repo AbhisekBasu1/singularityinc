@@ -97,8 +97,8 @@ export const CHAPTERS = [
 
       { id: 'release',
         title: 'That is the whole interface',
-        body: `Write code, ship features, launch, and read Next when you are lost. Everything else opens on its own.\n\n**The clock starts when you close this.**`,
-        cta: 'Start the clock' },
+        body: `Write code, ship features, launch, and read Next when you are lost. Everything else opens on its own.\n\nClose this to finish First Light. If you invited your assistant, one final handoff comes next; otherwise the clock starts now.`,
+        cta: 'Finish First Light' },
     ],
   },
 
@@ -302,7 +302,7 @@ export const CHAPTERS = [
         body: `One click revokes every tool at once.\n\nThe game does not stop. The written world — six files of authored cards, the rival's own moves, the press — takes back every slot. Nothing is lost by pulling it.` },
       { id: 'words',
         title: 'You can answer in your own words',
-        body: `Any card the world writes has a line under the choices.\n\nType what you actually do into the chat instead of pressing a button, and the world will write what happens — then you decide whether to accept it.` },
+        body: `Every card shown while your assistant is present has a text box of its own.\n\nType what you actually do on the card and send it to the world. The answer returns to that same card — then you decide whether to accept it.` },
     ],
   },
 ];

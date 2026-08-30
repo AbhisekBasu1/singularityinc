@@ -34,7 +34,8 @@ about to fill — and if it goes quiet, or writes something the rules refuse, or
 you pull the plug, the deck takes them all back mid-run and nothing is lost.
 
 Everything it can do to you is bounded, and the bounds come from the game itself.
-`tools/capsderive.mjs` executes all **715 authored choices** against a
+`tools/capsderive.mjs` executes all **383 authored choices** — once in every act
+each card can appear in, 715 executions — against a
 representative state for each act and takes the 80th percentile of what the
 written game *takes* and what it *gives* — which are not the same number: Act I
 takes 30 code and gives 90. Those are the ceilings. On top of them sits a rolling
@@ -68,16 +69,53 @@ The count in the popover goes down because you earned something.
 
 ## Playing with your assistant
 
-Open the game in the ChatGPT desktop app's built-in browser and say *"play the
-world"*. Or use the deep link on the title screen, which opens the app on a new
-thread with the opening instruction already typed.
+Open the game in the ChatGPT desktop app's built-in browser. The title screen
+says what the browser you are in can do and shows the hand the world will hold
+the moment the run begins; **Begin** says which game it opens. The last beat of
+the opening asks the one question that has two real answers there — *let it play
+the world*, or *not this run*, which starts on the written world and can be
+handed back from the World console at any time. Then say *"play the world"* in
+the chat. Anywhere without site tools nothing is asked; the title carries the
+deep link that opens the app on a new thread with the opening instruction
+already typed.
 
-Then play. Type into the chat when you want to say something the buttons do not
-cover:
+Then play in the game. Every decision card now has **Or make your own move**:
+type what you actually do there and press **Send to world**.
 
 > *"I call Marcus Vance and offer a merger."*
 
-The card that comes back has his face on it.
+If the assistant is on duty, it receives those exact words immediately. If it
+is between turns, the move stays visibly and safely on the card until its next
+check-in. Its consequence replaces the choices, but no effect becomes real
+until you press **Accept**. Ordinary card and Wire choices reach it too, after
+their authored consequences land, so it can react now and build callbacks later.
+Meaningful play outside cards reaches it as well: features shipped, launches,
+team changes, research, fundraising, pricing, projects, regions, commitments and
+act transitions. Fast repetitive work is coalesced into one short activity beat.
+After a reload, `activity_log` recovers what happened; `inspect_module` reads the
+current state behind any of the eight tabs without moving your screen.
+During a live session the assistant keeps `wait_for_world` open even while you
+press **Accept** or **Decline**; you should not reconnect after each decision.
+The reconnect line is recovery for an interrupted or deliberately ended turn,
+not part of the normal play loop.
+
+### Three minutes with a judge
+
+1. Open the game in the ChatGPT desktop app's built-in browser (Sol or Terra).
+   The title says *Site tools on in this browser* and shows the ten tools the
+   world holds at day zero.
+2. Press **Begin**, complete the four short setup beats, then choose
+   **Quick tour — Act III** at the threshold. Its description tells you what is
+   being skipped. Open the editor. The machine plays the first year behind the
+   curtain, and you walk in at Act III with a rival named, the cast met, the
+   regulators awake — the whole hand.
+3. Say *"play the world"* in the chat. On its first card, type a move the buttons
+   do not cover and press **Send to world**; watch the card become a consequence
+   that still needs your **Accept**. Then watch for a refusal with the number it
+   broke; a doctrine earned and a tool leaving the popover; **Mute the world**,
+   and the written deck playing the next card.
+
+A late start pays half legacy and leaves the walkthroughs in the manual.
 
 ### Without one
 
@@ -147,7 +185,7 @@ Full detail in [`evals/README.md`](evals/README.md).
 
 | | |
 |---|---|
-| tool selection, top-1 | **74%** over 50 phrases, none naming a tool |
+| tool selection, top-1 | **72–74%** over 50 phrases, none naming a tool (the scored state is bot-played, so it moves a point run to run) |
 | top-3 · median rank · unreachable | 98% · 1 · 0 |
 | facts absent from the page at any length | **8 / 8**, six of them shipped by a tool |
 | world actions with no DOM path at all | **5 / 5** |
@@ -182,6 +220,7 @@ RUNS=3 DAYS=2000 node tools/balance.mjs
 | `src/world/forecast.js` | the world runs the game forward on a copy of itself, and puts the RNG back |
 | `src/data/balance.js` | every number, with the measurement that produced it |
 | [`docs/PATTERN.md`](docs/PATTERN.md) | the four files worth copying into another project, and the traps they handle |
+| `docs/plan/` | the field guide, the design notes and the build plan this layer was built from — history, not instructions |
 
 MIT licensed.
 
@@ -313,20 +352,20 @@ points, permanent perks, achievements and unlocked founder archetypes across run
 | Ending art | **8** plates, one per path |
 | Doctrines | **15** permanent, earned by conduct |
 | Directives / prompt approaches | **11** / **5** |
-| Achievements / objectives | **126** / **38** |
+| Achievements / objectives | **132** / **38** |
 | Characters | **12**, with portraits and six-stage arcs |
 | Agent traits / models / specialties | **24** / **7** / **12** |
 | Archetypes / legacy perks | **7** / **12** |
 | Difficulties / scenarios | **4** / **7** |
-| Walkthrough chapters / steps | **8** / **40**, anchored to live elements |
-| Glossary terms | **52**, each a hover anywhere the word appears |
+| Walkthrough chapters / steps | **9** / **44**, anchored to live elements |
+| Glossary terms | **59**, each a hover anywhere the word appears |
 | Distinct run configurations | **1,568** |
 
 ## How it teaches itself
 
 Nobody reads a manual first, so the game does three things instead.
 
-**Walkthroughs.** Eight short chapters that spotlight a real element, dim everything
+**Walkthroughs.** Nine short chapters that spotlight a real element, dim everything
 else, and wait. The first covers The Desk end to end in about two minutes; the rest
 fire the moment their subject becomes relevant — the first agent, the first idle
 research queue, the first launched product, the first round, Act III. The clock is
@@ -335,7 +374,7 @@ held while one runs, and every step is skippable, replayable and keyboard-driven
 **Field Notes.** A panel on The Desk that always names the single most useful thing
 you could be doing right now, and changes as the situation does.
 
-**The manual.** `?` opens keys, a fifty-two-term glossary, a per-act guide and the
+**The manual.** `?` opens keys, a fifty-nine-term glossary, a per-act guide and the
 walkthrough list. Every glossary term is also a hover: anywhere the interface prints
 one of those words as a label, resting on it explains it. Add a term to
 `src/data/manual.js` and it becomes hoverable everywhere for free.
@@ -383,6 +422,11 @@ Dev harness (URL params on the running game):
 ?dev=1&brief=1                             # the "while you were gone" briefing
 ?dev=1&notut=1                             # suppress walkthroughs (clean screenshots)
 ```
+
+`tools/titleshot.mjs` is `shot.mjs` for the first screen: it renders the title in
+three browsers — no site tools, site tools in Chrome, site tools inside the ChatGPT
+desktop browser — at a desktop height and in the ChatGPT pane, and reports whether
+the pitch and **Begin** are both on screen without scrolling.
 
 Audio is fully synthesised at runtime (Web Audio) — no sound files.
 Character portraits and act banners in `assets/img/` were generated for this project.

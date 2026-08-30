@@ -102,7 +102,11 @@ export function sparkline(data, { w = 240, h = 42, color = '#00e5a0', fill = tru
     return [x, y];
   });
   const d = pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
-  const id = 'sg' + Math.random().toString(36).slice(2, 8);
+  // Derived from the colour, never random: a fresh id every call made every
+  // frame's string differ, which defeated the `el.__html === html` short-circuit
+  // in `render()` for any view with a sparkline in it — the Desk, every tick.
+  // Two sparklines of one colour share one gradient, which is the same gradient.
+  const id = 'sg' + String(color).replace(/[^a-z0-9]/gi, '');
   const area = fill ? `<defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="${color}" stop-opacity="0.32"/>
       <stop offset="100%" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>
@@ -131,8 +135,15 @@ export function meter(label, valueText, pct, color, opts = {}) {
 
 // ── Slider (custom, pointer-driven) ────────────────────────────────────────
 export function slider(key, value, color = 'var(--green)', extra = '') {
-  const p = Math.max(0, Math.min(1, value)) * 100;
-  return `<div class="slider" data-slider="${key}" ${extra}>
+  const v = Math.max(0, Math.min(1, value || 0));
+  const p = v * 100;
+  // Focusable, with the ARIA slider role and a value assistive tech can read.
+  // The arrow keys drive it (below); without that the allocation panel — the
+  // biggest lever in the game — needed a mouse.
+  const [kind, id] = String(key).split(':');
+  const label = /aria-label/.test(extra) ? '' : `aria-label="${esc(id ? `${id} ${kind}` : kind)}"`;
+  return `<div class="slider" data-slider="${key}" data-value="${v.toFixed(3)}" role="slider" tabindex="0"
+      aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(p)}" ${label} ${extra}>
     <div class="slider-track"></div>
     <div class="slider-fill" style="width:${p.toFixed(1)}%;background:${color}"></div>
     <div class="slider-knob" style="left:${p.toFixed(1)}%"></div>
@@ -148,6 +159,18 @@ function sliderValueFromEvent(el, e) {
   return Math.max(0, Math.min(1, x / r.width));
 }
 
+// One place writes what a slider shows and says: the value it holds for the
+// keyboard, the ARIA value, the fill and the knob. Pointer and keys both go
+// through it, so a drag never leaves the arrow keys starting from a stale
+// number, and a screen reader hears the value that is on the screen.
+function syncSlider(el, v) {
+  el.dataset.value = v.toFixed(3);
+  el.setAttribute('aria-valuenow', String(Math.round(v * 100)));
+  const fill = el.querySelector('.slider-fill'), knob = el.querySelector('.slider-knob');
+  if (fill) fill.style.width = (v * 100).toFixed(1) + '%';
+  if (knob) knob.style.left = (v * 100).toFixed(1) + '%';
+}
+
 let dragging = null;
 document.addEventListener('pointerdown', (e) => {
   const el = e.target.closest?.('.slider');
@@ -155,17 +178,42 @@ document.addEventListener('pointerdown', (e) => {
   dragging = el;
   el.setPointerCapture?.(e.pointerId);
   const v = sliderValueFromEvent(el, e);
+  syncSlider(el, v);
   sliderHandler?.(el.dataset.slider, v, el);
-  e.preventDefault();
+  e.preventDefault();                          // which also skips the focus a press would give
+  try { el.focus({ preventScroll: true }); } catch {}
 });
 document.addEventListener('pointermove', (e) => {
   if (!dragging) return;
   const v = sliderValueFromEvent(dragging, e);
+  syncSlider(dragging, v);
   sliderHandler?.(dragging.dataset.slider, v, dragging);
 });
 document.addEventListener('pointerup', () => { dragging = null; });
 document.addEventListener('pointercancel', () => { dragging = null; });
 export function isDragging() { return !!dragging; }
+
+// Keyboard: the same handler the pointer feeds, in steps. Registered before the
+// shortcut dispatcher below so an arrow on a slider never reaches it.
+document.addEventListener('keydown', (e) => {
+  const el = e.target?.closest?.('.slider[role="slider"]');
+  if (!el) return;
+  const step = e.shiftKey ? 0.10 : 0.05;
+  const cur = Number(el.dataset.value) || 0;
+  let v = null;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowUp') v = cur + step;
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') v = cur - step;
+  else if (e.key === 'PageUp') v = cur + 0.2;
+  else if (e.key === 'PageDown') v = cur - 0.2;
+  else if (e.key === 'Home') v = 0;
+  else if (e.key === 'End') v = 1;
+  if (v === null) return;
+  v = Math.max(0, Math.min(1, v));
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  syncSlider(el, v);
+  sliderHandler?.(el.dataset.slider, v, el);
+});
 
 // ── Click delegation ───────────────────────────────────────────────────────
 const actions = new Map();
@@ -196,6 +244,7 @@ function termFor(el) {
 let tipEl = null;
 let glossed = null;
 let tipAnchor = null;
+let tipSource = 'pointer';   // 'pointer' | 'focus'
 
 // Resolve what an element would explain, from either source.
 function tipFor(target) {
@@ -207,10 +256,16 @@ function tipFor(target) {
   return t ? { el: lab, text: t.def, title: t.name, gloss: true } : null;
 }
 
-function openTip(hit) {
+function openTip(hit, source = 'pointer') {
   if (!hit) return;
+  // Close the old one *before* recording the new anchor. `showTip` used to do
+  // this after `openTip` had already set it, which cleared the anchor (and
+  // the gloss) on every open — so focusout never matched, and a tooltip
+  // opened from the keyboard stayed until something else hid it.
+  hideTip();
   if (hit.gloss) { glossed = hit.el; hit.el.classList.add('glossed'); }
   tipAnchor = hit.el;
+  tipSource = source;
   showTip(hit.text, hit.title, hit.el);
 }
 
@@ -249,9 +304,25 @@ document.addEventListener('pointerdown', (e) => {
 });
 window.addEventListener('blur', () => hideTip());
 window.addEventListener('resize', () => hideTip());
+// `.tip` is position: fixed. Scrolling the view under it left it hanging in
+// the air where its anchor used to be.
+document.addEventListener('scroll', () => hideTip(), true);
+
+// Focus is the hover the keyboard has. `:focus-visible` keeps a mouse click —
+// which focuses the button too — from opening a note that would then sit
+// there, and hold the Desk repaint, until the pointer left.
+document.addEventListener('focusin', (e) => {
+  let visible = false;
+  try { visible = !!e.target?.matches?.(':focus-visible'); } catch {}
+  if (!visible) return;
+  openTip(tipFor(e.target), 'focus');
+});
+document.addEventListener('focusout', (e) => {
+  if (tipAnchor && tipFor(e.target)?.el === tipAnchor) hideTip();
+});
 
 function showTip(text, title, anchor) {
-  hideTip();
+  if (tipEl) { tipEl.remove(); tipEl = null; }   // the element only; the anchor was just set
   tipEl = document.createElement('div');
   tipEl.className = 'tip';
   // `.tip` does not set white-space, so newline-style tips need real breaks.
@@ -273,9 +344,18 @@ function hideTip() {
   tipAnchor = null;
 }
 export { hideTip };
-export function tipOpen() { return !!tipEl; }
+// Only a pointer tip asks the Desk to hold its repaint: the pointer will move
+// and end it. A focus tip stays until focus moves, which can be all afternoon,
+// and its anchor survives a repaint anyway because `render()` patches.
+export function tipOpen() { return !!tipEl && tipSource !== 'focus'; }
 
 // ── Keyboard ───────────────────────────────────────────────────────────────
+document.addEventListener('keyup', (e) => {
+  if (e.key !== ' ' || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.target?.closest?.('button, a[href], input, textarea, select, summary, [contenteditable]')) return;
+  const b = e.target?.closest?.('[role="button"][data-act]');
+  if (b) { e.preventDefault(); b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); }
+});
 const keyHandlers = new Map();
 export function onKey(key, fn) {
   if (!keyHandlers.has(key)) keyHandlers.set(key, new Set());
@@ -283,6 +363,26 @@ export function onKey(key, fn) {
 }
 document.addEventListener('keydown', (e) => {
   if (e.target.matches?.('input, textarea, select')) return;
+  // The shortcuts are bare keys. Cmd+S is the browser's save and Cmd+R its
+  // reload; with no guard here each one also shipped a feature or spent focus
+  // on a post before the browser got to it.
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  // A div acting as a button — a bloc on the map, a research node — has to
+  // answer Enter and Space like the real thing, or focusing it is a lie.
+  if (e.key === 'Enter' || e.key === ' ') {
+    // A native control answers these itself. The game's own Space — pause —
+    // must not fire on top of it, or a focused button pauses instead of clicking.
+    if (e.target?.closest?.('button, a[href], input, textarea, select, summary, [contenteditable]')) return;
+    const b = e.target?.closest?.('[role="button"][data-act]');
+    if (b) {
+      e.preventDefault();
+      // A real, bubbling click, because `click()` is not a method every SVG
+      // element has, and the map's blocs are SVG. Enter fires on keydown and
+      // Space on keyup, which is what a native button does.
+      if (e.key === 'Enter' && !e.repeat) b.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      return;
+    }
+  }
   const k = e.key.toLowerCase();
   const set = keyHandlers.get(k);
   if (set) { for (const fn of set) fn(e); }

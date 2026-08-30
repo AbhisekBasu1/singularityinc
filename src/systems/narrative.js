@@ -121,6 +121,51 @@ export function eligibleEvents(S) {
   return out;
 }
 
+// Every route through a written card must close the same lifecycle. The
+// ordinary buttons call this from `resolveChoice`; the assistant-authored
+// own-words route calls it after the founder presses Accept. Keeping it here
+// prevents a once-only priority card from being dealt again simply because the
+// founder answered with a sentence instead of a button.
+export function markEventHandled(S, active = S?.narrative?.activeEvent) {
+  if (!active || active.runtime) return false;
+  const e = EVENT_MAP[active.id];
+  if (!e) return false;
+  S.narrative.seen[e.id] = true;
+  S.narrative.cooldowns[e.id] = S.time.day + (e.cooldown || EB.BASE_INTERVAL_DAYS * 6);
+  return true;
+}
+
+// Repairs saves produced before the own-words route closed that lifecycle.
+// The journal is proof that a card resolved. Rebuild its seen/cooldown record,
+// and discard only an impossible duplicate of a once-only card that is open
+// again with no outcome.
+export function repairEventHistory(S) {
+  if (!S?.narrative) return { changed: false, dismissed: false };
+  let changed = false;
+  const journalIds = new Set();
+  for (const entry of S.narrative.journal || []) {
+    const e = EVENT_MAP[entry?.id];
+    if (!e) continue;
+    journalIds.add(e.id);
+    if (!S.narrative.seen[e.id]) { S.narrative.seen[e.id] = true; changed = true; }
+    const until = Number(entry.day) + (e.cooldown || EB.BASE_INTERVAL_DAYS * 6);
+    if (Number.isFinite(until) && (S.narrative.cooldowns[e.id] || -Infinity) < until) {
+      S.narrative.cooldowns[e.id] = until;
+      changed = true;
+    }
+  }
+  const active = S.narrative.activeEvent;
+  let dismissed = false;
+  if (active && !active.runtime && !active.outcome && EVENT_MAP[active.id]?.once
+      && journalIds.has(active.id)) {
+    S.narrative.activeEvent = null;
+    scheduleNext(S);
+    changed = dismissed = true;
+  }
+  if (changed) markDirty();
+  return { changed, dismissed };
+}
+
 export function drawEvent(S, force) {
   const pool = eligibleEvents(S);
   if (!pool.length) return null;
@@ -147,9 +192,15 @@ export function presentEvent(S, e) {
     kind: e.kind,
     char: e.char,
     body: safeCall(e.body, S, ''),
-    choices: (e.choices || []).filter((c) => !c.req || safeCall(c.req, S, false)).map((c, i) => ({
-      i, label: safeCall(c.label, S, ''), sub: safeCall(c.sub, S, ''), tone: c.tone || 'neutral',
-    })),
+    // `oi` is the choice's index in the authored card. The legal list is
+    // re-derived at resolve time, and an assistant's tool call can move the
+    // world while the card is open; without the identity, button 2 could
+    // resolve as choice 3 if a `req` flipped in between.
+    choices: (e.choices || []).map((c, oi) => ({ c, oi }))
+      .filter(({ c }) => !c.req || safeCall(c.req, S, false))
+      .map(({ c, oi }, i) => ({
+        i, oi, label: safeCall(c.label, S, ''), sub: safeCall(c.sub, S, ''), tone: c.tone || 'neutral',
+      })),
     outcome: null,
   };
   emit('event:present', S.narrative.activeEvent);
@@ -162,8 +213,12 @@ export function resolveChoice(S, index) {
   const e = EVENT_MAP[active.id]
     || (active.runtime && hydrateFn ? hydrateFn(S, active.runtime, active.id) : null);
   if (!e) { S.narrative.activeEvent = null; return null; }
-  const legal = (e.choices || []).filter((c) => !c.req || safeCall(c.req, S, false));
-  const choice = legal[index];
+  // What was offered is what resolves — by identity where the card carries it,
+  // by position only for a save that predates the field.
+  const offered = active.choices?.[index];
+  const choice = offered && Number.isInteger(offered.oi)
+    ? (e.choices || [])[offered.oi]
+    : (e.choices || []).filter((c) => !c.req || safeCall(c.req, S, false))[index];
   if (!choice) return null;
 
   const fx = makeFx(S);
@@ -172,15 +227,13 @@ export function resolveChoice(S, index) {
   catch (err) { console.error('[event effect]', e.id, err); }
 
   const written = !!active.runtime;
-  if (!written) {
-    S.narrative.seen[e.id] = true;
-    S.narrative.cooldowns[e.id] = S.time.day + (e.cooldown || EB.BASE_INTERVAL_DAYS * 6);
-  }
+  markEventHandled(S, active);
   S.narrative.choicesMade++;
   S.stats.eventsResolved++;
+  const choiceLabel = typeof choice.label === 'function' ? choice.label(S) : choice.label;
   S.narrative.journal.unshift({
     day: Math.floor(S.time.day), id: e.id, title: e.title,
-    choice: typeof choice.label === 'function' ? choice.label(S) : choice.label,
+    choice: choiceLabel,
     outcome, char: e.char, kind: e.kind, tone: choice.tone || 'neutral',
     effects: fx._log.slice(), ...(written ? { author: 'world' } : {}),
   });
@@ -188,9 +241,9 @@ export function resolveChoice(S, index) {
 
   active.outcome = outcome;
   active.effects = fx._log.slice();
-  active.chosen = choice.label;
+  active.chosen = choiceLabel;
   markDirty();
-  emit('event:resolved', { event: active, choice, outcome, effects: fx._log });
+  emit('event:resolved', { event: active, choice: { ...choice, label: choiceLabel }, outcome, effects: fx._log });
   return { outcome, effects: fx._log };
 }
 
@@ -223,13 +276,22 @@ export function tickNarrative(S) {
     const next = q.shift();
     const ev = EVENT_MAP[next.id];
     if (ev) { presentEvent(S, ev); return; }
+    // An arc that cannot continue used to vanish without a trace. It still
+    // cannot continue, but now it says so.
+    console.warn('[narrative] a chain follow-up points at nothing:', next.id);
   }
   // Priority cards can jump the queue
   const pool = eligibleEvents(S);
   const prio = pool.filter((e) => (e.priority || 0) > 0);
   if (prio.length && realGateOk(S, true)) {
     prio.sort((a, b) => (b.priority || 0) - (a.priority || 0));
-    presentEvent(S, prio[0]);
+    const first = prio[0];
+    // Most priority cards are authored continuity and remain non-negotiable.
+    // The opening card is different: after an explicit AI handoff, giving its
+    // slot to the assistant is the promised first magical moment. offerSlot's
+    // timeout still returns it to this exact authored card if the world is quiet.
+    if (first.worldClaimable && offerSlotFn && offerSlotFn(S, 'event')) return;
+    presentEvent(S, first);
     return;
   }
   if (S.time.day >= S.narrative.nextEventDay && realGateOk(S, false)) {

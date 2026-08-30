@@ -26,12 +26,60 @@ A solo-founder simulation. Vanilla ES modules, no build step, no dependencies.
 - **Walkthrough anchors are load-bearing.** A step spotlights a CSS selector. If you rename
   a panel or drop a `data-tut` attribute, `tools/tutorialtest.mjs` fails — fix the step, do
   not delete it.
-- **`styles/console.css` loads last and owns the look.** It is the reskin layer: square
-  geometry, corner ticks, segmented meters, mono uppercase labels, screen frame. New UI
-  should read as machine, not as web page — square the corners, label in mono, and give
-  anything list-shaped a left rail or an index rather than a rounded card. Because it
-  loads last, any responsive rule it overrides must be re-asserted in its own media
-  blocks at the end of the file.
+- **`styles/console.css` then `styles/hud.css` own the look, in that order.**
+  `console.css` is the reskin layer: square geometry, corner ticks, segmented meters,
+  mono uppercase labels, screen frame. `styles/hud.css` loads last and is the emissive
+  layer on top of it — chamfers, bezels, brackets and bloom. New UI should read as
+  machine, not as web page: square the corners, label in mono, and give anything
+  list-shaped a rail or an index rather than a rounded card. Because each loads after
+  the last, any responsive rule either overrides must be re-asserted in its own media
+  blocks at the end of that file.
+
+  Three rules hold `hud.css` together, and breaking one is what every bug in it has been:
+
+  - **Chamfer, not radius.** `--ch` sets the cut and `--cut-tlbr` / `--cut-br` are the
+    polygons. A modal cuts two corners; everything smaller cuts one. That is the
+    hierarchy — twenty double-cut plates on the Desk read as sawteeth.
+  - **The frame is a layer, not a border.** `clip-path` throws a border away at the cut,
+    so a chamfered plate is two shapes: the element *is* the 1px line and a pseudo-element
+    inset by 1px is the fill. The fill must be **opaque** — built only from translucent
+    gradients, the bezel colour floods the whole plate. And it goes at **`z-index: -1`**,
+    never `0`: a `z-index: 0` fill paints over a bare text label, and the obvious fix —
+    `> * { position: relative; z-index: 1 }` — drags every absolutely-positioned child
+    back into flow. A clip-path already makes the host a stacking context, so a negative
+    index lands above the host's background and below all content, static children
+    included. Use `filter: drop-shadow()`, never `box-shadow`, or the shadow draws a
+    rectangle behind a cut plate.
+  - **Colour is structure, not tint — and it closes.** An accent lights an edge, a
+    bracket or a keycap: something that would still be there in white. It never washes a
+    surface, and it never lands on one edge. A stripe down the left of a card is the web's
+    idiom for "category"; a frame closed on all four sides is the one a game panel uses,
+    and that difference is most of why this reads as hardware. Both stylesheets underneath
+    are full of `border: 1px solid A; border-left: 2px solid ACCENT` — `--fk` names the
+    accent and `hud.css` gives it all four sides. Watch specificity when you add one:
+    those rules are written as `.commit.done`, which out-specifies a single-class rule
+    here, so the frame rules use doubled selectors (`.commit.commit`) to tie and win on
+    order rather than reaching for `!important`.
+
+    Three screens are exempt, on purpose: the opening beats, the ending, and the act
+    transition are film, not interface, and a framed panel around a paragraph of prose is
+    the UI walking into the shot. They keep bare typography over the photograph. The act
+    card takes one thing from this file — a reticle of four corner brackets standing off
+    the title — because that reads as the machine noticing the moment rather than as a
+    card wrapped around it.
+
+    `tools/oneside.mjs` is how this is checked. Like `shot.mjs` it wants an external
+    Playwright and is not a dependency. It walks every view and flags any element whose
+    border differs edge to edge, plus any `::before`/`::after` that is a thin bar pinned
+    to one side, then marks each hit against a list of the neutral hairlines that divide
+    regions and rows (`.topbar`, `.nav`, `.view-head`, `.nem-move`, the prose blockquote).
+    Those are structure, not accent; anything it marks `✗` is a bug. The answer is not
+    zero, which is why this prints a list rather than gating.
+
+  Check which pseudo-element is already spoken for before taking one: `::after` on a
+  research node is its tick mark, `::before` on a Wire reply is its `>` prompt glyph, and
+  quietly claiming either deletes it everywhere. `tools/uitest.mjs` renders without CSS
+  and cannot see any of this — the only check is looking at it.
 
 ## The world, played (WebMCP)
 
@@ -51,7 +99,8 @@ world exactly as before, and that path must never regress.
   `src/world/effects.js`, bounded by `src/world/validate.js`. Adding a key means
   adding it there and deriving a ceiling; there is no other way in.
 - **Ceilings are derived, and split by direction.** `tools/capsderive.mjs` runs
-  all 715 authored choices and reports what the deck takes and what it gives
+  all 383 authored choices once per act each can appear in (715 executions) and
+  reports what the deck takes and what it gives
   separately, because they are not the same number. Deriving a ceiling on damage
   from the size of the game's rewards was a real bug: it let the world take most
   of an Act I company's output twice a fortnight.
@@ -115,11 +164,23 @@ world exactly as before, and that path must never regress.
 - **`_toolBusy` lives in `loop.js`, not on the state object.** A save taken while
   it was true would reload into a game whose clock never starts. `save.js` strips
   the transient underscore flags for the same reason.
-- **The Wire rail is `display: none` below 1120px** and the browser this is meant
-  to be played in is a ~760px pane, so the world's console has a second home
-  behind a topbar button. It is in the topbar and not the statusline because
-  ChatGPT's chat input floats over the bottom centre of its own browser, about
-  720×120 — `tools/shot.mjs` checks for anything pinned under it.
+- **The Wire rail is a drawer below 1120px**, because the browser this is meant
+  to be played in is a ~760px pane. It used to be `display: none` there, and that
+  did not merely hide a feed: the threads waiting on an answer are decisions, and
+  at 760px nine of them sat in the DOM with nothing on screen that could reach
+  any of them. It slides now, and it is the *same element* — `paintFeed` keeps
+  writing into the same `#feed-list` and the thread buttons keep their delegated
+  action, so there is no second copy to go stale. `wire-toggle` in the topbar is
+  the door and carries the count of what is behind it; the head has a close and
+  Escape works. No scrim, on purpose: a full-screen fixed layer is what
+  `tools/shot.mjs` calls a page-eater.
+  The world's console rides in that rail and keeps its own topbar button as well.
+  Both are in the topbar and not the statusline because ChatGPT's chat input
+  floats over the bottom centre of its own browser, about 720×120 — the drawer
+  stops above that band at ≤860px, and `tools/shot.mjs` checks both that the Wire
+  is reachable at every width and that nothing it pins lands under the chat box.
+  That tool also knows that a panel parked entirely off-canvas by a transform is
+  a shut door rather than clipped content; without that it flags its own drawer.
 - **Tool names go through a safety review.** Consequential verbs (`open_*`,
   `delete_*`, `send_*`) fire a confirmation modal that stalls a filmed chain.
   Names here describe the effect; re-check on the platform (`docs/DAY0.md`).

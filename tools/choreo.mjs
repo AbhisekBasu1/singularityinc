@@ -37,6 +37,7 @@ await MCP.boot();
 
 const shot = [];
 const beat = (n, line) => { shot.push(`${String(n).padStart(2, '0')}  ${line}`); };
+let mergerMove;
 
 // A take is choreographed, not improvised. Between beats the state is put where
 // the shot needs it — the rate windows cleared, the card cleared, the run not
@@ -48,6 +49,7 @@ function markOut() {
   s.world.author.recent.postDays = [];
   s.ending = null;
   World.clearPending('take');
+  s.world.author.inbox = [];
   World.noteCall();
 }
 
@@ -72,6 +74,7 @@ await section('0:30 — "I call Marcus Vance and offer a merger"', async () => {
   // Vance has to be somebody the founder has met before the world may use him.
   bot.play(s, 40);
   s.narrative.relationships.vance = { met: true, affinity: -1, respect: 2, fear: 0, arc: 2 };
+  markOut();
   await Surface.reconcile(s, 'take');
   ok('and now the world can speak as him', R.has('post_as_vance'), R.list().join(','));
 
@@ -97,18 +100,35 @@ await section('0:30 — "I call Marcus Vance and offer a merger"', async () => {
   ok('it is on the founder\'s screen', !!s.narrative.activeEvent);
   eq('with his face on it', s.narrative.activeEvent.char, 'vance');
   eq('and three things they could do', s.narrative.activeEvent.choices.length, 3);
-  beat(4, 'TYPE INTO CHAT: "I call Marcus Vance and offer a merger."');
-  beat(5, 'THE CARD FADES IN: his portrait, the text typing itself out.');
+  const waiting = mc.call('wait_for_world', {});
+  await Promise.resolve();
+  const sent = World.submitFounderWords(s, 'I call Marcus Vance and offer a merger.');
+  eq('the card accepts the founder\'s move', sent.ok, true, JSON.stringify(sent));
+  mergerMove = await waiting;
+  eq('the waiting world receives the exact words', mergerMove.founder_words,
+     'I call Marcus Vance and offer a merger.');
+  ok('and gives them an identity', !!mergerMove.submission_id, JSON.stringify(mergerMove));
+  beat(4, 'THE WORLD DEALS A VANCE CARD: his portrait, prose, and written choices.');
+  beat(5, 'TYPE ON THE CARD: "I call Marcus Vance and offer a merger." SEND TO WORLD.');
 });
 
 await section('0:50 — the founder answers, and the numbers move', async () => {
   const rep0 = s.resources.reputation;
-  const r = resolveChoice(s, 0);
+  await Surface.reconcile(s, 'take');
+  const proposed = await mc.call('answer_in_own_words', {
+    submission_id: mergerMove.submission_id,
+    outcome: 'You put a number on the table. Vance is quiet for four seconds, then asks for the model.',
+    tone: 'risky',
+    effects: { rep: 6, focus: -5 },
+  });
+  eq('the bespoke consequence is only proposed', proposed.status, 'needs_human', JSON.stringify(proposed));
+  eq('nothing lands before the human accepts it', s.resources.reputation, rep0);
+  const r = World.acceptProposal(s);
   ok('the outcome is prose', typeof r.outcome === 'string' && r.outcome.length > 20);
   ok('reputation actually moved', s.resources.reputation > rep0);
   ok('and the strip has something to show', (r.effects || []).length > 0, JSON.stringify(r.effects));
   dismissEvent(s);
-  beat(6, 'CLICK a choice. The outcome types out; the stat strip moves.');
+  beat(6, 'THE CONSEQUENCE TYPES IN. THE FOUNDER PRESSES ACCEPT. THE STAT STRIP MOVES.');
 });
 
 await section('1:00 — the world keeps playing while they do', async () => {
@@ -254,7 +274,7 @@ await section('2:40 — the numbers', async () => {
 
 console.log('\n── the shot list, as tested ──');
 for (const line of shot) console.log('  ' + line);
-console.log('\n  Money shot, sound off: a person types a sentence and a card with a face');
-console.log('  on it fades in. Everything else is that, plus consequences.');
+console.log('\n  Money shot, sound off: a person types a move directly on a card; its');
+console.log('  choices become a bespoke consequence, and only Accept makes it real.');
 
 report('choreography');

@@ -44,7 +44,7 @@ exist that is also a rule of the game:
 | **Mute the world** | one abort takes every registration with it |
 | the stop button halts the clock mid-run | `options.signal`, honoured inside a long-running tool |
 | everything the world wrote, read back | `untrustedContentHint` — semantically true, not decorative |
-| `briefing`, `example_cards`, `explain_term` | `readOnlyHint` |
+| `briefing`, `activity_log`, `inspect_module`, `example_cards`, `explain_term` | `readOnlyHint` |
 | accepting your own fate, by hand | a declarative form with **no** `toolautosubmit` |
 | the world stays on duty while you play | a long-pending tool: the page cannot *start* a turn, but it can hold one open |
 | `forecast` — run it forward without committing | `readOnlyHint`, and a hypothetical that provably leaves no trace |
@@ -75,6 +75,10 @@ The page holds no key and names no vendor.
   line under the choices: type what you actually do. *"I call Marcus Vance and
   offer a merger."* The card that comes back has his face on it, and you press
   Accept before a word of it is real.
+- **It sees the whole company, not only the modals.** Meaningful play across all
+  eight modules wakes the live world. Rapid direct work is batched, strategic
+  decisions arrive immediately, `activity_log` survives reconnects, and
+  `inspect_module` gives the context behind a beat without taking control away.
 - **You can take it away.** Three doctrines earned by playing a certain way
   permanently remove something from the world's hand, and the plug removes all
   of it. The count in the popover goes down because you earned something.
@@ -101,7 +105,8 @@ protagonist plays, and revocable in one click.
   measures the *serialised* payload, structured results that never reject, and a
   surface that is a pure function of game state.
 - **The ceilings are derived from the game itself.** `tools/capsderive.mjs`
-  executes all 715 authored choices and takes the 80th percentile of what the
+  executes all 383 authored choices, once per act each can appear in — 715
+  executions — and takes the 80th percentile of what the
   written deck takes and what it gives — separately, because they are not the
   same number.
 - **`evals/capsfuzz.mjs` plays the worst assistant the rules allow** against a
@@ -122,7 +127,7 @@ protagonist plays, and revocable in one click.
 ## The reusable part
 
 `docs/PATTERN.md`. Four files — `detect.js`, `results.js`, `pack.js`,
-`registry.js`, 643 lines — that handle every documented trap in the
+`registry.js`, 667 lines — that handle every documented trap in the
 platform and import nothing outside their own directory. That last claim is a
 build gate, not a sentence: `tools/webmcptest.mjs` fails if one of them grows an
 import or a word of domain vocabulary.
@@ -151,8 +156,8 @@ the real reducers so it cannot rot:
 0:00  the compatibility contract, spoken
 0:10  "A founder sim where your own assistant plays the world against you."
 0:20  the popover, open, and left open
-0:30  type: "I call Marcus Vance and offer a merger" → his card fades in
-0:50  click a choice; the stat strip moves
+0:30  a Vance card lands; type on it: "I call Marcus Vance and offer a merger"
+0:50  Send to world → its consequence appears → Accept → the stat strip moves
 1:00  the world posts as Vance while the founder keeps playing
 1:20  the world asks for too much → a refusal with a number → it rewrites
 1:40  the founder earns Untouchable → regulator_pressure vanishes, one shot
@@ -163,8 +168,8 @@ the real reducers so it cannot rot:
 2:40  the evals table, the repo, the deep link
 ```
 
-**Money shot, sound off:** a person types a sentence and a card with a face on it
-fades in.
+**Money shot, sound off:** a person types a move directly on a card; the choices
+become a bespoke consequence, and only their **Accept** makes it real.
 
 ---
 

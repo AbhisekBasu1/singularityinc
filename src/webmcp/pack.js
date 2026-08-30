@@ -16,8 +16,7 @@
 // outside this directory. `tools/webmcptest.mjs` fails the build if that stops
 // being true.
 export const HARD_CAP = 1500;
-export let BUDGET = 1400;
-export function setBudget(n) { BUDGET = Math.max(200, Math.min(HARD_CAP, Number(n) || BUDGET)); }
+export const BUDGET = 1400;
 
 export function weigh(x) {
   try { return JSON.stringify(x).length; } catch { return Infinity; }
@@ -55,9 +54,19 @@ function walk(v, path, seen, depth) {
   seen.delete(v);
 }
 
-// Fields carrying prose, longest-first, that may be shortened to fit. Anything
-// not named here is structural and is never touched.
+// Fields carrying prose, in the order they give way. A field not named here
+// is still trimmed — after these, heaviest first — rather than dropped whole
+// by the structural pass below: a `briefing` grew four fields this list did
+// not know about, and each of them went from present to gone in one step.
 const TRIMMABLE = ['brief', 'context', 'body', 'lately', 'reason', 'wire', 'also', 'warnings', 'title'];
+const PROTECTED = ['status', 'next', 'rule', 'reason', 'day', 'act', 'warning'];
+function trimOrder(out) {
+  const rest = Object.keys(out)
+    .filter((k) => !TRIMMABLE.includes(k) && !PROTECTED.includes(k) && k !== '_trimmed')
+    .filter((k) => typeof out[k] === 'string' || Array.isArray(out[k]) || (out[k] && typeof out[k] === 'object'))
+    .sort((a, b) => weigh(out[b]) - weigh(out[a]));
+  return [...TRIMMABLE, ...rest];
+}
 
 function shorten(str, by) {
   const target = Math.max(24, str.length - by);
@@ -75,7 +84,7 @@ export function pack(result, { budget, hard = HARD_CAP } = {}) {
   let trimmed = false;
   for (let round = 0; round < 8 && weigh(out) > budget; round++) {
     let cutSomething = false;
-    for (const key of TRIMMABLE) {
+    for (const key of trimOrder(out)) {
       if (weigh(out) <= budget) break;
       const v = out[key];
       if (typeof v === 'string' && v.length > 30) {
@@ -97,7 +106,7 @@ export function pack(result, { budget, hard = HARD_CAP } = {}) {
   // `warning` is in here because it is the one field whose absence changes the
   // meaning of the rest: a payload that carries another origin's prose without
   // the note saying it contains an instruction is worse than no payload.
-  const protectedKeys = ['status', 'next', 'rule', 'reason', 'day', 'act', 'warning'];
+  const protectedKeys = PROTECTED;
   if (weigh(out) > hard) {
     const keys = Object.keys(out).filter((k) => !protectedKeys.includes(k));
     while (keys.length && weigh(out) > hard) { delete out[keys.pop()]; trimmed = true; }

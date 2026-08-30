@@ -77,7 +77,8 @@ export function tickResearch(S, days, laneOutput, m = computeMods(S)) {
     // auto-pull from queue
     while (S.research.queue.length) {
       const next = S.research.queue.shift();
-      if (isAvailable(S, RESEARCH_MAP[next])) { startResearch(S, next); break; }
+      const node = RESEARCH_MAP[next];          // a renamed node in an old save is skipped, not a crash
+      if (node && isAvailable(S, node)) { startResearch(S, next); break; }
     }
   }
   if (!S.research.active) return null;

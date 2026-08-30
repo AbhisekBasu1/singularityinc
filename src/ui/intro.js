@@ -12,6 +12,12 @@ import { companyName, personName, handleFor, TAGLINES } from '../data/names.js';
 import { pick } from '../engine/rng.js';
 import { fmt, money } from '../engine/format.js';
 import { loadLegacy, hasSave } from '../engine/save.js';
+import { newGame } from '../engine/state.js';
+import { rngState, setRngState } from '../engine/rng.js';
+import { capability } from '../webmcp/index.js';
+import { desiredTools, templateFor } from '../webmcp/surface.js';
+import { PLATFORM, REMEDY } from '../data/platform.js';
+import { LATE_START } from '../data/balance.js';
 
 const ARCH_COLOR = { hacker: '#4dd0e1', designer: '#c084fc', hustler: '#f5a623',
   researcher: '#8b5cf6', operator: '#7c8a99', prophet: '#ffffff', ghost: '#6b7686' };
@@ -23,6 +29,8 @@ export const draft = {
   category: 'devtools',
   difficulty: 'standard',
   scenario: 'none',
+  assistant: 'play',        // 'play' | 'mute' — asked only where both are real
+  start: 'day0',            // 'day0' | 'act3' — where the run begins
 };
 
 let onStart = null;
@@ -31,6 +39,183 @@ export function setHandlers(h) { onStart = h.start; onContinue = h.cont; }
 
 const app = () => document.getElementById('app');
 const legacy = () => loadLegacy() || { runs: 0, unlockedArchetypes: ['hacker'] };
+
+// ── The world, on the title ─────────────────────────────────────────────────
+// The headline feature is on the first screen, and it is detected rather than
+// asked: the panel says what this browser can do, shows the hand the world
+// will hold the moment the run begins, and offers the one door that matters
+// for where the player is. Nothing here is a settings step — Begin is Begin.
+
+// What the world holds at day zero, from the same pure function that publishes
+// the surface, so the list on the title can never disagree with the popover.
+export function openingHand() {
+  const rng = rngState();
+  let names = [];
+  try { names = desiredTools(newGame({})); } catch { names = []; }
+  finally { setRngState(rng); }
+  return {
+    tools: names.map((name) => ({ name, title: templateFor(name)?.title || '' })),
+    later: EARNED_BY_PLAY,
+  };
+}
+const EARNED_BY_PLAY = [
+  ['post_as_<name>', 'the voice of anyone you meet'],
+  ['rival_move', 'once a rival becomes your nemesis'],
+  ['market_weather', 'from Act III'],
+  ['regulator_pressure', 'from Act III, until you earn Untouchable'],
+  ['read_the_rival', 'while the rival lab\'s own site is answering'],
+];
+
+// There is no documented host flag for a page to read. The desktop browser's
+// WebMCP bridge currently exposes Codex-prefixed methods (and, on some builds,
+// its backing object); older builds announced themselves in the user agent.
+// Keep all three as best-effort signals. A miss is still harmless at the
+// action boundary: main.js refuses to deep-link a page that is already hosted.
+function inChatGPT() {
+  try {
+    const mc = document?.modelContext;
+    return !!window?.__codexWebMcpModelContext
+      || typeof mc?.codexGetTools === 'function'
+      || typeof mc?.codexExecuteTool === 'function'
+      || /CodexBrowser|ChatGPT/i.test(navigator?.userAgent || '');
+  } catch { return false; }
+}
+
+// 'hosted': site tools, inside ChatGPT's browser — the assistant is at the
+// table. 'tools': site tools, no agent of its own (Chrome with the trial).
+// 'none': the written world is the only game here. Detected, never asked.
+export function assistantMode() {
+  const cap = capability();
+  const on = cap.tier === 'native' || cap.tier === 'legacy';
+  return !on ? 'none' : inChatGPT() ? 'hosted' : 'tools';
+}
+
+// The one primary button says which game it opens.
+function beginLabel() {
+  const m = assistantMode();
+  return m === 'hosted' ? 'Begin — with your assistant' : m === 'none' ? 'Begin — the written world' : 'Begin';
+}
+
+// The question, asked only where both answers are real: a browser with site
+// tools. "Not this run" is the plug the World console already has, thrown
+// before the run starts, and it can be thrown back at any time.
+export function assistantPick() {
+  if (assistantMode() === 'none') return '';
+  const play = draft.assistant !== 'mute';
+  return `<div class="assistant-pick reveal" role="group" aria-label="Your assistant">
+    <div class="ap-kicker"><span class="al-mark">◈</span> Your assistant is at the table</div>
+    <div class="ap-row">
+      <button class="ap-opt ${play ? 'on' : ''}" data-act="pick-assistant" data-v="play" aria-pressed="${play}">
+        <b>Let it play the world</b>
+        <span>It writes the cards, speaks for the cast, moves the rival. Say <i>play the world</i> in the chat once the run begins.</span>
+      </button>
+      <button class="ap-opt ${play ? '' : 'on'}" data-act="pick-assistant" data-v="mute" aria-pressed="${!play}">
+        <b>Not this run</b>
+        <span>The written world — six files of cards, a rival with its own moves. You can hand it back at any time.</span>
+      </button>
+    </div>
+    ${assistantHandoffPreview()}
+  </div>`;
+}
+
+// The choice used to hide the only action it required in one line of 11px
+// copy. Make the handoff part of the decision itself: before the player opens
+// the editor they know that the page can offer tools, but only they can start
+// the chat turn that brings the assistant through them.
+export function assistantHandoffPreview() {
+  if (assistantMode() === 'none' || draft.assistant === 'mute') return '';
+  const moment = draft.start === 'act3' ? 'after the first-year curtain' : 'after First Light';
+  return `<div class="ap-handoff" aria-label="How the assistant joins the run">
+    <div class="aph-k">THE HANDOFF</div>
+    <div class="aph-flow">
+      <span><b>1</b> The editor registers the world&rsquo;s tools</span>
+      <i aria-hidden="true">→</i>
+      <span><b>2</b> The clock pauses ${moment}</span>
+      <i aria-hidden="true">→</i>
+      <span><b>3</b> You send <em>play the world</em> in this chat</span>
+    </div>
+    <div class="aph-note">The game confirms the first tool call before the story starts. You can use the written world instead.</div>
+  </div>`;
+}
+// Where the run starts. Day one is the game. Act III is the door for a judge
+// with three minutes and for anyone who has played the garage before: the
+// machine plays the first year in a second, and the world's whole hand is on
+// the table when the founder walks in.
+export function startPick() {
+  const late = draft.start === 'act3';
+  return `<div class="start-pick reveal" role="group" aria-label="Where the run starts">
+    <div class="adv-label">Choose where the story begins</div>
+    <div class="start-row">
+      <button class="start-opt ${late ? '' : 'on'}" style="--ac:#00e5a0" data-act="pick-start" data-v="day0" aria-pressed="${!late}">
+        <b>⌘ Day one</b>
+        <span>The full story — $12,000, a laptop and an empty repository.</span>
+      </button>
+      <button class="start-opt ${late ? 'on' : ''}" style="--ac:#8b5cf6" data-act="pick-start" data-v="act3" aria-pressed="${late}">
+        <b>★ Quick tour — Act III</b>
+        <span>Skip the first year and meet the rival, cast, market and regulators immediately. <i>×${LATE_START.LEGACY_MULT.toFixed(1)} legacy</i></span>
+      </button>
+    </div>
+  </div>`;
+}
+function openLabel() {
+  const m = assistantMode();
+  if (m === 'none') return 'Open the editor →';
+  return draft.assistant === 'mute' ? 'Open the editor — the written world →' : 'Open the editor — then connect →';
+}
+
+// `brief` is for anyone who has seen the pitch: the status line and the doors,
+// nothing else. The full panel is for first sight.
+export function webmcpPanel({ brief = false } = {}) {
+  const cap = capability();
+  const on = cap.tier === 'native' || cap.tier === 'legacy';
+  const hosted = on && inChatGPT();
+  const hand = openingHand();
+  const reason = on ? (cap.tier === 'legacy' ? cap.reason : '')
+    : (cap.secure ? REMEDY : cap.reason);
+  const chips = hand.tools.map((t) => `<span class="wm-tool" data-tip="${esc(t.title)}">${esc(t.name)}</span>`).join('');
+  const later = hand.later.map(([n, why]) => `<span class="wm-later"><b>${esc(n)}</b> ${esc(why)}</span>`).join('');
+  // A hand-off reloads the game in another browser, and saves do not follow.
+  const saves = hasSave()
+    ? `<span class="wm-say dim">Saves stay in this browser — Settings → Copy save moves one across.</span>` : '';
+  const cta = hosted
+    ? `<div class="wm-cta reveal">
+         <span class="wm-say"><b>You are already in ChatGPT.</b> Press Begin, set up the company, then decide whether this chat plays the world.</span>
+         <button class="btn btn-sm btn-ghost" data-act="assistant-link">How it works</button>
+       </div>`
+    : `<div class="wm-cta reveal">
+         <button class="btn btn-sm" data-act="assistant-open">Play in ChatGPT</button>
+         <button class="btn btn-sm btn-ghost" data-act="assistant-copy">Copy link</button>
+         <button class="btn btn-sm btn-ghost" data-act="assistant-link">How it works</button>
+         <span class="wm-say">Open it there before setup so the game and its assistant begin together.</span>
+         ${saves}
+       </div>`;
+  const status = `<div class="wm-status reveal">
+      <span class="wm-dot ${on ? 'on' : ''}"></span>
+      <span class="wm-state">${on ? 'Site tools on in this browser' : 'No site tools in this browser'}</span>
+      <span class="wm-tier">${esc(cap.label)}</span>
+    </div>
+    ${reason ? `<div class="wm-reason reveal">${esc(reason)}</div>` : ''}`;
+  if (brief) {
+    return `<section class="title-webmcp brief reveal" aria-label="Playing with your assistant">
+      <div class="wm-kicker reveal"><span class="wm-mark">◈</span> The first game built on WebMCP</div>
+      ${status}
+      ${cta}
+    </section>`;
+  }
+  return `<section class="title-webmcp reveal" aria-label="Playing with your assistant">
+    <div class="wm-kicker reveal"><span class="wm-mark">◈</span> The first game built on WebMCP</div>
+    <p class="wm-lead reveal">Your own assistant plays the world against you. It shapes the opposition, the gameplay and the story: it writes the cards, speaks for the cast, moves the rival and turns the market — and you can take any of it away.</p>
+    <p class="wm-lead dim reveal">It plays in full on its own. For the version with an opponent, use a WebMCP-capable browser: <b>${esc(PLATFORM.browser)}</b> or <b>${esc(PLATFORM.app)}</b> on ${esc(PLATFORM.presets)}.</p>
+    ${status}
+    <div class="wm-hand reveal">
+      <div class="wm-label">The world's opening hand · ${hand.tools.length} tools, registered the moment the run begins</div>
+      <div class="wm-tools">${chips}</div>
+      <div class="wm-label wm-label-later">Earned by play</div>
+      <div class="wm-laters">${later}</div>
+    </div>
+    ${cta}
+  </section>`;
+}
 
 // ── Cold open ───────────────────────────────────────────────────────────────
 const COLD_OPEN = [
@@ -56,10 +241,11 @@ export async function showTitle({ cold = null } = {}) {
         <div class="title-sub">One person. One laptop. An unlimited supply of machines
           that will do anything you can describe.</div>
         <div class="title-sub dim2">Find out how far that goes.</div>
+        ${webmcpPanel({ brief: hasSave() || (L.runs || 0) > 0 })}
         <div class="title-actions" id="title-actions">
           ${hasSave() ? `<button class="btn btn-primary btn-lg reveal" data-act="continue-game">Continue</button>` : ''}
           <button class="btn ${hasSave() ? 'btn-ghost' : 'btn-primary'} btn-lg reveal" data-act="new-game">
-            ${hasSave() ? 'New timeline' : 'Begin'}</button>
+            ${hasSave() ? 'New timeline' : beginLabel()}</button>
         </div>
         ${L.runs > 0 ? `<div class="title-legacy reveal">
           <span>${L.runs} timeline${L.runs === 1 ? '' : 's'}</span>
@@ -271,7 +457,7 @@ async function beatThreshold() {
   const scen = SCENARIOS.find((s) => s.id === draft.scenario) || SCENARIOS[0];
 
   app().innerHTML = `
-  <div class="stage"><div class="beat narrow" id="beat">
+  <div class="stage"><div class="beat narrow threshold-beat" id="beat">
     ${chrome(3)}
     <div class="beat-body narrow">
       <div class="threshold-lines" id="lines"></div>
@@ -285,12 +471,14 @@ async function beatThreshold() {
       </div>
       ${showAdv ? `<button class="adv-toggle reveal" data-act="toggle-adv">${advanced ? 'Hide' : 'Adjust'} the run conditions</button>` : ''}
       ${showAdv && advanced ? advancedPanel(L) : ''}
-      <button class="btn btn-primary btn-lg beat-next reveal" data-act="start-game">Open the editor →</button>
-      <div class="beat-note reveal">None of this can be changed later.</div>
-      <button class="assistant-line reveal" data-act="assistant-link">
+      ${assistantPick()}
+      ${startPick()}
+      <button class="btn btn-primary btn-lg beat-next reveal" data-act="start-game">${openLabel()}</button>
+      <div class="beat-note reveal">None of this can be changed later${assistantMode() === 'none' ? '' : ' — except the assistant, which the World console can mute or hand back'}.</div>
+      ${assistantMode() === 'none' ? `<button class="assistant-line reveal" data-act="assistant-link">
         <span class="al-mark">◈</span>
         <span>Play with your assistant — it writes the world against you</span>
-      </button>
+      </button>` : ''}
     </div>
   </div></div>`;
 
@@ -380,6 +568,9 @@ export function getConfig() {
     scenario: draft.scenario,
     productName: draft.companyName?.trim() || 'Untitled',
     tagline: pick(TAGLINES),
+    // 'none' where there was nothing to decide; the game ignores it.
+    assistant: assistantMode() === 'none' ? 'none' : (draft.assistant === 'mute' ? 'mute' : 'play'),
+    start: draft.start === 'act3' ? 'act3' : 'day0',
   };
 }
 

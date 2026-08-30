@@ -103,7 +103,13 @@ export function titleCase(s) {
   return s.replace(/\w\S*/g, (t) => t[0].toUpperCase() + t.slice(1).toLowerCase());
 }
 
-export function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+// NaN fails both comparisons and used to pass straight through, which made a
+// sieve of a safety net: one bad field in a save poisoned every accumulator
+// it touched, permanently. Anything that is not a number clamps to the floor.
+export function clamp(v, lo, hi) {
+  if (typeof v !== 'number' || v !== v) return lo;
+  return v < lo ? lo : v > hi ? hi : v;
+}
 export function lerp(a, b, t) { return a + (b - a) * t; }
 export function invLerp(a, b, v) { return b === a ? 0 : clamp((v - a) / (b - a), 0, 1); }
 

@@ -25,7 +25,9 @@ let fails = 0;
 const ok = (cond, msg) => { if (!cond) { fails++; console.log('  ✗ ' + msg); } else console.log('  ✓ ' + msg); };
 
 // Build a rich mid-game state.
-const s = Game.startNewGame({ founderName: 'Save Test', companyName: 'Persist', archetype: 'operator', category: 'agents' });
+// Seeded: "users did not go backwards offline" is a property of one run, not
+// of the simulation, and an unseeded run failed it about one time in five.
+const s = Game.startNewGame({ founderName: 'Save Test', companyName: 'Persist', archetype: 'operator', category: 'agents', seed: 4242 });
 for (let d = 0; d < 500; d++) {
   for (let i = 0; i < 3; i++) if (s.founder.focus > 30 && s.company.cash > 200) actionPromptAI(s);
   for (let i = 0; i < 3; i++) { const r = Game.doShipFeature(s); if (!r.ok) break; }
@@ -58,6 +60,19 @@ const blob = Save.exportSave(loaded);
 ok(blob.length > 500, `export produces a blob (${blob.length} chars)`);
 ok(Save.importSave(blob), 'import accepts its own export');
 
+// A forecast points the live binding at a throwaway clone while it runs, and
+// the Settings export reads that binding. The clone must never leave, and a
+// flag that describes this moment rather than the run must never travel.
+{
+  const clone = { ...loaded, _forecast: true };
+  ok(Save.exportSave(clone) === null, 'a forecast clone cannot be exported');
+  ok(Save.save(clone) === false, 'nor saved');
+  const flagged = { ...loaded, _agentDriven: true };
+  const decoded = JSON.parse(decodeURIComponent(escape(atob(Save.exportSave(flagged)))));
+  ok(!('_agentDriven' in decoded) && !('_forecast' in decoded), 'transient flags are stripped from an export');
+  ok(flagged._agentDriven === true, 'without touching the live object');
+}
+
 console.log('\n── forward migration from an older schema ──');
 const old = JSON.parse(JSON.stringify(loaded));
 old.meta.version = 1;
@@ -66,9 +81,22 @@ delete old.world.projectsBuilt;
 delete old.objectivesDone;
 delete old.settings.autoShip;
 delete old.company.actStartedDay;
+// Fields on array elements: deepMerge replaces arrays wholesale, so these are
+// the ones a two-level fill could never reach.
+delete old.products[0].peakUsers;
+delete old.products[0].sentiment;
+if (old.agents[0]) { delete old.agents[0].tools; delete old.agents[0].level; }
+if (old.market.competitors[0]) { delete old.market.competitors[0].memory; delete old.market.competitors[0].grudge; }
+// And a field that moved: the transform for version 9 carries it across.
+old._lastShipDay = 123; delete old.stats.lastShipDay;
 store['singularity_inc_save_v1'] = JSON.stringify(old);
 const migrated = Save.load();
 ok(!!migrated, 'old save loads');
+ok(migrated.products[0].peakUsers === 0 && migrated.products[0].sentiment === 0.5, 'a product missing fields is backfilled from the factory');
+ok(!old.agents[0] || (Array.isArray(migrated.agents[0].tools) && migrated.agents[0].level === 1), 'and so is an agent');
+ok(!old.market.competitors[0] || (Array.isArray(migrated.market.competitors[0].memory) && migrated.market.competitors[0].grudge === 0), 'and a competitor');
+ok(migrated.stats.lastShipDay === 123 && migrated._lastShipDay === undefined, 'a moved field is carried by its version transform');
+ok(migrated.products[0].id === old.products[0].id && migrated.products[0].name === old.products[0].name, 'identity is never overwritten');
 ok(migrated.meta.version >= 7, 'version upgraded');
 ok(!!migrated.objectivesDone, 'missing objectivesDone filled');
 ok(migrated.world.projectsBuilt !== undefined, 'missing projectsBuilt filled');

@@ -167,7 +167,7 @@ def({ id: 'content_engine', name: 'Content Engine', branch: 'growth', tier: 2, c
   mods: { repRate: 1.35 }, unlock: 'spec_content' });
 def({ id: 'onboarding', name: 'Ruthless Onboarding', branch: 'growth', tier: 2, cost: 88,
   act: 2, reqs: ['user_interviews'], desc: '−30% churn. Time-to-value measured in seconds.',
-  flavor: 'Eleven steps became one. Retention doubled.', mods: { churn: 0.7 } });
+  flavor: 'Seven steps became one. Retention doubled.', mods: { churn: 0.7 } });
 def({ id: 'network_effects', name: 'Network Effects', branch: 'growth', tier: 3, cost: 210,
   act: 2, reqs: ['referrals', 'onboarding'], desc: 'Churn falls as users grow. Viral +0.06.',
   flavor: 'Now leaving costs them something. This is the moat.',
@@ -215,7 +215,7 @@ def({ id: 'pricing_power', name: 'Pricing Power', branch: 'capital', tier: 2, co
   mods: { priceElastic: 0.5 } });
 def({ id: 'enterprise_sales', name: 'Enterprise Motion', branch: 'capital', tier: 3, cost: 175,
   act: 2, reqs: ['pricing_power'], desc: 'Unlocks Enterprise deals. +60% revenue per paying user.',
-  flavor: 'One logo. Eleven months of procurement. $2.4M ARR. Worth it.',
+  flavor: 'One logo. Fourteen months of procurement. $2.4M ARR. Worth it.',
   mods: { arpu: 1.6 }, unlock: 'enterprise' });
 def({ id: 'venture_debt', name: 'Venture Debt', branch: 'capital', tier: 3, cost: 150,
   act: 2, reqs: ['pitch_craft'], desc: 'Borrow against ARR without dilution.',

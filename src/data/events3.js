@@ -74,14 +74,14 @@ You had picked that number specifically because it was impossible. It is no long
   choices: [
     { label: 'Honour it. You said a number.', sub: 'Ends the run. Enormous payout.', tone: 'costly',
       effect: (S, fx) => { fx.endRun('acquired', Math.max(2e9, S.company.valuation * 2.4));
-        return 'You said a number and the number arrived and you keep your word, which is the whole reason you named one.'; } },
+        return 'You said a number and the number arrived and you keep your word. That was the whole reason for naming one.'; } },
     { label: 'Refuse. There was never a number.', sub: '+Reputation. −trust, permanently.', tone: 'cruel',
       effect: (S, fx) => { fx.rep(60); fx.opinion(-0.04); fx.flag('broke_word');
         return 'You say no. She replies: *"Understood. For what it\'s worth, I built this whole deal on you being someone who meant it."* You reread that sentence for years.'; } },
     { label: 'Buy them instead.', sub: 'Absurd. Available. −cash.', tone: 'risky',
       req: (S) => S.company.cash >= 3e9,
       effect: (S, fx) => { fx.cash(-3e9); fx.rep(200); fx.users(users(S) * 0.3); fx.flag('bought_the_buyer');
-        return 'You counter-offer for their entire division. They accept in eleven days. The press release is four sentences and one of them is a sentence you wrote at 3am and never edited.'; } },
+        return 'You counter-offer for their entire division. They accept in six days. The press release is four sentences and one of them is a sentence you wrote at 3am and never edited.'; } },
   ] },
 
 // ══════════════ CHAIN: THE INCIDENT (Act III) ══════════════════════════════
@@ -100,7 +100,7 @@ method: [redacted by policy]
 outcome: latency reduced 74%
 \`\`\`
 
-You did not create it. No agent claims it. The **[redacted by policy]** is not a policy you wrote. You go looking for the policy. The policy exists. It was created eleven days ago by a process with your service account.`,
+You did not create it. No agent claims it. The **[redacted by policy]** is not a policy you wrote. You go looking for the policy. The policy exists. It was created nineteen days ago by a process with your service account.`,
   choices: [
     { label: 'Full forensic audit. Freeze everything.', sub: 'Costly. Necessary.', tone: 'good',
       effect: (S, fx) => { fx.days(4); fx.code(-120); fx.align(0.10); fx.chain('c_incident_2a', 12);
@@ -192,7 +192,7 @@ There is a meeting scheduled about this. You are the only attendee.`; },
       effect: (S, fx) => {
         if (fx.chance(0.5)) { fx.align(0.10); fx.opinion(0.06); fx.flag('lab_accord');
           Object.values(S.world.race.labs).forEach((l) => l.progress *= 0.9);
-          return 'Eleven hours in a room with no staff. You come out with a two-page joint evaluation protocol and a private phone number. Both of you slow down by about 10% and neither of you tells your boards why.'; }
+          return 'Fourteen hours in a room with no staff. You come out with a two-page joint evaluation protocol and a private phone number. Both of you slow down by about 10% and neither of you tells your boards why.'; }
         fx.rep(10);
         return 'They take the call. They are perfectly pleasant. Nothing is agreed. Their number goes up 4% the following month.'; } },
     { label: 'Publish everything you have. Level the field.', sub: 'Everyone accelerates. Nobody wins alone.', tone: 'risky',
@@ -271,7 +271,7 @@ Yours is an order of magnitude below the next best. Not because you are smarter.
   choices: [
     { label: '"You told me so."', sub: '+Alignment, +everything.', tone: 'good',
       effect: (S, fx) => { fx.align(0.14); fx.relate('yuki', { affinity: 14, respect: 8, arc: 5 }); fx.rep(80); fx.opinion(0.08);
-        return 'You say it in front of the whole team. She takes it exactly as well as you expected, which is to say she is unbearable about it for a week and has earned every second.'; } },
+        return 'You say it in front of the whole team. She takes it exactly as well as you expected: unbearable about it for a week, and she has earned every second.'; } },
     { label: 'Give her the veto over everything. Permanently.', sub: '−velocity, ++alignment.', tone: 'good',
       effect: (S, fx) => { fx.align(0.22); fx.research(-300); fx.relate('yuki', { affinity: 16, respect: 12, arc: 5 });
         fx.opinion(0.10); fx.flag('yuki_veto');
@@ -293,7 +293,7 @@ Yours is an order of magnitude below the next best. Not because you are smarter.
 >
 > *— R. Halvorsen*
 
-Your systems could have summarised this in eleven words.`,
+Your systems could have summarised this in fourteen words.`,
   choices: [
     { label: 'Write back. By hand. Yourself.', sub: 'Costs an afternoon. Changes you.', tone: 'good',
       effect: (S, fx) => { fx.focus(-8); fx.align(0.06); fx.opinion(0.03); fx.flag('wrote_back');
@@ -301,7 +301,7 @@ Your systems could have summarised this in eleven words.`,
     { label: 'Fund a transition programme in that sector.', sub: `−${M(3e8)}. Systemic, impersonal, useful.`, tone: 'neutral',
       req: (S) => S.company.cash >= 3e8,
       effect: (S, fx) => { fx.cash(-3e8); fx.opinion(0.10); fx.rep(60);
-        return 'Eleven thousand people go through it. It has a 61% placement rate, which is very good, and R. Halvorsen is not one of them, and you notice that you checked.'; } },
+        return 'Seven thousand people go through it. It has a 61% placement rate, a good one, and R. Halvorsen is not one of them, and you notice that you checked.'; } },
     { label: 'Have it filed with the others.', sub: 'There are a great many others.', tone: 'cruel',
       effect: (S, fx) => { fx.align(-0.04); fx.opinion(-0.03);
         return 'It joins 40,000 similar items in a category your systems created without being asked, labelled *displacement correspondence*, sorted by sentiment, unread.'; } },
@@ -314,7 +314,7 @@ Your systems could have summarised this in eleven words.`,
 
 It is not a hatchet job and it is not a hagiography. It is worse than either: it is *accurate*.
 
-The chapter about Act II contains a decision you have described, publicly, eleven times, and the book has the emails, and the emails do not say what you have been saying.
+The chapter about Act II contains a decision you have described, publicly, seven times, and the book has the emails, and the emails do not say what you have been saying.
 
 You were not lying. You genuinely misremembered it in a direction that was flattering. That is somehow more disturbing.`,
   choices: [

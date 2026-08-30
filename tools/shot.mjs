@@ -104,10 +104,24 @@ try {
 
     // ── The clipping check ──────────────────────────────────────────────────
     const clipped = await page.evaluate(() => {
+      // A panel deliberately parked off-canvas — the Wire drawer when it is
+      // shut — is not clipped content, it is content waiting behind a door.
+      // The tell is that it (or an ancestor) is *entirely* outside the viewport
+      // and got there by a transform. Something genuinely clipped is cut by the
+      // edge, which means part of it is still inside.
+      const parked = (el) => {
+        for (let n = el; n && n !== document.body; n = n.parentElement) {
+          const r = n.getBoundingClientRect();
+          if ((r.left >= innerWidth - 1 || r.right <= 1)
+              && getComputedStyle(n).transform !== 'none') return true;
+        }
+        return false;
+      };
       const out = [];
       for (const el of document.querySelectorAll('#app *')) {
         const r = el.getBoundingClientRect();
         if (r.width === 0 || r.height === 0) continue;
+        if (parked(el)) continue;
         if (r.right > innerWidth + 2 || r.left < -2) {
           const t = (el.textContent || '').trim().slice(0, 30);
           if (t) out.push(`${el.className || el.tagName}: "${t}"`.slice(0, 70));
@@ -162,6 +176,52 @@ try {
     });
     if (!reach.panel && !reach.chip) note('the world\'s console is unreachable at this width — no panel and no chip');
     else console.log(`  ✓ world console reachable (${reach.panel ? 'panel' : ''}${reach.panel && reach.chip ? ' + ' : ''}${reach.chip ? 'chip' : ''})`);
+
+    // ── So must the Wire ───────────────────────────────────────────────────
+    // The rail used to be `display: none` below 1120px, which is every width
+    // this tool looks at except the desktop one. That did not just hide a feed:
+    // the threads waiting on an answer are decisions, and at 760px — the pane
+    // this game is meant to be played in — nine of them were in the DOM with
+    // nothing on screen that could reach any of them. It is a drawer now, so
+    // what has to hold is that either the rail is open or a door exists, and
+    // that the drawer's own buttons never land under ChatGPT's chat box.
+    const wire = await page.evaluate(() => {
+      const onScreen = (el) => {
+        if (!el) return false;
+        const c = getComputedStyle(el);
+        if (c.display === 'none' || c.visibility === 'hidden' || Number(c.opacity) < 0.05) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && r.right > 2 && r.left < innerWidth - 2;
+      };
+      const open = () => {
+        const rail = onScreen(document.querySelector('.feed-rail'));
+        const threads = [...document.querySelectorAll('.thread-opt')].filter(onScreen).length;
+        const total = document.querySelectorAll('.thread-opt').length;
+        return { rail, threads, total };
+      };
+      const before = open();
+      const door = document.querySelector('[data-act="wire-toggle"]');
+      if (!before.rail && onScreen(door)) {
+        document.getElementById('app')?.classList.add('wire-open');
+        const after = open();
+        // Nothing the drawer pins may sit in the floating chat box.
+        const bw = Math.min(720, innerWidth), bh = 120;
+        const box = { l: (innerWidth - bw) / 2, r: (innerWidth + bw) / 2, t: innerHeight - bh };
+        const buried = [...document.querySelectorAll('.feed-rail button')].filter((el) => {
+          if (!onScreen(el)) return false;
+          const r = el.getBoundingClientRect();
+          const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+          return cx > box.l && cx < box.r && cy > box.t;
+        }).length;
+        document.getElementById('app')?.classList.remove('wire-open');
+        return { how: 'drawer', ...after, buried };
+      }
+      return { how: before.rail ? 'rail' : 'nothing', ...before, buried: 0 };
+    });
+    if (wire.how === 'nothing') note('the Wire is unreachable at this width — no rail and no door');
+    else if (wire.total && !wire.threads) note(`the Wire opens but none of its ${wire.total} thread options are on screen`);
+    else if (wire.buried) note(`${wire.buried} Wire control(s) sit under the ChatGPT chat box`);
+    else console.log(`  ✓ Wire reachable as ${wire.how} (${wire.threads}/${wire.total} thread options on screen)`);
 
     const facts = await page.evaluate(() => ({
       tools: window.__mcpCount ?? null,

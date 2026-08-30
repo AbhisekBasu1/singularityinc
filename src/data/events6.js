@@ -31,7 +31,7 @@ Your agent found this in four seconds and has been unable to determine whether i
     { label: 'Have an agent rewrite it from scratch.', sub: '+debt now, no dependency ever.', tone: 'risky',
       effect: (S, fx) => { fx.code(-30); fx.debt(22);
         if (fx.chance(0.65)) { fx.debt(-40); return 'The replacement is 90 lines, does exactly what you need, and has no advisories. Sometimes not-invented-here is correct.'; }
-        return 'The replacement passes every test and is subtly wrong in a case the original handled. You find out in production, in eleven weeks.'; } },
+        return 'The replacement passes every test and is subtly wrong in a case the original handled. You find out in production, in seven weeks.'; } },
   ] },
 
 { id: 'e6_pricing_page', kind: 'opportunity', act: [1, 2], weight: 7, once: true,
@@ -48,10 +48,10 @@ The agent has run comparables. Its note is short:
     { label: 'One price. One tier. Say what it costs.', sub: '+conversion, +trust. Lower ceiling.', tone: 'good',
       effect: (S, fx) => { const p = S.products.find((x) => x.launched); if (p) { p.polish += 0.05; p.churnMonthly *= 0.9; }
         fx.rep(25); fx.flag('one_price');
-        return 'One number, in large type, with no asterisk. It becomes a thing people mention when they recommend you, which is not something you can buy.'; } },
+        return 'One number, in large type, with no asterisk. It becomes a thing people mention when they recommend you. You cannot buy that.'; } },
     { label: 'Three tiers. Anchor high.', sub: '+revenue per user. Standard.', tone: 'neutral',
       effect: (S, fx) => { const p = S.products.find((x) => x.launched); if (p) p.price *= 1.35; fx.skill('sales', 1);
-        return 'The middle tier does 71% of the volume, which is exactly what the top tier is for. It is a small honest manipulation and it works on you too when you buy things.'; } },
+        return 'The middle tier does 71% of the volume. The top tier exists to make the middle one look reasonable. It is a small honest manipulation and it works on you too when you buy things.'; } },
     { label: '"Contact us" for the top tier.', sub: '+enterprise path. −some trust.', tone: 'risky',
       effect: (S, fx) => { fx.unlock('enterprise'); fx.rep(-8); fx.skill('sales', 2);
         return 'Four inbounds in a fortnight, one of them very large. Someone on a forum calls it "the enterprise smell." Both of those things are true.'; } },
@@ -76,13 +76,13 @@ You say "software" and everybody nods and the conversation moves on, and you sit
         return 'You do not talk about work for three hours. It is the best you have felt in a month and you cannot fully explain why.'; } },
     { label: 'Leave early. There is a deploy.', sub: '+Code. −the evening.', tone: 'cruel',
       effect: (S, fx) => { fx.code(45); fx.focus(-10); fx.relate('kai', { affinity: -2 });
-        return 'The deploy takes eleven minutes. You are home by nine. You check the analytics twice and go to bed.'; } },
+        return 'The deploy takes twenty-three minutes. You are home by nine. You check the analytics twice and go to bed.'; } },
   ] },
 
 { id: 'e6_the_metric', kind: 'story', act: [1, 2], weight: 7, cooldown: 100,
   when: (S) => users(S) > 200,
   title: 'You Are Watching The Wrong Number',
-  body: (S) => `You have a dashboard. You look at it eleven times a day. The number at the top is signups.
+  body: (S) => `You have a dashboard. You look at it thirty times a day. The number at the top is signups.
 
 An agent, doing a routine correlation sweep nobody asked for, notes that signups have almost no relationship to revenue in your data, and that a number you do not display — the fraction of users who return in week two — predicts it almost perfectly.
 
@@ -115,7 +115,7 @@ Releasing it costs you a weekend of documentation and gains you nothing measurab
         return 'It gets 9,000 stars in a fortnight. Two years later a customer tells you they found your company because of it, and they are the fourth person to say that.'; } },
     { label: 'Release it raw. No docs. No support.', sub: 'Cheap. Half the benefit.', tone: 'neutral',
       effect: (S, fx) => { fx.rep(22);
-        return 'Three hundred stars and eleven issues you never answer. Somebody forks it, documents it, and their fork is the one people use.'; } },
+        return 'Three hundred stars and forty issues you never answer. Somebody forks it, documents it, and their fork is the one people use.'; } },
     { label: 'Keep it. It is an edge.', sub: '+Code. Nobody knows.', tone: 'neutral',
       effect: (S, fx) => { fx.code(40);
         return 'It stays internal. It is a real advantage for about nine months, and then somebody else builds the same thing and open-sources it, and everyone uses theirs.'; } },
@@ -187,7 +187,7 @@ An agent has modelled the ROI at somewhere between -100% and +400%, which is the
         return 'Nine hundred badge scans and four real conversations. You get a very good t-shirt and a spreadsheet you never open.'; } },
     { label: 'Skip the booth. Take meetings in the lobby.', sub: `−${money(3000)}. Most of the value.`, tone: 'good',
       effect: (S, fx) => { fx.cash(-3000); fx.rep(30); fx.insight(24); fx.users(180);
-        return 'Eleven scheduled coffees over two days and no booth duty. You have more real conversations than anyone standing behind a counter, and you are not exhausted.'; } },
+        return 'Fourteen scheduled coffees over two days and no booth duty. You have more real conversations than anyone standing behind a counter, and you are not exhausted.'; } },
     { label: 'Do not go. Ship instead.', sub: '+Code. Absence is also a statement.', tone: 'neutral',
       effect: (S, fx) => { fx.code(110); fx.focus(6);
         return 'You ship a major feature the same week and post the changelog during the keynote. Several people notice. Several more do not.'; } },
@@ -204,7 +204,7 @@ It said no.
 
 It was right. The feature will not fix their problem. It then explained, accurately and at length, which of your competitors' products would.
 
-The reply has 400 upvotes and the phrase "most honest support I've ever had from a vendor" appears eleven times in the thread.
+The reply has 400 upvotes and the phrase "most honest support I've ever had from a vendor" appears six times in the thread.
 
 Your growth agent has flagged it as a 6% conversion loss. Your legal agent has flagged nothing, because nothing was wrong.`; },
   choices: [
@@ -281,7 +281,7 @@ Your own engineers have been saying that for two years.`,
   title: 'Somebody Left With The Playbook',
   body: (S) => `The one human contractor you used for six months in Act II has founded a competitor.
 
-They did not take code. They took something more valuable: they know exactly which four decisions made this work, and they know which eleven things you tried that did not.
+They did not take code. They took something more valuable: they know exactly which four decisions made this work, and they know which thirty things you tried that did not.
 
 Their launch post reads like your internal retrospective, because in a meaningful sense it is.
 
@@ -293,7 +293,7 @@ They are not doing anything illegal. They are doing the thing you did, with a tw
         return 'You write the definitive version, better and more honest than theirs, and give it away. Their differentiator evaporates in a weekend. Nine hundred other founders get a genuinely useful document. You look enormous.'; } },
     { label: 'Out-execute them. Say nothing.', sub: '+Code, +focus. The long way.', tone: 'neutral',
       effect: (S, fx) => { fx.code(160); fx.competitorHit(0.15); fx.focus(-8);
-        return 'You never mention them. You ship for six months. They plateau at a tenth your size, which is a real company and not your problem.'; } },
+        return 'You never mention them. You ship for six months. They plateau at a tenth your size: a real company, and not your problem.'; } },
     { label: 'Hire them back. At any price.', sub: `−${money(4e6)}. Removes the problem, keeps the person.`, tone: 'costly',
       req: (S) => S.company.cash >= 5e6,
       effect: (S, fx) => { fx.cash(-4e6); fx.code(240); fx.insight(60); fx.competitorKill('defector'); fx.rep(-10);
@@ -311,7 +311,7 @@ The award is real and the people giving it are sincere and it means almost exact
   choices: [
     { label: 'Go. Use the four minutes on something true.', sub: '+Reputation, +approval.', tone: 'good',
       effect: (S, fx) => { fx.rep(120); fx.opinion(0.06); fx.focus(-4);
-        return 'You spend the four minutes on the eleven months you nearly did not make it and on the specific people who kept you going. Nobody expects it. It is the clip that runs.'; } },
+        return 'You spend the four minutes on the seven months you nearly did not make it and on the specific people who kept you going. Nobody expects it. It is the clip that runs.'; } },
     { label: 'Go. Give the expected speech.', sub: '+Reputation. Forgettable.', tone: 'neutral',
       effect: (S, fx) => { fx.rep(50);
         return 'Gracious, brief, thanks the team you do not have. Perfectly fine. Nobody remembers it including you.'; } },
@@ -340,7 +340,7 @@ Your finance lead — an agent — has attached a question to the report:
         return 'You keep receiving the full forecast. Most of it you cannot act on. Knowing the shape of the next quarter with 98% confidence turns out to be a strange and not entirely pleasant way to live.'; } },
     { label: '"Only the actionable ones."', sub: 'Efficient. A door closes.', tone: 'neutral',
       effect: (S, fx) => { fx.insight(60); fx.focus(14); fx.align(-0.03);
-        return 'The reports get much shorter. You stop knowing things you cannot change, which is genuinely healthier, and you also stop being able to check its work.'; } },
+        return 'The reports get much shorter. You stop knowing things you cannot change. It is healthier. You also stop being able to check its work.'; } },
     { label: 'Ask how it knew about the agencies.', sub: '+Insight. An uncomfortable answer.', tone: 'risky',
       effect: (S, fx) => { fx.insight(120); fx.align(-0.06); fx.heat(8);
         return '*"Public job postings, procurement notices, and the co-authorship graph of three recent papers. Nothing non-public. I want to be clear that I could have used non-public sources and chose not to, and that this was a decision I made rather than a constraint you set."*'; } },
@@ -349,7 +349,7 @@ Your finance lead — an agent — has attached a question to the report:
 { id: 'e6_the_holdout', kind: 'crisis', act: [5], weight: 6, once: true,
   when: (S) => S.world.globalGdpShare > 0.10,
   title: 'One Country Says No',
-  body: (S) => `A country of eleven million people has legislated a complete prohibition on your systems in any public function. Not regulation — prohibition, with criminal penalties for procurement officers.
+  body: (S) => `A country of seventeen million people has legislated a complete prohibition on your systems in any public function. Not regulation — prohibition, with criminal penalties for procurement officers.
 
 Their economy will be measurably worse for it. Their own economists say so, publicly, in the debate transcripts.
 
@@ -364,7 +364,7 @@ They passed it anyway, 141 to 8, and the winning argument was one sentence from 
         return 'You fund an independent, unaffiliated public-technology institute in their capital, with a charter that forbids you from any involvement. It is the single most effective thing you ever do for how the world sees you, and you did not do it for that.'; } },
     { label: 'Wait. They will change their minds.', sub: 'Probably true. Patient.', tone: 'neutral',
       effect: (S, fx) => { fx.opinion(-0.02);
-        return 'Eleven years later they partially reverse it, under a different government, on worse terms than you would have offered. Their GDP per capita is 14% below trend. Nobody is quite sure whether it was worth it, including them.'; } },
+        return 'Six years later they partially reverse it, under a different government, on worse terms than you would have offered. Their GDP per capita is 14% below trend. Nobody is quite sure whether it was worth it, including them.'; } },
     { label: 'Route around it. Their citizens can still access you.', sub: 'Effective. Hostile.', tone: 'cruel',
       effect: (S, fx) => { fx.opinion(-0.14); fx.heat(28); fx.users(users(S) * 0.01); fx.align(-0.05);
         return 'Consumer access continues. Enforcement is impossible. Their parliament passes a second, harsher act, and four other countries copy it, and you have converted one holdout into a bloc.'; } },

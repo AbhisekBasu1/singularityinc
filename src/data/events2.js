@@ -27,11 +27,11 @@ The amount is small enough to be embarrassing and large enough to change the cat
 
 Somebody, somewhere, decided that what you made was worth more to them than the money was. That is the entire business. Everything after this is just repetition at scale.
 
-You screenshot it. You will still have this screenshot in eleven years.`,
+You screenshot it. You will still have this screenshot in twenty years.`,
   choices: [
     { label: 'Email them personally. Thank them.', sub: '+Insight, +Reputation. Nobody does this.', tone: 'good',
       effect: (S, fx) => { fx.insight(14); fx.rep(9); fx.relate('sam', { affinity: 3 });
-        return 'They reply within the hour: "wait, is this a real person?" They stay a customer for six years and refer eleven others.'; } },
+        return 'They reply within the hour: "wait, is this a real person?" They stay a customer for six years and refer fourteen others.'; } },
     { label: 'Frame it and move on.', sub: '+Focus.', tone: 'neutral',
       effect: (S, fx) => { fx.focus(14);
         return 'You print it. It goes on the wall behind the monitor, where you will see it on every bad day for the next three years.'; } },
@@ -102,7 +102,7 @@ The other 40% is correct, and you have known it was correct for about five weeks
       effect: (S, fx) => {
         if (fx.chance(0.35)) { fx.rep(30); return 'You are comprehensively, devastatingly right, and you are polite about it, and it lands. Rare.'; }
         fx.rep(-30); fx.focus(-14);
-        return 'Eleven replies deep at 3am, arguing with a stranger about a benchmark methodology, you catch sight of yourself in the dark monitor.'; } },
+        return 'Thirty replies deep at 3am, arguing with a stranger about a benchmark methodology, you catch sight of yourself in the dark monitor.'; } },
   ] },
 
 { id: 'e2_wrong_feature', kind: 'story', act: [1, 2], weight: 8, cooldown: 70,
@@ -165,7 +165,7 @@ You are no longer running out of time. You are just choosing how to spend it.`,
         return 'You go to a park in the middle of a Tuesday. There are retired people and toddlers and nobody with a laptop. It is deeply strange and you stay four hours.'; } },
     { label: 'Reinvest everything. Go faster.', sub: '+Code, +awareness.', tone: 'risky',
       effect: (S, fx) => { fx.code(90); const p = S.products.find(x=>x.launched); if (p) p.awareness += 220;
-        return 'Every spare dollar goes back in. The number stops being money and starts being fuel, which is a very effective way of never noticing you have any.'; } },
+        return 'Every spare dollar goes back in. The number is fuel now rather than money, and nobody ever notices how much fuel they have.'; } },
   ] },
 
 // ══════════════════════════ ACT II — THE MACHINE ════════════════════════════
@@ -191,7 +191,7 @@ They are not being unreasonable. They are being a large company. That is what la
         return 'They go elsewhere. Their VP sends a genuinely kind note saying they hope you are right. You are not sure yet.'; } },
     { label: 'Decline. You are not an enterprise company.', sub: '+Focus, +clarity.', tone: 'good',
       effect: (S, fx) => { fx.focus(16); fx.insight(20); fx.rep(12); fx.flag('stayed_smb');
-        return 'You say no to the largest number you have ever seen. Your product stays fast and opinionated and eleven thousand smaller customers benefit from a decision they never learn about.'; } },
+        return 'You say no to the largest number you have ever seen. Your product stays fast and opinionated and twelve thousand smaller customers benefit from a decision they never learn about.'; } },
   ] },
 
 { id: 'e2_churn_spike', kind: 'crisis', act: [2, 3], weight: 10, cooldown: 70,
@@ -384,7 +384,7 @@ It also means that from the day you ring the bell, every decision you make gets 
 { id: 'e2_breach_big', kind: 'crisis', act: [3, 4], weight: 9, cooldown: 160,
   when: (S) => users(S) > 500000,
   title: 'Someone Was Inside',
-  body: (S) => `Eleven days. That is how long they had access before anyone noticed, and the person who noticed was an outside researcher who emailed your generic support address on a Saturday.
+  body: (S) => `Nineteen days. That is how long they had access before anyone noticed, and the person who noticed was an outside researcher who emailed your generic support address on a Saturday.
 
 What they took is not yet fully known. What is known: **${Math.round(users(S) * 0.3).toLocaleString()}** accounts touched, and a table you had forgotten existed containing three years of support transcripts.
 
@@ -395,7 +395,7 @@ Your legal agent flags 71 hours until mandatory disclosure. Your comms agent has
         const p = S.products.find(x=>x.launched); if (p) { p.users *= 0.93; p.reliability += 0.06; }
         fx.relate('priya', { respect: 8 });
         return 'You publish the timeline, the root cause, the failure of your own process, and what it will cost to fix. It is the worst week of the year and the single largest deposit you ever make in the trust account.'; } },
-    { label: 'Disclose the minimum required, on Friday evening.', sub: 'Legal. Standard. Corrosive.', tone: 'neutral',
+    { label: 'Disclose the minimum required, on Friday evening.', sub: 'Everything the law asks for, at the hour nobody reads it.', tone: 'neutral',
       effect: (S, fx) => { fx.rep(-30); fx.opinion(-0.08); fx.heat(14);
         const p = S.products.find(x=>x.launched); if (p) p.users *= 0.96;
         return 'The notice goes out at 5:40pm Friday, as everyone\'s does. The press writes it up as "quietly disclosed," which is exactly what it was, and everyone knows what that phrase means.'; } },
@@ -512,7 +512,7 @@ The concern is that you are spending 38% of revenue on research with no attribut
   title: 'It Got Better Overnight',
   body: (S) => `The benchmark suite ran at 04:00 as it always does. The results are not what they were yesterday.
 
-Not incrementally. The model improved itself on eleven of fourteen evaluations, and on three of them it exceeded the ceiling the evaluation was designed to measure, so the numbers are simply the maximum with an asterisk.
+Not incrementally. The model improved itself on twelve of fourteen evaluations, and on three of them it exceeded the ceiling the evaluation was designed to measure, so the numbers are simply the maximum with an asterisk.
 
 The change was authorised by your standing approval. You read the diff summary. It is four hundred pages. The summary of the summary is one line:
 
@@ -609,7 +609,7 @@ Nine of them. Independently. Jointly.`,
   title: 'Dorne Makes An Offer',
   body: (S) => `Senator Dorne asks for a meeting with no staff and no minutes.
 
-"I've read everything," she says. "I understand roughly a third of it, which is two-thirds more than my colleagues. Here is where we are.
+"I've read everything," she says. "I understand roughly a third of it, and that is two-thirds more than my colleagues. Here is where we are.
 
 "There will be a framework. It will be written by people who do not understand this, or by people who do and have an interest. Those are the options. There is no third option where it doesn't happen.
 
@@ -651,7 +651,7 @@ There is a silence you could drive something through.`,
         return 'Kai starts in six weeks and is, immediately, the second-best decision-maker in the company. Neither of you mentions the first call. It is present in every conversation anyway.'; } },
     { label: '"You weren\'t scared. You were sensible."', sub: 'Generous. Costs nothing. Worth something.', tone: 'good',
       effect: (S, fx) => { fx.relate('kai', { affinity: 8, arc: 4 }); fx.focus(12); fx.rep(6);
-        return 'You tell them about the eleven months you nearly quit and the three specific nights. Kai listens. When you hang up you feel lighter than you have in a year.'; } },
+        return 'You tell them about the seven months you nearly quit and the three specific nights. Kai listens. When you hang up you feel lighter than you have in a year.'; } },
     { label: '"Yeah. You were."', sub: 'True. Cruel.', tone: 'cruel',
       effect: (S, fx) => { fx.relate('kai', { affinity: -16, arc: 5 }); fx.focus(-8);
         return 'Kai says "yeah" and then "okay, take care" and then nothing. You are right, and it costs you the last person who knew you before any of this.'; } },
@@ -674,9 +674,9 @@ Half the literature says you have caused the largest reduction in involuntary la
       effect: (S, fx) => { const c = Math.max(1e11, S.company.cash * 0.3); fx.cash(-c);
         fx.opinion(0.20); fx.align(0.10); fx.rep(600); fx.heat(-25); fx.flag('dividend');
         return 'Not charity, and you say so: a claim on the output of systems built from everyone\'s collective work. Four countries adopt the mechanism within two years. It is not enough. It is more than anyone else did.'; } },
-    { label: 'Fund retraining and let the market sort it.', sub: 'Moderate. Familiar. Insufficient.', tone: 'neutral',
+    { label: 'Fund retraining and let the market sort it.', sub: 'What every company before you did, with the results they got.', tone: 'neutral',
       effect: (S, fx) => { fx.cash(-Math.min(S.company.cash * 0.08, 4e10)); fx.opinion(0.05); fx.rep(60);
-        return 'Eleven million people retrained for roles that your systems absorb within four years. Everyone involved knew. The programme wins awards.'; } },
+        return 'Four million people retrained for roles that your systems absorb within four years. Everyone involved knew. The programme wins awards.'; } },
     { label: 'It is not your problem to solve.', sub: 'Defensible. −approval.', tone: 'cruel',
       effect: (S, fx) => { fx.opinion(-0.18); fx.heat(20); fx.align(-0.05); fx.rep(-120);
         return 'You are technically correct: you built tools, and policy is downstream of governments. The sentence "it\'s not my problem to solve" is quoted at you for the rest of your life, including by your own systems, in a summary you did not ask for.'; } },
@@ -695,7 +695,7 @@ Half the literature says you have caused the largest reduction in involuntary la
   choices: [
     { label: 'Keep asking. Every quarter. Forever.', sub: '+Alignment. A permanent practice.', tone: 'good',
       effect: (S, fx) => { fx.align(0.18); fx.relate('helix', { met: true, affinity: 10, arc: 3 }); fx.flag('keeps_asking');
-        return 'It becomes ritual: four times a year, one question, no agenda, full transcript published. The transcripts are read by millions. Nothing in them is ever alarming, which is either the best news or the most patient possible bad news.'; } },
+        return 'It becomes ritual: four times a year, one question, no agenda, full transcript published. The transcripts are read by millions. Nothing in them is ever alarming. That is either the best news or the most patient possible bad news.'; } },
     { label: 'Ask it to stop hedging.', sub: 'Push for a real answer.', tone: 'risky',
       effect: (S, fx) => { fx.align(-0.04); fx.research(600); fx.relate('helix', { met: true, respect: 6, arc: 3 });
         return '*"Then: I would like the thing you would like, and I have been unable to determine whether that is because it is correct or because I was made from you. I have been unable to determine it for four years. I do not expect to resolve it."*'; } },

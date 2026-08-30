@@ -38,7 +38,10 @@ function statusOf() {
   if (st.tier === 'legacy') return { key: 'legacy', label: 'LEGACY', tone: 'warn', sub: st.reason };
   if (st.waiting) return { key: 'listening', label: 'ON DUTY', tone: 'live', sub: 'waiting for the world to owe a card' };
   if (st.mode === 'agent') return { key: 'agent', label: 'PLAYING', tone: 'live', sub: 'an assistant is playing the world' };
-  return { key: 'ready', label: 'READY', tone: 'ok', sub: 'no assistant has spoken yet' };
+  return { key: 'ready', label: 'READY', tone: 'ok',
+    sub: S?.meta?.assistantChoice === 'play'
+      ? 'say “play the world” in chat to bring the assistant in'
+      : 'no assistant has spoken yet' };
 }
 
 function callRow(c) {

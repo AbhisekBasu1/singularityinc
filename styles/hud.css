@@ -1,0 +1,1245 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   HUD — the emissive layer. Loaded after console.css, so this file has the
+   last word on geometry and light.
+
+   console.css made the interface a machine: square, etched, mono-labelled.
+   This makes it an *instrument* — a thing with a bezel, a bloom and a
+   direction. Three rules hold it together:
+
+     1. CHAMFER, NOT RADIUS. A cut corner reads as milled metal; a rounded one
+        reads as a web card. Corners are cut on the diagonal (top-left and
+        bottom-right) so every plate has an axis, and the two square corners
+        carry brackets. `--ch` sets the cut and `--cut-*` are the polygons.
+
+     2. THE FRAME IS A LAYER, NOT A BORDER. `clip-path` throws borders away at
+        the cut, so a chamfered plate is two stacked shapes: the element itself
+        is the 1px line, and a `::before` inset by 1px is the fill. `filter:
+        drop-shadow()` replaces `box-shadow`, because a box-shadow ignores the
+        clip and draws a rectangle behind a cut plate.
+
+     3. COLOUR IS STRUCTURE, NOT TINT — AND IT GOES ALL THE WAY ROUND. An
+        accent never washes a surface: it lights an edge, a bracket or a
+        keycap, something that would still be there in white. And it lights
+        every edge, never one. A stripe down the left of a card is the web's
+        idiom for "category"; a frame closed on all four sides is the one a
+        game panel uses, and the difference is most of why this reads as
+        hardware. `--fk` names the accent, and the frame is the only place it
+        lands.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Cut sizes. Every user of a --cut-* polygon sets its own --ch; this is only
+     the fallback that keeps the polygon valid if one forgets, because an
+     unresolved var() inside clip-path silently becomes `none`. */
+  --ch: 12px;
+
+  --cut-tlbr: polygon(var(--ch) 0, 100% 0, 100% calc(100% - var(--ch)), calc(100% - var(--ch)) 100%, 0 100%, 0 var(--ch));
+  /* Inset by 1px on every side. The diagonal has to shrink by less than the
+     straight edges do or the 1px line pinches to nothing at the cut: at
+     --ch − 0.5px the hypotenuse lands ~1.06px from the outer one, which
+     matches the 1px sides closely enough to read as a single even stroke. */
+  --cut-tlbr-in: polygon(calc(var(--ch) - 0.5px) 0, 100% 0, 100% calc(100% - var(--ch) + 0.5px), calc(100% - var(--ch) + 0.5px) 100%, 0 100%, 0 calc(var(--ch) - 0.5px));
+
+  --cut-br:    polygon(0 0, 100% 0, 100% calc(100% - var(--ch)), calc(100% - var(--ch)) 100%, 0 100%);
+  --cut-br-in: polygon(0 0, 100% 0, 100% calc(100% - var(--ch) + 0.5px), calc(100% - var(--ch) + 0.5px) 100%, 0 100%);
+
+  /* The steel a plate is cut from. */
+  --hud-plate: linear-gradient(168deg, #0e121b 0%, #0a0d15 44%, #06080d 100%);
+  --hud-line:  rgba(255,255,255,0.16);
+}
+
+@keyframes hudSweep {
+  from { transform: translateX(-108%) skewX(-14deg); }
+  to   { transform: translateX(320%) skewX(-14deg); }
+}
+@keyframes hudBracketIn {
+  from { opacity: 0; transform: scale(1.5); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ═══ THE DISPATCH ═════════════════════════════════════════════════════════
+   An event card is the game's one full-attention surface, so it gets the full
+   treatment: a cut bezel, corner brackets in the card's own colour, a measured
+   rail across the top and a bloom that says which kind of news this is. */
+
+.modal {
+  --ch: 20px;
+  /* Every card carries a colour. Event cards get theirs inline from the kind;
+     a plain dialog falls back to instrument steel rather than borrowing an
+     accent it has no reason to. */
+  --kc: var(--kind-color, #7f8da0);
+
+  clip-path: var(--cut-tlbr);
+  /* The element is the bezel. The fill arrives one pixel in. */
+  background:
+    linear-gradient(168deg,
+      color-mix(in srgb, var(--kc) 46%, rgba(255,255,255,0.13)),
+      rgba(255,255,255,0.10) 58%,
+      color-mix(in srgb, var(--kc) 26%, rgba(255,255,255,0.07)));
+  border: none;
+  box-shadow: none;
+  filter:
+    drop-shadow(0 28px 70px rgba(0,0,0,0.85))
+    drop-shadow(0 0 46px color-mix(in srgb, var(--kc) 16%, transparent));
+  overflow: visible;
+}
+.modal::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-tlbr-in);
+  background:
+    /* the kind's light, entering from the corner the rail starts at */
+    radial-gradient(120% 96% at 4% -14%, color-mix(in srgb, var(--kc) 15%, transparent), transparent 62%),
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.014) 0 1px, transparent 1px 3px),
+    var(--hud-plate);
+  /* The inner keyline of a double bezel. It is drawn on the rectangle and then
+     cut by this layer's own clip-path, so it stops cleanly at each chamfer
+     instead of turning the corner — which is exactly how a real bezel reads. */
+  box-shadow:
+    inset 0 0 0 5px rgba(0,0,0,0),
+    inset 0 0 0 6px color-mix(in srgb, var(--kc) 13%, rgba(255,255,255,0.035));
+}
+/* Brackets on the two corners the chamfer left square. */
+.modal::after {
+  content: ''; position: absolute; inset: 0; z-index: 7; pointer-events: none;
+  background:
+    linear-gradient(var(--kc), var(--kc)) 100% 0   / 30px 2px no-repeat,
+    linear-gradient(var(--kc), var(--kc)) 100% 0   / 2px 30px no-repeat,
+    linear-gradient(var(--kc), var(--kc)) 0    100% / 30px 2px no-repeat,
+    linear-gradient(var(--kc), var(--kc)) 0    100% / 2px 30px no-repeat;
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--kc) 60%, transparent));
+  animation: hudBracketIn .5s cubic-bezier(.16,1,.3,1) .12s backwards;
+}
+html.reduced-motion .modal::after { animation: none; }
+
+
+/* components.css runs a bar of the kind's colour along the top edge of the
+   header. The bezel and the corner brackets already say that colour on all
+   four sides, so the bar is a fifth statement of it — in the one shape this
+   file will not use. The divider under the header is structure, not accent,
+   and stays. */
+.modal-top::before { display: none; }
+.modal-top { border-bottom: 1px solid color-mix(in srgb, var(--kc) 15%, rgba(255,255,255,0.05)); }
+
+/* The kind becomes a bracketed tag with its own glyph, not a coloured word. */
+.event-kind {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 3px 9px 3px 8px; margin-bottom: 7px;
+  --ch: 5px; clip-path: var(--cut-br);
+  color: var(--kc);
+  background: color-mix(in srgb, var(--kc) 11%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--kc) 42%, transparent);
+  font-weight: 700;
+}
+.event-kind::before { font-size: 11px; line-height: 1; opacity: 0.95; }
+.event-kind.kind-story::before       { content: '\25C8'; }   /* ◈ */
+.event-kind.kind-crisis::before      { content: '\26A0'; }   /* ⚠ */
+.event-kind.kind-opportunity::before { content: '\2197'; }   /* ↗ */
+.event-kind.kind-character::before   { content: '\260E'; }   /* ☎ */
+.event-kind.kind-milestone::before   { content: '\2726'; }   /* ✦ */
+
+.event-title { text-shadow: 0 0 26px color-mix(in srgb, var(--kc) 22%, transparent); }
+
+/* A card with a face on it is lit by that person, not by its filing category.
+   The portrait's own rim light is the character's colour, so a cyan bezel
+   around a violet-lit face read as two cards stacked. console.css already
+   coloured the kind label this way; this carries it to the whole bezel. */
+.modal.has-portrait { --kc: var(--char-color, var(--kind-color)); }
+.modal.has-portrait .event-kind { color: var(--kc); }
+
+/* The icon chip on a card with no face behind it. */
+.event-avatar {
+  --ch: 9px; clip-path: var(--cut-tlbr); border-radius: 0; border: none;
+  background: color-mix(in srgb, var(--kc) 14%, rgba(255,255,255,0.03));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--kc) 40%, transparent),
+              0 0 24px -8px var(--kc);
+  color: var(--kc);
+  text-shadow: 0 0 14px color-mix(in srgb, var(--kc) 65%, transparent);
+}
+
+
+/* ═══ THE CARD, IN TWO COLUMNS ═════════════════════════════════════════════
+   An event card used to divide one column of height between the scene and the
+   controls. That worked while the controls were three buttons. Once the card
+   became the founder's input surface — a labelled textarea, a status line and
+   a send key — the prose was reading through a letterbox with most of the
+   scene behind a scroll, which is the wrong thing to hide on a card whose
+   whole job is to be read.
+
+   So the scene goes left and the decision goes right, and each half scrolls
+   against its own bottom. Neither can shorten the other, and the card grows
+   sideways into space it already had rather than downwards into space it
+   did not. Below 1000px there is no room for two columns and it stacks again
+   — with the decision capped in `vh` so the scene always keeps the rest.
+
+   The flex chain matters: every ancestor between the modal and a scrolling
+   pane needs `min-height: 0`, or the pane refuses to shrink below its content
+   and the modal grows past its own max-height instead of scrolling. */
+
+.modal-split { width: min(1160px, 100%); }
+
+.modal-cols {
+  display: flex; align-items: stretch;
+  flex: 1 1 auto; min-height: 0;
+}
+.modal-read {
+  display: flex; flex-direction: column;
+  flex: 1 1 auto; min-height: 0; min-width: 0;
+}
+.modal-read .modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+.modal-act {
+  display: flex; flex-direction: column;
+  flex: 0 0 clamp(350px, 36%, 440px); min-height: 0;
+  border-left: 1px solid color-mix(in srgb, var(--kc) 16%, rgba(255,255,255,0.06));
+  /* Opaque, and a shade under the plate: the controls read as their own
+     module, and it is what lets the scroll shadow below match exactly. */
+  background: #070a10;
+}
+.modal-act .modal-choices {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  padding: 13px 16px 18px;
+}
+/* Where a column overflows, say so. The usual scroll-shadow trick throws a
+   dark shadow at the edge, which on a near-black ground is invisible — so
+   these fade the content into the ground instead.
+
+   The fade is pinned to the column rather than to the scroller and is exactly
+   as tall as that scroller's bottom padding. With nothing to scroll it covers
+   only the padding and cannot be seen; with something below it covers text,
+   which is the whole signal. No JS, no scroll listener, and nothing to get out
+   of sync. Keep the two numbers equal if either changes. */
+.modal-act, .modal-read { position: relative; }
+.modal-act::after, .modal-read::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0;
+  z-index: 2; pointer-events: none;
+}
+.modal-act::after  { height: 18px; background: linear-gradient(rgba(7,10,16,0), #070a10); }
+.modal-read::after { height: 22px; background: linear-gradient(rgba(7,9,14,0), #07090e); }
+
+/* The written options sit at the top of the column and the composer sits at
+   its foot, the way an input belongs at the bottom of anything you type into.
+   It reads in that order too: the label starts "Or", which only means anything
+   once the alternatives it is offering an alternative to have been read.
+   `:empty` is display:none, so with no world at the table the auto margin
+   never applies and the choices simply stack from the top. */
+.modal-act .own-words-slot { margin-top: auto; padding-top: 4px; }
+/* The right column's heading. It is the only label either half carries, so it
+   says what the column currently holds — `setKicker` rewrites it when the
+   choices give way to an outcome or to what the world wrote. */
+.act-head {
+  flex: 0 0 auto;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 11px 16px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.055);
+}
+.act-k {
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--kc);
+}
+.act-n {
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--ink-5); white-space: nowrap;
+}
+/* The proposal names itself in its own kicker, and now the column does too. */
+.modal-split .proposal-kind { display: none; }
+
+/* With a column of its own the portrait gets the height it always wanted. */
+.modal-split.has-portrait .modal-top { min-height: 204px; }
+
+@media (max-width: 1000px) {
+  .modal-split { width: min(720px, 100%); }
+  .modal-cols { flex-direction: column; }
+  .modal-act {
+    flex: 0 1 auto; max-height: 46vh;
+    border-left: none;
+    border-top: 1px solid color-mix(in srgb, var(--kc) 16%, rgba(255,255,255,0.06));
+  }
+  .modal-split.has-portrait .modal-top { min-height: 196px; }
+}
+@media (max-width: 700px) {
+  .modal-act { max-height: 52vh; }
+  .modal-split.has-portrait .modal-top { min-height: 156px; }
+}
+
+/* ═══ THE DECISION ═════════════════════════════════════════════════════════
+   Five tones, and every one of them is instrumented. `neutral` used to be the
+   row with nothing on its left edge, which made half a card's options look
+   unfinished rather than deliberately unweighted; it gets steel now. */
+
+.modal-choices { z-index: 1; padding: 4px 20px 20px; gap: 7px; }
+
+.choice {
+  --tone: #7b8aa3;
+  --ch: 12px;
+  position: relative; overflow: visible;
+  clip-path: var(--cut-br);
+  background: color-mix(in srgb, var(--tone) 56%, rgba(255,255,255,0.09));
+  border: none; border-radius: 0;
+  padding: 12px 15px;
+  transition: transform .16s cubic-bezier(.2,.8,.3,1), filter .16s;
+}
+.choice.good   { --tone: var(--green); }
+.choice.risky  { --tone: var(--amber); }
+.choice.cruel  { --tone: var(--red); }
+.choice.costly { --tone: var(--cyan); }
+.choice.good, .choice.risky, .choice.cruel, .choice.costly,
+.choice.good:hover, .choice.risky:hover, .choice.cruel:hover {
+  border-left: none; box-shadow: none;
+}
+
+.choice::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-br-in);
+  background:
+    /* an even breath of the tone off all four edges — the frame's own light
+       falling inward, not a wash poured in from one side */
+    radial-gradient(120% 150% at 50% 50%, transparent 34%, color-mix(in srgb, var(--tone) 10%, transparent)),
+    linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.014) 24px, rgba(255,255,255,0.007)),
+    linear-gradient(180deg, #121722, #0d111a);
+  transition: background .18s;
+}
+/* The chevron that says which way this goes. */
+.choice::after {
+  content: '\25B8'; position: absolute; right: 13px; top: 50%; z-index: 2;
+  transform: translate(-5px, -50%);
+  font-size: 13px; line-height: 1; color: var(--tone);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--tone) 70%, transparent);
+  opacity: 0; transition: opacity .16s, transform .16s cubic-bezier(.2,.8,.3,1);
+  pointer-events: none;
+}
+
+.choice:hover, .choice:focus-visible {
+  transform: translateX(3px);
+  background: color-mix(in srgb, var(--tone) 96%, rgba(255,255,255,0.10));
+  filter: drop-shadow(0 0 22px color-mix(in srgb, var(--tone) 34%, transparent));
+  outline: none;
+}
+.choice:hover::before, .choice:focus-visible::before {
+  background:
+    radial-gradient(120% 150% at 50% 50%, transparent 22%, color-mix(in srgb, var(--tone) 20%, transparent)),
+    linear-gradient(180deg, rgba(255,255,255,0.09), rgba(255,255,255,0.03) 24px, rgba(255,255,255,0.015)),
+    linear-gradient(180deg, #161c28, #10151f);
+}
+.choice:hover::after, .choice:focus-visible::after { opacity: 1; transform: translate(0, -50%); }
+.choice:active { transform: translateX(3px) translateY(1px); }
+
+/* A single pass of light across the row on hover. It is a `::before` child so
+   it can be clipped to the chamfer without a third pseudo-element. */
+.choice .choice-sheen {
+  position: absolute; inset: 0; z-index: -1; overflow: hidden; pointer-events: none;
+  clip-path: var(--cut-br-in);
+}
+.choice:hover .choice-sheen::before {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 32%;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--tone) 22%, transparent), transparent);
+  animation: hudSweep .78s cubic-bezier(.3,.1,.2,1);
+}
+html.reduced-motion .choice:hover .choice-sheen::before { animation: none; }
+
+/* The keycap. This is the reference the whole card is built around: a cut,
+   lit, mono cell that looks like something you press. */
+.choice-num {
+  width: 23px; height: 23px; flex: 0 0 23px; margin-top: 0;
+  --ch: 5px; clip-path: var(--cut-br); border-radius: 0;
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--tone) 26%, rgba(255,255,255,0.05)),
+    color-mix(in srgb, var(--tone) 9%, transparent));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 52%, transparent),
+              inset 0 1px 0 rgba(255,255,255,0.14);
+  color: var(--tone); font-weight: 700; font-size: 11px;
+  text-shadow: 0 0 10px color-mix(in srgb, var(--tone) 55%, transparent);
+  transition: box-shadow .16s, background .16s;
+}
+.choice:hover .choice-num, .choice:focus-visible .choice-num {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--tone) 46%, rgba(255,255,255,0.06)),
+    color-mix(in srgb, var(--tone) 16%, transparent));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 80%, transparent),
+              inset 0 1px 0 rgba(255,255,255,0.2),
+              0 0 16px -3px var(--tone);
+}
+.choice-label { letter-spacing: -0.005em; }
+.choice-sub { color: #7d8798; }
+.choice:hover .choice-label { color: #fff; }
+
+/* The free-form route keeps the decision geometry, but opens into a real text
+   field instead of pretending the chat composer is part of the card. */
+.choice-free {
+  --tone: var(--violet);
+  background: color-mix(in srgb, var(--violet) 30%, transparent) !important;
+  border: none !important;
+}
+.choice-free { background: color-mix(in srgb, var(--violet) 46%, transparent) !important; }
+.choice-free::before {
+  background:
+    radial-gradient(120% 150% at 50% 50%, transparent 34%, rgba(139,92,246,0.07)),
+    linear-gradient(180deg, rgba(255,255,255,0.022), rgba(255,255,255,0.005)),
+    linear-gradient(180deg, #101420, #0c1017);
+  /* dashed, because this row is not a button — but dashed all the way round */
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0);
+  outline: 1px dashed rgba(139,92,246,0.55); outline-offset: -1px;
+}
+.choice-free::after { content: none; }
+.choice-free:hover { transform: none; filter: none; }
+.choice-free:hover .choice-num { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--violet) 52%, transparent), inset 0 1px 0 rgba(255,255,255,0.14); background: linear-gradient(180deg, color-mix(in srgb, var(--violet) 26%, rgba(255,255,255,0.05)), color-mix(in srgb, var(--violet) 9%, transparent)); }
+.choice-free:focus-within::before {
+  outline-style: solid; outline-color: rgba(139,92,246,0.82);
+  box-shadow: inset 0 0 0 1px rgba(139,92,246,0.18), 0 0 28px -12px rgba(139,92,246,0.85);
+}
+.own-words-send { --ch: 5px; flex: 0 0 auto; white-space: nowrap; }
+
+
+/* ═══ THE MOVE IN FLIGHT ═══════════════════════════════════════════════════
+   The pending card puts a status sentence and two controls on one row with
+   `justify-content: space-between`, and the controls are `flex: 0 0 auto`. In
+   the 350–440px decision column that leaves the status about 90px, so
+   "Move saved — reconnect the world to deliver it" broke to two words a line
+   and the controls, unable to shrink, printed straight over the top of it.
+
+   Three things fix it and none of them is a media query. The row wraps. The
+   status asks for a real minimum (170px) so it takes its own line whenever the
+   controls cannot leave it that much — and in the pending card, where there are
+   two controls, it always does. And the controls stop being underlined text
+   with no bounds and become chips, which is both the house style and the reason
+   they can no longer appear to sit on top of anything. */
+
+.own-words-footer { flex-wrap: wrap; row-gap: 9px; }
+.own-words-status {
+  flex: 1 1 170px;
+  align-items: flex-start;          /* the dot marks the first line, not the middle of five */
+  font-size: 9px; letter-spacing: .045em;
+}
+.own-words-status i { margin-top: 4px; }
+.own-words-pending .own-words-status { flex-basis: 100%; }
+
+.own-words-actions {
+  flex: 1 1 auto; justify-content: flex-end; flex-wrap: wrap; gap: 6px;
+}
+.own-words-link {
+  --ch: 4px; clip-path: var(--cut-br);
+  padding: 4px 9px; border: none; border-radius: 0;
+  background: rgba(139,92,246,0.09);
+  box-shadow: inset 0 0 0 1px rgba(139,92,246,0.42);
+  color: var(--ink-3);
+  font-size: 8.5px; letter-spacing: .11em; text-transform: uppercase;
+  transition: background .14s, box-shadow .14s, color .14s;
+}
+.own-words-link:hover {
+  background: rgba(139,92,246,0.22); box-shadow: inset 0 0 0 1px var(--violet);
+  color: #e9dfff;
+}
+.own-words-link:focus-visible {
+  outline: none; box-shadow: inset 0 0 0 1px var(--violet), 0 0 0 2px rgba(139,92,246,0.35);
+}
+
+/* What the founder typed, quoted back. It was rail-on-the-left like everything
+   else once was; this state never renders in the views `tools/oneside.mjs`
+   walks, which is exactly why it survived the sweep. */
+.own-words-quote {
+  border-left: none; padding: 9px 11px;
+  box-shadow: inset 0 0 0 1px rgba(139,92,246,0.4);
+}
+/* No chamfer on this one. A ring drawn as an inset shadow is clipped away at
+   the cut, and on a block this small the missing diagonal reads as a break in
+   the frame rather than as a milled corner. Quoted text does not need the
+   silhouette; it needs the frame to close. */
+
+/* ═══ THE OUTCOME ══════════════════════════════════════════════════════════ */
+
+.outcome {
+  --ch: 12px; clip-path: var(--cut-br);
+  position: relative; margin: 2px 0 10px; padding: 16px 20px 17px;
+  background: none; border-top: none;
+}
+.outcome::before {
+  content: ''; position: absolute; inset: 0; z-index: -1; clip-path: var(--cut-br);
+  background: radial-gradient(120% 150% at 50% 40%, transparent 30%, rgba(0,229,160,0.09));
+  box-shadow: inset 0 0 0 1px rgba(0,229,160,0.55);
+}
+.outcome-text { color: var(--ink); }
+
+.eff {
+  --ch: 5px; clip-path: var(--cut-br); border-radius: 0;
+  padding: 3.5px 9px 3.5px 8px; letter-spacing: 0.03em;
+  border: none;
+}
+.eff.pos { background: rgba(0,229,160,0.10); box-shadow: inset 0 0 0 1px rgba(0,229,160,0.34); }
+.eff.neg { background: rgba(255,77,94,0.10); box-shadow: inset 0 0 0 1px rgba(255,77,94,0.34); }
+
+
+
+/* ═══ PLATES ═══════════════════════════════════════════════════════════════
+   A panel is milled from the same stock as a dispatch, but calmer: one cut
+   corner instead of two, and brackets only along the top. There are twenty of
+   these on the Desk at once, so the double-cut silhouette the event card uses
+   would turn the screen into sawteeth. One cut gives the plate a direction;
+   the modal's two give it presence. That is the hierarchy.
+
+   `backdrop-filter` moves off the panel and onto the fill layer, because the
+   element itself is now the bezel: blurring behind an opaque plate does
+   nothing, and the drifting background is worth seeing through the glass. */
+
+.panel {
+  --ch: 13px;
+  --pk: var(--edge-c, rgba(255,255,255,0.34));       /* the plate's own light */
+  clip-path: var(--cut-br);
+  background: rgba(255,255,255,0.17);
+  border: none; border-radius: 0; box-shadow: none;
+  backdrop-filter: none;
+}
+.panel::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-br-in);
+  backdrop-filter: blur(14px);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.038), rgba(255,255,255,0.008) 74px, rgba(255,255,255,0.015)),
+    linear-gradient(180deg, rgba(9,12,19,0.88), rgba(7,9,15,0.91));
+}
+/* Brackets on all four corners. Two of them read as a header ornament; four
+   read as a bezel, which is the thing being imitated. */
+.panel::after {
+  content: ''; position: absolute; inset: 0; z-index: 3; pointer-events: none;
+  border-radius: 0; opacity: 1;
+  background:
+    linear-gradient(var(--pk), var(--pk)) 0    0    / 15px 2px no-repeat,
+    linear-gradient(var(--pk), var(--pk)) 0    0    / 2px 15px no-repeat,
+    linear-gradient(var(--pk), var(--pk)) 100% 0    / 15px 2px no-repeat,
+    linear-gradient(var(--pk), var(--pk)) 100% 0    / 2px 15px no-repeat,
+    linear-gradient(var(--pk), var(--pk)) 0    100% / 15px 2px no-repeat,
+    linear-gradient(var(--pk), var(--pk)) 0    100% / 2px 15px no-repeat,
+    linear-gradient(var(--pk), var(--pk)) 100% 100% / 15px 2px no-repeat,
+    linear-gradient(var(--pk), var(--pk)) 100% 100% / 2px 15px no-repeat;
+}
+.panel.glow-green  { --pk: rgba(0,229,160,0.85);  background: rgba(0,229,160,0.30); }
+.panel.glow-violet { --pk: rgba(139,92,246,0.85); background: rgba(139,92,246,0.30); }
+.panel.glow-red    { --pk: rgba(255,77,94,0.85);  background: rgba(255,77,94,0.30); }
+.panel.glow-green::after, .panel.glow-violet::after, .panel.glow-red::after {
+  filter: drop-shadow(0 0 7px var(--pk));
+}
+
+/* The header strip is a divider, not another place to put the accent — the
+   plate's frame already carries that on all four sides. console.css hangs an
+   index mark off the left edge here; with a closed frame it is one more
+   left-hand stripe, so it goes. */
+.panel-head { border-bottom: none; position: relative; }
+.panel-head::before { display: none; }
+.panel-head::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
+  background: rgba(255,255,255,0.055);
+}
+.panel-title { color: var(--ink-2); }
+
+/* ═══ TILES AND CELLS ══════════════════════════════════════════════════════ */
+
+.stat-tile {
+  --ch: 8px; clip-path: var(--cut-br);
+  background: rgba(255,255,255,0.13);
+  border: none; box-shadow: none;
+}
+.stat-tile::after {
+  inset: 1px; clip-path: var(--cut-br-in); opacity: 1; z-index: -1;
+  background:
+    linear-gradient(rgba(255,255,255,0.42), rgba(255,255,255,0.42)) 0    0    / 12px 1px no-repeat,
+    linear-gradient(rgba(255,255,255,0.42), rgba(255,255,255,0.42)) 0    0    / 1px 12px no-repeat,
+    linear-gradient(rgba(255,255,255,0.42), rgba(255,255,255,0.42)) 100% 0    / 12px 1px no-repeat,
+    linear-gradient(rgba(255,255,255,0.42), rgba(255,255,255,0.42)) 100% 0    / 1px 12px no-repeat,
+    linear-gradient(rgba(255,255,255,0.42), rgba(255,255,255,0.42)) 0    100% / 12px 1px no-repeat,
+    linear-gradient(rgba(255,255,255,0.42), rgba(255,255,255,0.42)) 0    100% / 1px 12px no-repeat,
+    linear-gradient(160deg, rgba(255,255,255,0.035), transparent 66%),
+    linear-gradient(180deg, #0b0e16, #080b12);
+}
+
+/* ═══ LOG LINES AND READOUTS ═══════════════════════════════════════════════ */
+
+.toast {
+  --ch: 9px; clip-path: var(--cut-br);
+  border: none; border-left: none; border-radius: 0;
+  background: color-mix(in srgb, var(--toast-k, #ffffff) 70%, rgba(255,255,255,0.20));
+  box-shadow: none;
+  filter: drop-shadow(0 8px 24px rgba(0,0,0,0.6));
+}
+.toast::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-br-in);
+  background:
+    radial-gradient(120% 160% at 50% 50%, transparent 30%, color-mix(in srgb, var(--toast-k, #fff) 12%, transparent)),
+    linear-gradient(100deg, rgba(15,19,28,0.98), rgba(10,13,20,0.97));
+}
+.toast.good        { --toast-k: var(--green); }
+.toast.bad         { --toast-k: var(--red); }
+.toast.achievement { --toast-k: var(--amber); }
+
+.tip {
+  --ch: 8px; clip-path: var(--cut-br);
+  border: none; border-radius: 0;
+  background: rgba(255,255,255,0.22);
+  filter: drop-shadow(0 10px 30px rgba(0,0,0,0.75));
+  box-shadow: none;
+}
+.tip::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-br-in);
+  background: linear-gradient(180deg, rgba(13,17,25,0.99), rgba(9,12,19,0.99));
+}
+
+/* ═══ KEYS ═════════════════════════════════════════════════════════════════
+   A button was a filled pill. On this bezel a solid green slab is the one
+   thing left that reads as a web page, so a key becomes what a key on a
+   console is: a dark cell behind a lit edge. The colour is the light around
+   the key, never a wash over the label.
+
+   The two-layer chamfer trick needs one change here. A choice keeps its text
+   in child elements, so `.choice > *` can be lifted above the fill. A button's
+   label is usually a bare text node, and a `z-index: 0` fill would paint over
+   it — inline content comes first in paint order. So the fill sits at
+   `z-index: -1`, which lands above the element's own background (the bezel)
+   and below the text. `clip-path` makes the button a stacking context, so the
+   negative index cannot escape into whatever is behind it. */
+
+.btn {
+  --ch: 7px;
+  --key: rgba(255,255,255,0.22);              /* the lit edge */
+  --key-fill: linear-gradient(180deg, #181e2a, #11161f);
+  --key-ink: var(--ink);
+  clip-path: var(--cut-br);
+  background: var(--key);
+  border: none; border-radius: 0; box-shadow: none;
+  color: var(--key-ink);
+  isolation: isolate;
+  transition: background .15s, color .15s, filter .15s, transform .15s cubic-bezier(.2,.8,.3,1);
+}
+.btn::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-br-in);
+  background: var(--key-fill);
+  transition: background .15s;
+}
+.btn:hover:not(:disabled) {
+  --key: rgba(255,255,255,0.46);
+  --key-fill: linear-gradient(180deg, #212837, #171d29);
+  --key-ink: #fff;
+  background: var(--key);
+  transform: none;
+  filter: drop-shadow(0 0 16px rgba(255,255,255,0.10));
+}
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:focus-visible { outline: none; --key: #fff; filter: drop-shadow(0 0 14px rgba(255,255,255,0.35)); }
+.btn-sm  { --ch: 5px; border-radius: 0; }
+.btn-lg  { --ch: 10px; border-radius: 0; }
+.btn-icon { --ch: 6px; }
+
+/* A lit key. The bezel is the accent at full strength, the interior is the
+   accent at a tenth of it, and the label is the accent lifted to near-white —
+   so the thing that carries the colour is the edge, which is the whole point. */
+.btn-primary {
+  --key: var(--green);
+  --key-fill: linear-gradient(180deg, rgba(0,229,160,0.20), rgba(0,229,160,0.055) 60%), linear-gradient(#0a1712, #071009);
+  --key-ink: #8dffd8;
+  text-shadow: 0 0 16px rgba(0,229,160,0.55);
+  filter: drop-shadow(0 0 20px rgba(0,229,160,0.28));
+}
+.btn-primary:hover:not(:disabled) {
+  --key: #4dffc4;
+  --key-fill: linear-gradient(180deg, rgba(0,229,160,0.34), rgba(0,229,160,0.11) 60%), linear-gradient(#0d2019, #08150e);
+  --key-ink: #ccfff0;
+  background: var(--key);
+  filter: drop-shadow(0 0 30px rgba(0,229,160,0.5));
+}
+.btn-violet {
+  --key: var(--violet);
+  --key-fill: linear-gradient(180deg, rgba(139,92,246,0.22), rgba(139,92,246,0.06) 60%), linear-gradient(#120e1e, #0b0814);
+  --key-ink: #d8c6ff;
+  text-shadow: 0 0 16px rgba(139,92,246,0.55);
+  filter: drop-shadow(0 0 20px rgba(139,92,246,0.26));
+}
+.btn-violet:hover:not(:disabled) {
+  --key: #b18bff;
+  --key-fill: linear-gradient(180deg, rgba(139,92,246,0.36), rgba(139,92,246,0.12) 60%), linear-gradient(#171130, #0e0a1c);
+  --key-ink: #efe7ff; background: var(--key);
+  filter: drop-shadow(0 0 30px rgba(139,92,246,0.48));
+}
+.btn-danger {
+  --key: var(--red);
+  --key-fill: linear-gradient(180deg, rgba(255,77,94,0.20), rgba(255,77,94,0.055) 60%), linear-gradient(#1a0d10, #110809);
+  --key-ink: #ffbcc3;
+  text-shadow: 0 0 16px rgba(255,77,94,0.5);
+  filter: drop-shadow(0 0 20px rgba(255,77,94,0.24));
+}
+.btn-danger:hover:not(:disabled) {
+  --key: #ff8b96;
+  --key-fill: linear-gradient(180deg, rgba(255,77,94,0.34), rgba(255,77,94,0.11) 60%), linear-gradient(#241014, #16090b);
+  --key-ink: #ffe2e5; background: var(--key);
+  filter: drop-shadow(0 0 30px rgba(255,77,94,0.46));
+}
+/* Dark glass rather than nothing: a chamfered plate cannot be transparent
+   inside without losing the diagonal of its own bezel. */
+.btn-ghost {
+  --key: rgba(255,255,255,0.15);
+  --key-fill: linear-gradient(180deg, rgba(12,16,24,0.82), rgba(8,11,17,0.86));
+  --key-ink: var(--ink-2);
+}
+.btn-ghost:hover:not(:disabled) {
+  --key: rgba(255,255,255,0.38);
+  --key-fill: linear-gradient(180deg, rgba(24,30,42,0.9), rgba(16,21,31,0.92));
+  --key-ink: var(--ink); background: var(--key);
+}
+
+/* One pass of light across a key when it is pressable and pointed at. */
+.btn::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 34%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.16), transparent);
+  transform: translateX(-140%) skewX(-14deg);
+  pointer-events: none; opacity: 0;
+}
+.btn:hover:not(:disabled)::after { opacity: 1; animation: hudSweep .8s cubic-bezier(.3,.1,.2,1); }
+html.reduced-motion .btn:hover::after { animation: none; opacity: 0; }
+
+
+/* ═══ THE INDEX ════════════════════════════════════════════════════════════
+   The nav is a module index, so the selected module gets a lit cell rather
+   than a tinted pill. Note the active rail moves *inside* the item: a
+   `clip-path` clips its own pseudo-elements too, so the old rail sitting at
+   `left: -8px` in the gutter would simply have been cut away. */
+
+.nav-item {
+  --ch: 8px;
+  --nk: transparent;
+  --nk-fill: transparent;
+  clip-path: var(--cut-br);
+  background: var(--nk);
+  border: none; border-radius: 0; box-shadow: none;
+  padding-left: 12px;
+  transition: color .14s, background .14s;
+}
+.nav-item::after {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-br-in);
+  background: var(--nk-fill);
+  transition: background .14s;
+}
+.nav-item:hover:not(.locked) {
+  --nk: rgba(255,255,255,0.20);
+  --nk-fill: linear-gradient(90deg, rgba(255,255,255,0.06), rgba(255,255,255,0.014) 70%);
+  background: var(--nk); color: var(--ink);
+}
+.nav-item.on {
+  --nk: rgba(0,229,160,0.55);
+  --nk-fill: linear-gradient(90deg, rgba(0,229,160,0.17), rgba(0,229,160,0.025) 64%), linear-gradient(#0a1512, #070d0b);
+  background: var(--nk); color: var(--ink); box-shadow: none;
+  filter: drop-shadow(0 0 14px rgba(0,229,160,0.2));
+}
+.nav-item.on::before { display: none; }
+.nav-item.on .nav-idx { text-shadow: 0 0 10px rgba(0,229,160,0.7); }
+.nav-badge {
+  --ch: 4px; clip-path: var(--cut-br); border-radius: 0;
+  background: rgba(255,77,94,0.16); color: #ffb3ba;
+  box-shadow: inset 0 0 0 1px rgba(255,77,94,0.62), 0 0 12px -4px var(--red);
+}
+
+/* ═══ THE WIRE ═════════════════════════════════════════════════════════════
+   Each line closes into its own framed transmission. A dense list of rows
+   divided by a hairline is a feed; a stack of closed frames is a console —
+   which needs the rows to stop touching, hence the gap. A line with nothing
+   to say still gets steel, because a list where only some rows are
+   instrumented looks unfinished. */
+
+.feed-list { gap: 6px; padding: 6px 0 24px; }
+.feed-item {
+  --fk: rgba(255,255,255,0.13);
+  position: relative;
+  border: 1px solid var(--fk);
+  background: rgba(255,255,255,0.014);
+}
+.feed-item.good       { --fk: rgba(0,229,160,0.30); background: rgba(0,229,160,0.04);  border-color: var(--fk); }
+.feed-item.bad        { --fk: rgba(255,77,94,0.30);  background: rgba(255,77,94,0.045); border-color: var(--fk); }
+.feed-item.actionable { --fk: rgba(245,166,35,0.6);  background: rgba(245,166,35,0.045); border-color: var(--fk); }
+.feed-item.by-world   { --fk: rgba(139,92,246,0.6);  border-color: var(--fk); box-shadow: none; }
+
+/* A type badge was a filled swatch. Outline it: the colour lands on the edge,
+   the label keeps its own contrast, and eight of them down a rail stop reading
+   as confetti. */
+.feed-type {
+  --ch: 4px; clip-path: var(--cut-br); border-radius: 0;
+  background: color-mix(in srgb, currentColor 11%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 46%, transparent);
+  padding: 1.5px 6px;
+}
+
+/* The lines you can answer. Same language as an event choice, one size down.
+   The fill goes on `::after` here, not `::before`: console.css already spends
+   `::before` on the `>` prompt glyph, and taking it for the plate silently
+   deleted the marker from every reply in the Wire. */
+.thread-opt {
+  --ch: 7px; clip-path: var(--cut-br);
+  border: none; border-radius: 0; position: relative;
+  background: rgba(245,166,35,0.34);
+  padding-left: 20px;
+  transition: background .13s, transform .13s, color .13s;
+}
+.thread-opt::after {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-br-in);
+  background:
+    radial-gradient(130% 190% at 50% 50%, transparent 26%, rgba(245,166,35,0.07)),
+    linear-gradient(180deg, #0f131b, #0b0f16);
+  transition: background .13s;
+}
+.thread-opt:hover {
+  background: var(--amber); color: var(--ink); transform: translateX(2px);
+}
+.thread-opt:hover::after {
+  background:
+    radial-gradient(130% 190% at 50% 50%, transparent 16%, rgba(245,166,35,0.18)),
+    linear-gradient(180deg, #161a23, #101520);
+}
+
+
+/* ═══ THE TREE ═════════════════════════════════════════════════════════════
+   A research node is a cell on a board, so it takes the plate language at
+   card scale: a cut corner, a bezel that carries its state, and a rail that
+   lights when the node is yours. `::after` is spoken for — components.css
+   puts the tick mark of a finished node there — so the fill goes on
+   `::before` and the tick is lifted above it. */
+
+.tech-node {
+  --ch: 11px;
+  --tk: rgba(255,255,255,0.14);          /* the frame, which is the state */
+  --tk-rail: rgba(255,255,255,0.16);     /* the breath of light inside it */
+  clip-path: var(--cut-br);
+  background: var(--tk);
+  border: none; border-radius: 0; box-shadow: none;
+  transition: transform .16s cubic-bezier(.2,.8,.3,1), background .16s, filter .16s;
+}
+.tech-node::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-br-in);
+  background:
+    radial-gradient(120% 150% at 50% 50%, transparent 30%, color-mix(in srgb, var(--tk-rail) 9%, transparent)),
+    linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.007)),
+    linear-gradient(180deg, #0a0e16, #070911);
+  transition: background .16s;
+}
+.tech-node.done   { --tk: rgba(0,229,160,0.62);  --tk-rail: var(--green); background: var(--tk); }
+.tech-node.active { --tk: rgba(77,208,225,0.60); --tk-rail: var(--cyan);  background: var(--tk);
+                    box-shadow: none; filter: drop-shadow(0 0 24px rgba(77,208,225,0.3)); }
+.tech-node.done::after { z-index: 2; text-shadow: 0 0 12px rgba(0,229,160,0.7); }
+.tech-node:hover:not(.locked) {
+  --tk: rgba(255,255,255,0.34);
+  background: var(--tk); transform: translateY(-2px); box-shadow: none;
+  filter: drop-shadow(0 8px 22px rgba(0,0,0,0.6));
+}
+.tech-node.done:hover  { --tk: rgba(0,229,160,0.7); }
+.branch-tab { --ch: 6px; }
+
+/* The mark in the corner of the screen is the one piece of the chrome that
+   still had a 7px radius on it. */
+.brand-mark {
+  --ch: 7px; clip-path: var(--cut-tlbr); border-radius: 0;
+  box-shadow: 0 0 20px rgba(139,92,246,0.5);
+}
+
+/* The world's answer, framed rather than quoted. */
+.proposal-body {
+  border-left: none; padding: 11px 13px;
+  box-shadow: inset 0 0 0 1px rgba(139,92,246,0.5);
+  background: radial-gradient(120% 160% at 50% 50%, transparent 30%, rgba(139,92,246,0.07));
+}
+
+
+/* ═══ THE ROSTER ═══════════════════════════════════════════════════════════
+   An agent card carried its model's colour as a 1px line across the top —
+   the same one-edge idiom as a left stripe, rotated. The colour closes into
+   the frame instead, which is also the only way a stack of six of these reads
+   as six machines rather than six list rows. `::before` belongs to that top
+   line, so the fill goes on `::after`. */
+
+.agent-card {
+  --ak: var(--agent-color, var(--violet));
+  --ch: 12px; clip-path: var(--cut-br);
+  background: color-mix(in srgb, var(--ak) 38%, rgba(255,255,255,0.10));
+  border: none; border-radius: 0; box-shadow: none;
+  transition: transform .16s cubic-bezier(.2,.8,.3,1), background .16s, filter .16s;
+}
+.agent-card::before { display: none; }
+.agent-card::after {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-br-in);
+  background:
+    radial-gradient(120% 150% at 50% 50%, transparent 32%, color-mix(in srgb, var(--ak) 11%, transparent)),
+    linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.007)),
+    linear-gradient(180deg, #0a0e16, #070a11);
+}
+.agent-card:hover {
+  background: color-mix(in srgb, var(--ak) 88%, rgba(255,255,255,0.10));
+  transform: translateY(-2px); box-shadow: none;
+  filter: drop-shadow(0 10px 26px rgba(0,0,0,0.6));
+}
+.agent-avatar {
+  --ch: 8px; clip-path: var(--cut-tlbr); border-radius: 0; border: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ak) 55%, transparent),
+              inset 0 0 20px -8px var(--ak);
+  color: var(--ak);
+}
+.agent-lvl, .trait-chip {
+  --ch: 4px; clip-path: var(--cut-br); border-radius: 0; border: none;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 45%, transparent);
+}
+/* The two states set only `border-color`, which a bezel drawn as a box-shadow
+   would ignore; give them the ring directly. */
+.trait-chip.good { box-shadow: inset 0 0 0 1px rgba(0,229,160,0.5); background: rgba(0,229,160,0.08); }
+.trait-chip.bad  { box-shadow: inset 0 0 0 1px rgba(255,77,94,0.5);  background: rgba(255,77,94,0.08); }
+
+/* The lane selector is a row of keys, so it is built like the other keys. */
+.lane-tabs { --ch: 6px; clip-path: var(--cut-br); border-radius: 0; border: none;
+             box-shadow: inset 0 0 0 1px var(--etch); }
+.lane-tab  { --ch: 5px; clip-path: var(--cut-br); border-radius: 0; }
+.lane-tab.on {
+  background: rgba(0,229,160,0.14);
+  box-shadow: inset 0 0 0 1px rgba(0,229,160,0.55);
+}
+.lane-tab.on.match { background: rgba(0,229,160,0.2); }
+
+/* The agent's last line — a note, framed rather than quoted down one side. */
+.agent-note {
+  border-left: none; border-radius: 0;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.11);
+}
+
+/* Endings, regions, characters, achievements and the rest of the card shapes
+   take the cut corner so the whole game speaks one silhouette. They keep real
+   borders, so the accent already closes all the way round them. */
+.ending-card, .region-card, .char-card, .ach, .doctrine, .approach,
+.rival-row, .journal-entry { --ch: 10px; clip-path: var(--cut-br); border-radius: 0; }
+
+/* ═══ THE STATUS LINE ══════════════════════════════════════════════════════ */
+
+.sl-key kbd, .kbd {
+  --ch: 3px; clip-path: var(--cut-br); border-radius: 0;
+  background: rgba(255,255,255,0.055);
+  border: none; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.14);
+}
+.sl-alert {
+  --ch: 4px; clip-path: var(--cut-br); border-radius: 0;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 42%, transparent);
+}
+
+
+/* ═══ CLOSING THE REST OF THE FRAMES ═══════════════════════════════════════
+   console.css builds most of its rows the same way: `border: 1px solid A`
+   plus `border-left: 2px solid ACCENT`. Every one of those is a left-hand
+   category stripe, which is the web's idiom, not a console's. Here the left
+   border drops back to 1px and `--fk` — the accent that used to live only on
+   that edge — becomes the colour of all four.
+
+   One `--fk` per state is the whole conversion. Nothing else moves, so these
+   rows keep the square geometry console.css gives them; the chamfer is
+   reserved for plates, keys and cards that have earned the extra silhouette. */
+
+.obj.obj, .commit.commit, .threshold-card.threshold-card, .path-plate.path-plate,
+.sel-row.sel-row, .ship-row.ship-row, .man-row.man-row, .man-act.man-act,
+.siege-row.siege-row, .career-row.career-row, .brief-cell.brief-cell,
+.brief-row.brief-row, .brief-alert.brief-alert, .brief-wait.brief-wait,
+.path-lock.path-lock, .counter.counter, .sink.sink {
+  border-left-width: 1px;
+  border-color: var(--fk, rgba(255,255,255,0.11));
+  border-left-color: var(--fk, rgba(255,255,255,0.11));
+}
+
+.obj                          { --fk: rgba(0,229,160,0.42); }
+.obj.clickable:hover          { --fk: var(--green); }
+.commit                       { --fk: rgba(255,255,255,0.13); }
+.commit.done                  { --fk: rgba(0,229,160,0.6); }
+.threshold-card               { --fk: rgba(0,229,160,0.5); }
+.path-plate                   { --fk: color-mix(in srgb, var(--pc) 32%, transparent); }
+.path-plate.open              { --fk: color-mix(in srgb, var(--pc) 58%, transparent); }
+.sel-row                      { --fk: rgba(255,255,255,0.11); }
+.sel-row:hover:not(:disabled) { --fk: rgba(255,255,255,0.26); }
+.sel-row.on                   { --fk: rgba(0,229,160,0.62); }
+.ship-row                     { --fk: color-mix(in srgb, var(--kc) 45%, transparent); }
+.man-row                      { --fk: rgba(255,255,255,0.13); }
+.man-row.ready                { --fk: rgba(0,229,160,0.6); }
+.man-row.done                 { --fk: rgba(0,229,160,0.35); }
+.man-act                      { --fk: rgba(255,255,255,0.11); }
+.man-act.past                 { --fk: rgba(0,229,160,0.3); }
+.man-act.on                   { --fk: rgba(0,229,160,0.6); }
+.siege-row                    { --fk: rgba(255,77,94,0.6); }
+.career-row                   { --fk: color-mix(in srgb, var(--tc) 45%, transparent); }
+.brief-cell                   { --fk: rgba(0,229,160,0.5); }
+.brief-cell.neg               { --fk: rgba(255,77,94,0.55); }
+.brief-row                    { --fk: rgba(255,255,255,0.11); }
+.brief-row.good               { --fk: rgba(0,229,160,0.5); }
+.brief-row.bad                { --fk: rgba(255,77,94,0.5); }
+.brief-wait                   { --fk: rgba(245,166,35,0.55); }
+.brief-alert                  { --fk: rgba(255,77,94,0.55); }
+.path-lock                    { --fk: rgba(245,166,35,0.5); }
+.path-lock.chosen             { --fk: rgba(139,92,246,0.55); }
+.counter                      { --fk: color-mix(in srgb, var(--nc) 55%, transparent); }
+.counter.shut                 { --fk: rgba(255,255,255,0.13); }
+.sink                         { --fk: rgba(77,208,225,0.4); }
+.sink:hover:not(:disabled)    { --fk: rgba(77,208,225,0.75); }
+
+/* The washes these rows use run in from the left edge for the same reason the
+   stripes did. Even them out so the light comes off the frame instead. */
+.sink:hover:not(:disabled),
+.man-row.ready,
+.career-row:hover {
+  background: radial-gradient(130% 190% at 50% 50%, transparent 24%,
+              color-mix(in srgb, var(--fk) 26%, transparent));
+}
+
+/* A card the assistant wrote was marked with an inset stripe down its left. */
+.feed-item.by-world { box-shadow: none; }
+
+/* Trait, kind and status chips: outlined, so the colour is a closed edge
+   rather than a filled swatch behind a label. */
+.trait, .agent-trait, .tag, .chip, .locked-chip, .adv-chip, .sl-alert, .feed-type,
+.tl-eff, .pill, .res-chip, .cc-stat, .pick-stat, .brief-type {
+  --ch: 4px; clip-path: var(--cut-br); border-radius: 0; border-color: transparent;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 45%, transparent);
+}
+/* `.pill` and `.tl-eff` carry their state as `color`, so `currentColor` above
+   already lands the right hue on the ring — except the neutral ones, whose
+   colour is body ink and would ring in near-white. */
+.pill:not([class*=" "]), .tl-eff:not(.pos):not(.neg), .res-chip, .pick-stat, .cc-stat {
+  background: rgba(255,255,255,0.03);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.13);
+}
+
+/* Rows that carry a closed frame must not butt against the next one, or the
+   two frames read as one doubled rule between them. A few pixels is enough. */
+.brief-row { margin-bottom: 3px; }
+.counter, .sink { margin-bottom: 3px; }
+
+/* A face is a plate too. */
+.char-portrait, .char-avatar, .cc-icon-box {
+  --ch: 7px; clip-path: var(--cut-tlbr); border-radius: 0;
+}
+
+
+/* ═══ THE OPENING ══════════════════════════════════════════════════════════
+   intro.css builds its own panels, and it reached for the same left rail:
+   a violet stripe on the title's WebMCP panel, an inset 2px shadow on every
+   selected setup option. Each one closes into a ring here. The prose beats
+   are deliberately unstyled and stay that way — the opening is a film, and a
+   frame around a paragraph would be an interface intruding on it. */
+
+.title-webmcp {
+  --ch: 12px; clip-path: var(--cut-br);
+  border: none;
+  box-shadow: inset 0 0 0 1px rgba(139,92,246,0.55);
+}
+/* The corner tick this panel drew for itself sat outside the box; a clip-path
+   cuts its own pseudo-elements, so it has to come inside the edge. */
+.title-webmcp::after { right: 0; top: 0; }
+
+.wm-tool, .wm-later {
+  --ch: 4px; clip-path: var(--cut-br); border-radius: 0;
+}
+
+.ap-opt.on {
+  box-shadow: inset 0 0 0 1px var(--violet);
+}
+.ap-handoff {
+  --ch: 9px; clip-path: var(--cut-br);
+  border: none; box-shadow: inset 0 0 0 1px rgba(139,92,246,0.55);
+}
+.start-opt.on {
+  box-shadow: inset 0 0 0 1px var(--ac);
+}
+.ah-instruction {
+  --ch: 11px; clip-path: var(--cut-br);
+  border: none; box-shadow: inset 0 0 0 1px rgba(0,229,160,0.55);
+}
+
+/* The setup cards already colour their whole border on hover and when chosen,
+   so they only want the silhouette. */
+.choice-card { --ch: 14px; clip-path: var(--cut-br); border-radius: 0; }
+.ap-opt, .start-opt { --ch: 7px; clip-path: var(--cut-br); border-radius: 0; }
+
+
+/* ═══ THE LAST STRIPES ═════════════════════════════════════════════════════
+   The same idiom rotated ninety degrees: a 2px bar across the top of a card
+   instead of down its side. A doctrine you have earned, a region you hold and
+   the walkthrough's own card each wore one. They close too — an earned
+   doctrine is now ringed in its colour, which is also easier to scan than a
+   hairline you have to look for. */
+
+.doctrine, .region-card { --ch: 10px; clip-path: var(--cut-br); border-radius: 0; }
+.doctrine.earned::before, .region-card::before { display: none; }
+.doctrine.earned {
+  border-color: color-mix(in srgb, var(--dcc) 62%, transparent);
+  background: radial-gradient(120% 160% at 50% 50%, transparent 32%,
+              color-mix(in srgb, var(--dcc) 10%, transparent));
+}
+.region-card.held, .region-card {
+  border-color: color-mix(in srgb, var(--rc) 45%, rgba(255,255,255,0.10));
+}
+
+.tut-card {
+  --ch: 12px; clip-path: var(--cut-br);
+  border: none; border-top: none;
+  box-shadow: inset 0 0 0 1px rgba(0,229,160,0.6),
+              0 30px 80px -30px #000;
+}
+
+
+/* The Desk's four action tiles grew a 2px bar up their left edge on hover.
+   The tile's own frame takes the slot colour instead, and lights on hover —
+   which reads as the whole key coming alive rather than a marker sliding up
+   beside it. */
+.action-btn {
+  --ch: 10px; clip-path: var(--cut-br); border-radius: 0;
+  border-color: color-mix(in srgb, var(--slot-c, #ffffff) 26%, rgba(255,255,255,0.11));
+  transition: border-color .22s, transform .14s, box-shadow .14s;
+}
+.action-btn::before { display: none; }
+.action-btn:hover:not(:disabled) {
+  border-color: var(--slot-c, rgba(255,255,255,0.5));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.10),
+              0 0 26px -12px var(--slot-c, rgba(255,255,255,0.6));
+}
+
+/* A shipped feature was a row with a coloured left edge and a wash running in
+   from it. Both close. */
+.ship-row.ship-row {
+  border: 1px solid color-mix(in srgb, var(--kc) 42%, transparent);
+  background: radial-gradient(130% 200% at 50% 50%, transparent 26%,
+              color-mix(in srgb, var(--kc) 7%, transparent));
+}
+.ship-grid { gap: 5px 10px; }
+
+
+/* ═══ THE ACT CARD ═════════════════════════════════════════════════════════
+   The transition, the opening beats and the ending are film, not interface —
+   a framed panel around a paragraph of prose would be the UI walking into the
+   shot. So they keep their bare typography over the photograph. The one thing
+   the act card takes from this file is a reticle: four brackets standing off
+   the title, drawn in the same language as a plate's corners and arriving
+   after the type does. It reads as the machine noticing the moment rather
+   than as a card wrapped around it. */
+
+.act-inner::before {
+  content: ''; position: absolute; inset: -14px -6px;
+  pointer-events: none; z-index: -1;
+  background:
+    linear-gradient(rgba(255,255,255,0.5), rgba(255,255,255,0.5)) 0    0    / 34px 1px no-repeat,
+    linear-gradient(rgba(255,255,255,0.5), rgba(255,255,255,0.5)) 0    0    / 1px 34px no-repeat,
+    linear-gradient(rgba(255,255,255,0.5), rgba(255,255,255,0.5)) 100% 0    / 34px 1px no-repeat,
+    linear-gradient(rgba(255,255,255,0.5), rgba(255,255,255,0.5)) 100% 0    / 1px 34px no-repeat,
+    linear-gradient(rgba(255,255,255,0.5), rgba(255,255,255,0.5)) 0    100% / 34px 1px no-repeat,
+    linear-gradient(rgba(255,255,255,0.5), rgba(255,255,255,0.5)) 0    100% / 1px 34px no-repeat,
+    linear-gradient(rgba(255,255,255,0.5), rgba(255,255,255,0.5)) 100% 100% / 34px 1px no-repeat,
+    linear-gradient(rgba(255,255,255,0.5), rgba(255,255,255,0.5)) 100% 100% / 1px 34px no-repeat;
+  filter: drop-shadow(0 0 10px rgba(255,255,255,0.28));
+  animation: actReticle 1.4s .5s cubic-bezier(.16,1,.3,1) backwards;
+}
+@keyframes actReticle {
+  from { opacity: 0; transform: scale(1.09); }
+  to   { opacity: 1; transform: none; }
+}
+html.reduced-motion .act-inner::before { animation: none; }
+
+
+/* ═══ THE WIRE, AS A DRAWER ════════════════════════════════════════════════
+   `display: none` below 1120px took the whole Wire out of the game, and the
+   Wire is not decoration: it carries the threads that are waiting on an answer.
+   Measured at 900px, 760px and 620px, nine thread options were in the DOM and
+   none of them were on screen, with no control anywhere that could reach them.
+   The ~760px ChatGPT pane this is meant to be played in is inside that range,
+   so the target platform was the one that lost the feature.
+
+   It slides instead of disappearing, and it is the *same element* — no second
+   copy, so `paintFeed` keeps painting it live and the thread buttons keep the
+   delegated action they already had. The topbar carries the door and the count
+   of what is behind it.
+
+   There is no scrim on purpose. A full-screen fixed layer is what
+   `tools/shot.mjs` calls a page-eater, and the drawer does not need one: the
+   topbar button toggles, the head has a close, and Escape closes it. */
+
+.feed-close {
+  display: none; align-items: center; justify-content: center;
+  width: 20px; height: 20px; margin-left: 8px; flex: 0 0 20px;
+  --ch: 4px; clip-path: var(--cut-br);
+  background: rgba(255,255,255,0.05);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.16);
+  color: var(--ink-3); font-size: 10px; line-height: 1;
+  transition: background .14s, box-shadow .14s, color .14s;
+}
+.feed-close:hover {
+  background: rgba(255,255,255,0.14); color: var(--ink);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4);
+}
+
+@media (max-width: 1120px) {
+  .feed-rail {
+    display: flex; flex-direction: column;
+    position: fixed; top: var(--topbar-h); right: 0; bottom: 0;
+    width: min(392px, 92vw); z-index: 60;
+    border-left: 1px solid var(--edge);
+    background: linear-gradient(180deg, rgba(8,10,16,0.98), rgba(5,7,11,0.99));
+    backdrop-filter: blur(18px);
+    transform: translateX(101%);
+    transition: transform .3s cubic-bezier(.16,1,.3,1);
+    box-shadow: -30px 0 70px -30px rgba(0,0,0,0.9);
+  }
+  #app.wire-open .feed-rail { transform: none; }
+  .feed-close { display: inline-flex; }
+
+  /* ChatGPT's chat input floats over the bottom centre of its own browser,
+     about 720x120. Everything in a fixed drawer counts as pinned, so a reply
+     that scrolled into that band would be genuinely unclickable there. Stop
+     the drawer above it rather than hoping nothing lands in it. */
+  .feed-rail { bottom: 132px; }
+}
+@media (max-width: 1120px) and (min-width: 861px) {
+  .feed-rail { bottom: 34px; }   /* a real browser: clear the status line only */
+}
+html.reduced-motion .feed-rail { transition: none; }
+
+/* The door, in the topbar beside the world's. It reads like `.tb-world`
+   because it is the same kind of thing: a way into a rail that is not on
+   screen. Amber when something is waiting, because that is what the Wire's
+   own "needs you" marker uses. */
+.tb-wire {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 28px; padding: 0 9px; margin-right: 4px;
+  --ch: 5px; clip-path: var(--cut-br);
+  background: rgba(255,255,255,0.03);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.14);
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+  color: var(--ink-4); cursor: pointer;
+  transition: background .14s, box-shadow .14s, color .14s;
+}
+.tb-wire .tbw-dot {
+  width: 5px; height: 5px; flex: 0 0 5px; border-radius: 50%;
+  background: var(--ink-5);
+}
+.tb-wire.needs {
+  color: var(--amber);
+  background: rgba(245,166,35,0.09);
+  box-shadow: inset 0 0 0 1px rgba(245,166,35,0.5);
+}
+.tb-wire.needs .tbw-dot {
+  background: var(--amber); box-shadow: 0 0 9px rgba(245,166,35,0.9);
+  animation: wcPulse 2.1s infinite;
+}
+.tb-wire:hover { color: var(--ink); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.42); }
+.tb-wire.needs:hover { box-shadow: inset 0 0 0 1px var(--amber); }
+html.reduced-motion .tb-wire.needs .tbw-dot { animation: none; }
+
+/* Above 1120px the rail is the rail and the door is redundant. */
+@media (min-width: 1121px) { .tb-wire { display: none; } }
+
+/* ═══ NARROW ═══════════════════════════════════════════════════════════════
+   This file loads last, so its own responsive rules live at the bottom of it. */
+@media (max-width: 760px) {
+  .nav-item { padding-left: 0; }
+}
+@media (max-width: 700px) {
+  .modal { --ch: 14px; }
+  .modal::after { background-size: 22px 2px, 2px 22px, 22px 2px, 2px 22px; }
+}

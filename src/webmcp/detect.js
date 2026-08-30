@@ -28,7 +28,7 @@ export function capability() {
     tier: 'none', mc: null, secure, label: 'UNAVAILABLE',
     reason: !secure
       ? 'not a secure context — open this over https or on localhost (a LAN address like 192.168.x.x will never work)'
-      : 'no site tools in this browser — use the ChatGPT desktop app’s built-in browser (Sol or Terra; Luna has them switched off), or Chrome 149+',
+      : 'no site tools in this browser — it needs one that implements WebMCP',
   };
 }
 

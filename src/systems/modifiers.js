@@ -10,8 +10,10 @@ import { regionEffects } from './regions.js';
 import { DIRECTIVE_MAP, directiveStrength } from '../data/directives.js';
 import { doctrineMods } from './doctrines.js';
 import { diffMods } from '../data/difficulty.js';
+import { AGENTS, MODIFIERS } from '../data/balance.js';
 
 let cache = null;
+let cacheFor = null;
 let dirty = true;
 export function markDirty() { dirty = true; }
 
@@ -57,7 +59,7 @@ function apply(mods, source) {
 }
 
 export function computeMods(S) {
-  if (!dirty && cache) return cache;
+  if (!dirty && cache && cacheFor === S) return cache;
   const m = DEFAULTS();
 
   // 1. Research
@@ -96,18 +98,20 @@ export function computeMods(S) {
 
   // 5. Founder skills (soft bonuses)
   const sk = S.founder.skills;
-  m.codeRate *= 1 + (sk.engineering - 1) * 0.09;
-  m.insightRate *= 1 + (sk.growth - 1) * 0.05 + (sk.vision - 1) * 0.05;
-  m.repRate *= 1 + (sk.vision - 1) * 0.07;
-  m.promptOutput *= 1 + (sk.prompting - 1) * 0.13;
-  m.agentOutput *= 1 + (sk.ops - 1) * 0.055;
-  m.mrrMult *= 1 + (sk.sales - 1) * 0.06;
-  m.conversion *= 1 + (sk.design - 1) * 0.06;
-  m.researchRate *= 1 + (sk.vision - 1) * 0.06;
+  m.codeRate *= 1 + (sk.engineering - 1) * MODIFIERS.SKILL_ENGINEERING;
+  m.insightRate *= 1 + (sk.growth - 1) * MODIFIERS.SKILL_GROWTH_INSIGHT
+    + (sk.vision - 1) * MODIFIERS.SKILL_VISION_INSIGHT;
+  m.repRate *= 1 + (sk.vision - 1) * MODIFIERS.SKILL_VISION_REP;
+  m.promptOutput *= 1 + (sk.prompting - 1) * MODIFIERS.SKILL_PROMPTING;
+  m.agentOutput *= 1 + (sk.ops - 1) * MODIFIERS.SKILL_OPS_AGENT;
+  m.mrrMult *= 1 + (sk.sales - 1) * MODIFIERS.SKILL_SALES_MRR;
+  m.conversion *= 1 + (sk.design - 1) * MODIFIERS.SKILL_DESIGN_CONVERSION;
+  m.researchRate *= 1 + (sk.vision - 1) * MODIFIERS.SKILL_VISION_RESEARCH;
 
   // 6. Morale / burnout drag
   if (S.founder.burnout > 0) {
-    const drag = 1 - Math.min(0.55, S.founder.burnout / 100 * 0.55);
+    const drag = 1 - Math.min(MODIFIERS.BURNOUT_DRAG_CAP,
+      S.founder.burnout / 100 * MODIFIERS.BURNOUT_DRAG_CAP);
     m.codeRate *= drag; m.insightRate *= drag; m.agentOutput *= drag;
   }
 
@@ -138,7 +142,8 @@ export function computeMods(S) {
     }
     apply(m, scaled);
     m.directiveStrength = k;
-    m.directiveAlign = (dir.mods.alignBoost ? 0.00035 : 0) - (dir.mods.alignDrain ? 0.00045 : 0);
+    m.directiveAlign = (dir.mods.alignBoost ? MODIFIERS.DIRECTIVE_ALIGN_GAIN : 0)
+      - (dir.mods.alignDrain ? MODIFIERS.DIRECTIVE_ALIGN_DRAIN : 0);
   } else { m.directiveStrength = 0; m.directiveAlign = 0; }
 
   // 7c. Doctrines — permanent, earned by how you ran the company.
@@ -157,16 +162,29 @@ export function computeMods(S) {
   m.rivalRace = dm.rivalRace || 1;
 
   // 7e. Scenario rules
-  if (S.unlocks.quietWorld) { m.repRate *= 0.30; m.userMult *= 0.80; m.launchPower *= 0.5; m['+awarenessFlat'] *= 0.6; }
-  if (S.unlocks.alignFloorScenario) { m.alignFloor = Math.max(m.alignFloor, 0.70); m.researchRate *= 0.72; m.codeRate *= 0.88; }
-  if (S.unlocks.noAgents) { m.promptOutput *= 1.85; m.codeRate *= 1.35; m.focusRegen *= 1.25; }
+  if (S.unlocks.quietWorld) {
+    m.repRate *= MODIFIERS.QUIET_REP_MULT; m.userMult *= MODIFIERS.QUIET_USER_MULT;
+    m.launchPower *= MODIFIERS.QUIET_LAUNCH_MULT;
+    m['+awarenessFlat'] *= MODIFIERS.QUIET_AWARENESS_MULT;
+  }
+  if (S.unlocks.alignFloorScenario) {
+    m.alignFloor = Math.max(m.alignFloor, MODIFIERS.ALIGN_SCENARIO_FLOOR);
+    m.researchRate *= MODIFIERS.ALIGN_SCENARIO_RESEARCH;
+    m.codeRate *= MODIFIERS.ALIGN_SCENARIO_CODE;
+  }
+  if (S.unlocks.noAgents) {
+    m.promptOutput *= MODIFIERS.LONE_PROMPT_MULT; m.codeRate *= MODIFIERS.LONE_CODE_MULT;
+    m.focusRegen *= MODIFIERS.LONE_FOCUS_MULT;
+  }
 
   // 8. Regional presence
   const re = regionEffects(S);
   m.userMult *= re.userMult;
   m.mrrMult *= re.revenueMult;
   m['+computeCap'] += re.compute;
-  if (re.reliability) m.reliabilityFloor = Math.max(m.reliabilityFloor, 0.85);
+  if (re.reliability) {
+    m.reliabilityFloor = Math.max(m.reliabilityFloor, MODIFIERS.REGION_RELIABILITY_FLOOR);
+  }
   m.regionReach = re.populationReach;
   m.regionGdp = re.gdpReach;
   // Per-bloc bonuses, through the channels that already exist for them.
@@ -176,7 +194,7 @@ export function computeMods(S) {
   m['+opinionDrift'] += re.opinionDrift;
   m.agentUpkeep *= re.upkeepMult;
 
-  cache = m; dirty = false;
+  cache = m; cacheFor = S; dirty = false;
   return m;
 }
 
@@ -187,7 +205,7 @@ export function agentStats(a, S, m = computeMods(S)) {
   let debt = model.debt;
   let upkeep = model.upkeep;
   let xp = 1, incident = 1, insightBleed = 0, repBleed = 0, breakthrough = 0;
-  let crossLane = 0.45, aggression = 1, moraleFloor = 0, indestructible = 0, safe = 0;
+  let crossLane = AGENTS.CROSS_LANE_DEFAULT, aggression = 1, moraleFloor = 0, indestructible = 0, safe = 0;
   let debtSensitive = 0, crowdPenalty = 0, focusRamp = 0, drift = 0, lies = 0;
   let alignDelta = 0, autonomyCreep = 0;
 
@@ -225,15 +243,20 @@ export function agentStats(a, S, m = computeMods(S)) {
   }
 
   // level, morale, autonomy
-  output *= 1 + (a.level - 1) * 0.11;
+  output *= 1 + (a.level - 1) * AGENTS.LEVEL_OUTPUT_RATE;
   const morale = Math.max(moraleFloor, a.morale ?? 1);
-  output *= 0.55 + 0.45 * morale;
-  output *= 1 + (a.autonomy ?? 0.5) * 0.55;
-  debt *= 1 + (a.autonomy ?? 0.5) * 0.45;
+  output *= AGENTS.MORALE_OUTPUT_BASE + AGENTS.MORALE_OUTPUT_RANGE * morale;
+  output *= 1 + (a.autonomy ?? 0.5) * AGENTS.AUTONOMY_OUTPUT_RATE;
+  debt *= 1 + (a.autonomy ?? 0.5) * AGENTS.AUTONOMY_DEBT_RATE;
 
-  if (crowdPenalty && S.agents.length > 5) output *= Math.max(0.2, 1 - crowdPenalty * Math.floor(S.agents.length / 5));
-  if (debtSensitive && S.resources.techDebt > 120) output *= 0.3;
-  if (focusRamp && (a.laneDays ?? 0) > 30) output *= 1 + focusRamp;
+  if (crowdPenalty && S.agents.length > AGENTS.CROWD_GROUP_SIZE) {
+    output *= Math.max(AGENTS.CROWD_OUTPUT_FLOOR,
+      1 - crowdPenalty * Math.floor(S.agents.length / AGENTS.CROWD_GROUP_SIZE));
+  }
+  if (debtSensitive && S.resources.techDebt > AGENTS.DEBT_SENSITIVE_THRESHOLD) {
+    output *= AGENTS.DEBT_SENSITIVE_MULT;
+  }
+  if (focusRamp && (a.laneDays ?? 0) > AGENTS.FOCUS_RAMP_DAYS) output *= 1 + focusRamp;
 
   output *= m.agentOutput;
   debt *= m.agentDebt * m.debtRate;

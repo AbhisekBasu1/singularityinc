@@ -62,7 +62,7 @@ export const PROJECTS = [
   { id: 'lunar_fab', name: 'Lunar Fabrication', icon: '☾', act: 5, cost: 9e11, days: 300,
     req: 'self_replication', repeatable: true, costGrowth: 2.2,
     desc: 'Manufacturing that does not need Earth. Compute ×2.',
-    flavor: 'The first seed lands in Mare Imbrium. Ninety days later there are eleven of them.',
+    flavor: 'The first seed lands in Mare Imbrium. Ninety days later there are thirty of them.',
     effects: { computeCapMult: 2.0, control: 0.5 } },
   { id: 'swarm_phase', name: 'Collector Swarm Phase', icon: '☀', act: 5, cost: 4e12, days: 400,
     req: 'dyson_swarm', repeatable: true, costGrowth: 2.6,

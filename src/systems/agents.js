@@ -11,6 +11,8 @@ import { VOICE } from '../data/agents.js';
 import { clamp } from '../engine/format.js';
 import { emit } from '../engine/bus.js';
 
+const laneMemo = new WeakMap();
+
 export function maxAgents(S) {
   if (S.unlocks.noAgents) return 0;   // Lone Wolf: the company is one person, permanently
   const m = computeMods(S);
@@ -37,11 +39,11 @@ function rollTraits(S, count) {
   const out = [];
   for (const t of pool) {
     if (out.length >= count) break;
-    const w = RARITY_WEIGHT[t.rarity] || 10;
-    if (rand() * 100 < w) out.push(t.id);
+    const w = RARITY_WEIGHT[t.rarity] || AGENTS.TRAIT_FALLBACK_WEIGHT;
+    if (rand() * AGENTS.TRAIT_ROLL_MAX < w) out.push(t.id);
   }
   while (out.length < count) {
-    const t = weightedPick(TRAITS, (x) => RARITY_WEIGHT[x.rarity] || 10);
+    const t = weightedPick(TRAITS, (x) => RARITY_WEIGHT[x.rarity] || AGENTS.TRAIT_FALLBACK_WEIGHT);
     if (t && !out.includes(t.id)) out.push(t.id);
     else break;
   }
@@ -54,7 +56,7 @@ export function rollCandidate(S, forceModel) {
   const model = forceModel || models[models.length - 1];
   const specs = availableSpecialties(S);
   const spec = pick(specs).id;
-  const traitCount = weightedPick([1, 2, 3], [55, 33, 12]);
+  const traitCount = weightedPick([1, 2, 3], AGENTS.TRAIT_COUNT_WEIGHTS);
   const traits = rollTraits(S, traitCount);
   const used = S.agents.map((a) => a.name);
   return {
@@ -109,7 +111,11 @@ export function fireAgent(S, id, reason = 'released') {
 export function assignLane(S, id, lane) {
   const a = S.agents.find((x) => x.id === id);
   if (!a) return;
-  if (a.lane !== lane) { a.lane = lane; a.laneDays = 0; }
+  if (a.lane !== lane) {
+    a.lane = lane;
+    a.laneDays = 0;
+    emit('agent:lane', { agent: a, lane });
+  }
   markDirty();
 }
 
@@ -118,7 +124,8 @@ export function upgradeModel(S, id, modelId) {
   if (!a) return { ok: false };
   const from = MODELS[a.model], to = MODELS[modelId];
   if (!to || to.tier <= from.tier) return { ok: false, reason: 'tier' };
-  const cost = Math.floor(600 * Math.pow(3.1, to.tier - 1));
+  const cost = Math.floor(AGENTS.UPGRADE_BASE_COST
+    * Math.pow(AGENTS.UPGRADE_COST_GROWTH, to.tier - 1));
   if (S.company.cash < cost) return { ok: false, reason: 'cash', cost };
   S.company.cash -= cost;
   a.model = modelId;
@@ -151,6 +158,7 @@ export function toolsFor(S, a) {
 export function computeLaneOutput(S, m = computeMods(S)) {
   const out = { build: 0, growth: 0, research: 0, ops: 0, moonshot: 0 };
   const side = { debt: 0, insight: 0, rep: 0, breakthroughs: [], alignDelta: 0, incidentMult: 1 };
+  const perAgent = new Map();
   for (const a of S.agents) {
     if (a.status !== 'active') continue;
     const st = agentStats(a, S, m);
@@ -158,14 +166,14 @@ export function computeLaneOutput(S, m = computeMods(S)) {
     const match = a.lane === specLane ? 1 : st.crossLane;
     let work = st.output * match;
     // Goal drift: some work goes nowhere
-    if (st.drift && chance(st.drift * 0.2)) work *= 0.4;
+    if (st.drift && chance(st.drift * AGENTS.DRIFT_CHANCE_RATE)) work *= AGENTS.DRIFT_OUTPUT_MULT;
     out[a.lane] = (out[a.lane] || 0) + work;
-    side.debt += st.debt * work * 0.055;
-    side.insight += st.insightBleed * work * 0.09;
-    side.rep += st.repBleed * work * 0.07;
-    side.alignDelta += st.alignDelta * 0.01;
+    side.debt += st.debt * work * AGENTS.DEBT_PER_WORK;
+    side.insight += st.insightBleed * work * AGENTS.INSIGHT_PER_WORK;
+    side.rep += st.repBleed * work * AGENTS.REP_PER_WORK;
+    side.alignDelta += st.alignDelta * AGENTS.ALIGN_PER_DAY;
     side.incidentMult *= st.incident;
-    a._work = work; a._stats = st;
+    perAgent.set(a.id, { work, stats: st });
   }
   const laneMult = {
     build: m.buildLaneOutput * m.allLanes,
@@ -175,7 +183,9 @@ export function computeLaneOutput(S, m = computeMods(S)) {
     moonshot: m.moonshotLaneOutput * m.allLanes,
   };
   for (const k of Object.keys(out)) out[k] *= laneMult[k] || 1;
-  return { out, side };
+  const result = { out, side, perAgent };
+  laneMemo.set(S, result);
+  return result;
 }
 
 export function agentUpkeepTotal(S, m = computeMods(S)) {
@@ -188,40 +198,47 @@ export function agentUpkeepTotal(S, m = computeMods(S)) {
 }
 
 // ── Daily agent maintenance ────────────────────────────────────────────────
-export function tickAgentsDaily(S, m = computeMods(S)) {
+export function tickAgentsDaily(S, m = computeMods(S), laneOutput = laneMemo.get(S) || computeLaneOutput(S, m)) {
   const events = [];
   const crowd = S.agents.length;
   for (const a of S.agents) {
+    // Strip scratch fields persisted by saves from builds before lane output
+    // became an ephemeral return value.
+    delete a._work;
+    delete a._stats;
     if (a.status !== 'active') continue;
-    const st = a._stats || agentStats(a, S, m);
+    const work = laneOutput.perAgent.get(a.id)?.work || 0;
+    const st = laneOutput.perAgent.get(a.id)?.stats || agentStats(a, S, m);
     a.laneDays = (a.laneDays || 0) + 1;
-    a.contribution = (a.contribution || 0) + (a._work || 0);
+    a.contribution = (a.contribution || 0) + work;
 
     // XP & leveling
-    a.xp += AGENTS.XP_PER_DAY * st.xp * (0.6 + (a._work || 0) / 8);
+    a.xp += AGENTS.XP_PER_DAY * st.xp * (AGENTS.XP_WORK_BASE + work / AGENTS.XP_WORK_SCALE);
     const need = AGENTS.LEVEL_XP(a.level);
     if (a.xp >= need) { a.xp -= need; a.level++; events.push({ type: 'level', agent: a }); }
 
     // Morale: a real management surface, not decoration.
     const specLane = SPECIALTIES[a.spec]?.lane;
-    const target = clamp(0.92
-      - clamp(S.resources.techDebt / 620, 0, 0.38)          // the codebase wears on them
-      - clamp((crowd - 6) * 0.014, 0, 0.22)                 // coordination overhead
-      - (a.lane !== specLane ? 0.17 : 0)                    // working outside their craft
-      - (a.autonomy < 0.22 ? 0.13 : 0)                      // micromanaged
-      - (S.founder.burnout > 50 ? 0.09 : 0)                 // the founder sets the weather
-      - ((S.resources.alignment < 0.35) ? 0.07 : 0)
-      + (a.level >= 6 ? 0.05 : 0)                           // competence feels good
-      + Math.min(0.12, (a.tools?.length || 0) * 0.04)       // good tools
-      + m.auraMorale, 0.18, 1);
-    a.morale += (Math.max(target, st.moraleFloor ?? 0) - a.morale) * 0.06;
+    const target = clamp(AGENTS.MORALE_BASE
+      - clamp(S.resources.techDebt / AGENTS.MORALE_DEBT_SCALE, 0, AGENTS.MORALE_DEBT_CAP)
+      - clamp((crowd - AGENTS.MORALE_CROWD_FREE) * AGENTS.MORALE_CROWD_RATE,
+        0, AGENTS.MORALE_CROWD_CAP)
+      - (a.lane !== specLane ? AGENTS.MORALE_WRONG_LANE : 0)
+      - (a.autonomy < AGENTS.MORALE_AUTONOMY_THRESHOLD ? AGENTS.MORALE_AUTONOMY_PENALTY : 0)
+      - (S.founder.burnout > AGENTS.MORALE_BURNOUT_THRESHOLD ? AGENTS.MORALE_BURNOUT_PENALTY : 0)
+      - ((S.resources.alignment < AGENTS.MORALE_ALIGN_THRESHOLD) ? AGENTS.MORALE_ALIGN_PENALTY : 0)
+      + (a.level >= AGENTS.MORALE_LEVEL_THRESHOLD ? AGENTS.MORALE_LEVEL_BONUS : 0)
+      + Math.min(AGENTS.MORALE_TOOL_CAP,
+        (a.tools?.length || 0) * AGENTS.MORALE_TOOL_BONUS)
+      + m.auraMorale, AGENTS.MORALE_MIN, 1);
+    a.morale += (Math.max(target, st.moraleFloor ?? 0) - a.morale) * AGENTS.MORALE_ADJUST_RATE;
 
     // Autonomy creep (Ambitious trait)
     if (st.autonomyCreep) a.autonomy = clamp(a.autonomy + st.autonomyCreep, 0, 1);
 
     // Breakthroughs
     if (st.breakthrough && chance(st.breakthrough)) {
-      const amt = 6 + a.level * 3;
+      const amt = AGENTS.BREAKTHROUGH_BASE + a.level * AGENTS.BREAKTHROUGH_PER_LEVEL;
       S.resources.research += amt;
       events.push({ type: 'breakthrough', agent: a, amount: amt });
     }
@@ -229,10 +246,13 @@ export function tickAgentsDaily(S, m = computeMods(S)) {
     // Rogue risk: high autonomy + low alignment
     if (!st.safe) {
       const align = S.resources.alignment;
-      const risk = AGENTS.ROGUE_BASE_CHANCE * Math.pow(a.autonomy, 2.2)
-                 * (1.9 - align) * m.rogueChance * (MODELS[a.model].tier / 2);
+      const risk = AGENTS.ROGUE_BASE_CHANCE * Math.pow(a.autonomy, AGENTS.ROGUE_AUTONOMY_POWER)
+                 * (AGENTS.ROGUE_ALIGN_BASE - align) * m.rogueChance
+                 * ((MODELS[a.model] || MODELS.nano).tier / 2);
       if (chance(risk)) events.push({ type: 'rogue', agent: a });
-      else if (chance(risk * 8)) { a.rogueWarn++; events.push({ type: 'rogueWarn', agent: a }); }
+      else if (chance(risk * AGENTS.ROGUE_WARN_MULT)) {
+        a.rogueWarn++; events.push({ type: 'rogueWarn', agent: a });
+      }
     }
   }
   return events;

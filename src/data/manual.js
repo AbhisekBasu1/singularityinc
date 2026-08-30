@@ -96,7 +96,7 @@ export const GLOSSARY = [
     ['The deck', 'The written game: six files of authored cards, the rival\u2019s own moves, the press. It is the default and the spine. An assistant does not replace it — it claims slots the deck would otherwise have filled, and the deck takes any slot the assistant leaves.'],
     ['A slot', 'The moment the game is about to draw a card. With an assistant present it is offered to them first, for a day and a half of game time or forty-five seconds of yours — whichever runs out first. Then the deck draws, as it always did.'],
     ['Mute the world', 'The plug, at the head of the Wire. It revokes every tool the assistant holds, in one click. The run carries on with the written deck and nothing is lost.'],
-    ['In your own words', 'The line under the choices on any card the world wrote. Type what you actually do into the chat rather than pressing a button; the world writes what happens, and you accept it or you do not.'],
+    ['In your own words', 'The text box on any card shown while the assistant is present. Type what you actually do on the card; the world writes what follows, and you accept it or you do not. If the assistant is between turns, the move stays safely on the card until it reconnects.'],
     ['Immunity', 'Three doctrines take something away from the world permanently. Untouchable removes the regulators from its hands. Beloved stops it writing a cruel choice at you. Zero Entropy stops it adding tech debt.'],
     ['Ceilings', 'How far a single choice the world writes may move anything, per act. They are the authored deck\u2019s own 80th percentile, measured over all 715 written choices, and no card may take more than a quarter of your cash.'],
   ] },

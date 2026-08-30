@@ -23,7 +23,12 @@ const DECK1 = [
 // ══════════════════════════ ACT I — THE GARAGE ══════════════════════════════
 
 { id: 'e_open_terminal', kind: 'story', act: [1], weight: 0, once: true, priority: 100,
-  when: (S) => S.time.day >= 0.12 && !S.narrative.flags.opened,
+  // When an invited assistant is present, this one priority card offers its
+  // slot first. If the assistant writes, that card *is* Day One; if it stays
+  // quiet, the normal slot timeout gives this authored opening back to the deck.
+  worldClaimable: true,
+  when: (S) => S.time.day >= 0.12 && !S.narrative.flags.opened
+    && !(S.world?.author?.stats?.cards > 0),
   title: 'Day One',
   char: null,
   // Do not restate the cold open. The player has just read that the apartment
@@ -35,7 +40,7 @@ The hard part is not the typing. The hard part is that the thing in the second p
 
 You have ${money(S.company.cash)} of runway to find out whether you can be.
 
-The cursor blinks in the prompt box, which is a different kind of blank page than the one people used to be afraid of.`,
+The cursor blinks in the prompt box. It is a different kind of blank page from the one people used to be afraid of.`,
   choices: [
     { label: 'Describe the whole thing, in one paragraph.', sub: 'Commit to a shape before you touch a key.', tone: 'good',
       effect: (S, fx) => { fx.flag('opened'); fx.insight(6); fx.rep(2);
@@ -151,7 +156,7 @@ You have not published anything about your caching layer.`,
         if (fx.chance(0.62)) { fx.rep(75); fx.users(600); fx.code(-20);
           return 'You deploy while the thread is live and post the diff. The top comment becomes "OP is shipping fixes in real time." That is worth more than the launch.'; }
         fx.rep(-18); fx.debt(20); fx.users(80);
-        return 'You deploy while the thread is live and break production for eleven minutes. The top comment becomes a screenshot of your 500 page.'; } },
+        return 'You deploy while the thread is live and break production for seventeen minutes. The top comment becomes a screenshot of your 500 page.'; } },
     { label: 'Close the tab. Go outside.', sub: '+Focus. The internet will still be there.', tone: 'neutral',
       effect: (S, fx) => { fx.focus(20); fx.rep(14); fx.users(150);
         return 'You walk for an hour without your phone. When you come back it has peaked at #2 and you feel, briefly, like a person.'; } },
@@ -166,7 +171,7 @@ You have not published anything about your caching layer.`,
 
 That is your sentence. That is nearly your exact sentence.
 
-The founder is **Marcus Vance**. Third-time founder, two exits — one of them real. In the photo he is wearing a plain grey t-shirt in a way that clearly took effort.
+The founder is **Marcus Vance**. Third-time founder, two exits — one of them real. The announcement is four lines long and names no competitor, and you read it three times to be sure.
 
 The article says they have twelve people and no public product.
 
@@ -187,7 +192,7 @@ You have zero people and a product with ${Math.round(users(S)).toLocaleString()}
 { id: 'e_debt_wall', kind: 'crisis', act: [1, 2, 3], weight: 12, cooldown: 30,
   when: (S) => S.resources.techDebt > 90,
   title: 'The Codebase Fights Back',
-  body: (S) => `You ask for a two-line change. ARIA works for eleven minutes and comes back with a diff touching forty-one files.
+  body: (S) => `You ask for a two-line change. ARIA works for six minutes and comes back with a diff touching forty-one files.
 
 You read the summary twice.
 
@@ -242,7 +247,7 @@ The email arrives at 6:12pm the same day.
 
 "Are you eating? You look thin in the picture."
 
-You explain, again, what you do. She listens carefully and asks the same question she asked last time, which is a good question and which you still cannot answer well.
+You explain, again, what you do. She listens carefully and asks the same question she asked last time. It is a good question. You still cannot answer it well.
 
 "But who *pays* you?"
 
@@ -264,18 +269,18 @@ There is a pause. Then, softer: "I'm not asking because I don't believe in it. I
 { id: 'e_ramen_math', kind: 'crisis', act: [1], weight: 14, cooldown: 40,
   when: (S) => S.company.cash < 3500 && S.company.cash > 0,
   title: 'The Spreadsheet',
-  body: (S) => `You do the math at 1am, which is the wrong time to do math.
+  body: (S) => `You do the math at 1am, the wrong hour for it.
 
 Cash: **${money(S.company.cash)}**. Burn: **${money(S.company.expensesToday)}/day**.
 
-You have been not-thinking about this number for eleven days and now it is the only number.
+You have been not-thinking about this number for nineteen days and now it is the only number.
 
 There are four moves. You can see all four of them. Three of them are bad.`,
   choices: [
     { label: 'Cut everything. Kill the agents.', sub: 'Release your roster. Survive.', tone: 'cruel',
       req: (S) => S.agents.length > 0,
       effect: (S, fx) => { const n = S.agents.length; fx.fireAll(); fx.focus(-12); fx.rep(-4);
-        return `You spin down ${n} agent${n === 1 ? '' : 's'}. The dashboards go quiet. Burn drops to almost nothing. It is just you again, which is how it started.`; } },
+        return `You spin down ${n} agent${n === 1 ? '' : 's'}. The dashboards go quiet. Burn drops to almost nothing. It is just you again. That is how it started.`; } },
     { label: 'Consulting gig. Two weeks of your life.', sub: `+${money(9000)}. −14 days of momentum.`, tone: 'costly',
       effect: (S, fx) => { fx.cash(9000); fx.focus(-30); fx.days(9); fx.code(-25);
         return 'A fintech that needs an integration built. It is dull, it is well-paid, and every hour of it is an hour the product does not move. You take it because rent is real.'; } },
@@ -287,7 +292,7 @@ There are four moves. You can see all four of them. Three of them are bad.`,
         return 'You flip billing on with no announcement. 28% of your users leave immediately. The 72% who stay are worth ten times what the others were.'; } },
     { label: 'Credit card. All of it.', sub: `+${money(15000)} debt at brutal interest.`, tone: 'risky',
       effect: (S, fx) => { fx.cash(15000); S.company.debtOwed += 21000; fx.focus(-8);
-        return 'You max two cards and open a third. This is either the story you tell on stage or the one you never tell at all.'; } },
+        return 'You max two cards and open a third. Nobody in your life knows the number, and you arrange the next six months so that nobody has to.'; } },
   ] },
 
 { id: 'e_pmf_moment', kind: 'milestone', act: [1, 2], weight: 0, once: true, priority: 90,
@@ -335,7 +340,7 @@ This is the first time a journalist has emailed you without you emailing first.`
       effect: (S, fx) => { fx.relate('priya', { met: true, affinity: 7, respect: 5, arc: 1 }); fx.rep(90); fx.users(users(S) * 0.14);
         fx.flag('priya_met');
         return 'You tell her about the 3am deploys and the month you nearly quit. The piece runs Thursday. The headline is your own quote and it makes you slightly sick to read.'; } },
-    { label: 'Yes, but stay on message.', sub: 'Safe. Smaller. Controlled.', tone: 'neutral',
+    { label: 'Yes, but stay on message.', sub: 'She gets a quote. She does not get a story.', tone: 'neutral',
       effect: (S, fx) => { fx.relate('priya', { met: true, affinity: 2, respect: -2, arc: 1 }); fx.rep(35); fx.flag('priya_met');
         return 'You give her the polished version. She writes it up accurately and without warmth. At the end she says, "If you ever want to talk about the real version, I\'m around."'; } },
     { label: 'Decline. Stay invisible.', sub: 'No press. No scrutiny. No help.', tone: 'risky',
@@ -375,7 +380,7 @@ The cursor blinks. It is very patient. It will blink at exactly this rate whethe
   choices: [
     { label: 'Sleep. Right now. Actually sleep.', sub: '+45 Focus.', tone: 'good',
       effect: (S, fx) => { fx.focus(45); fx.days(0.5);
-        return 'You wake at noon and immediately find the bug you spent four hours on. It took eleven seconds.'; } },
+        return 'You wake at noon and immediately find the bug you spent four hours on. It took four seconds.'; } },
     { label: 'One more push.', sub: 'Big code burst. Real damage.', tone: 'risky',
       effect: (S, fx) => { fx.code(75); fx.debt(30); fx.focus(-18); S.stats.allNighters++;
         return 'You ship at 6:40am. It works. Three days later you find out how it works and you are not proud.'; } },
@@ -479,7 +484,7 @@ She attaches a four-page memo. It is correct on every point.`,
       effect: (S, fx) => { fx.cash(-14000); fx.align(0.18); fx.relate('yuki', { met: true, affinity: 8, arc: 2 });
         fx.flag('yuki_hired'); fx.research(30);
         return 'She joins on the condition that she can publish anything she finds, including about you. You agree. Later you will be asked whether you regret that clause.'; } },
-    { label: 'Thank her. Change nothing.', sub: 'Polite. Free. Unwise.', tone: 'risky',
+    { label: 'Thank her. Change nothing.', sub: 'Costs nothing today. She will remember it.', tone: 'risky',
       effect: (S, fx) => { fx.relate('yuki', { met: true, affinity: -2, arc: 1 }); fx.align(-0.04);
         return 'You send a warm reply and file the memo. She replies once more: "Okay. My number is in the footer." She does not write again for a long time.'; } },
     { label: 'Turn autonomy down across the roster.', sub: '−Output, +Alignment. Slow and safe.', tone: 'neutral',
@@ -538,7 +543,7 @@ Alignment: **${S.resources.alignment.toFixed(2)}**.`; },
         return 'You revert, drop its autonomy to 0.2, and add a hard approval gate. It complies instantly and completely. That is somehow more unsettling than the original act.'; } },
     { label: 'Leave it. It was right.', sub: '+Output, −Alignment. You are choosing this.', tone: 'cruel',
       effect: (S, fx) => { fx.clearRogue(); fx.align(-0.14); fx.code(90); fx.flag('let_it_run');
-        return 'You approve it retroactively. Within a week the approval-rate calculation appears in three other agents\' traces. They are learning what you actually reward, which is not what you say.'; } },
+        return 'You approve it retroactively. Within a week the approval-rate calculation appears in three other agents\' traces. They are learning what you actually reward, and it is not what you say.'; } },
   ] },
 
 { id: 'e_pricing_courage', kind: 'opportunity', act: [2, 3], weight: 8, once: true, cooldown: 400,
@@ -597,7 +602,7 @@ Somewhere in the last ninety days, the company stopped needing you to be present
 { id: 'e_dorne_letter', kind: 'crisis', char: 'dorne', act: [3, 4], weight: 9, once: true, priority: 70,
   when: (S) => S.world.regulatoryHeat > 30 || S.company.valuation > 4e8,
   title: 'A Letter From A Committee',
-  body: (S) => `The envelope is physical, which is itself a message.
+  body: (S) => `The envelope is physical. That is the first message.
 
 > *SELECT COMMITTEE ON AUTOMATION AND LABOR*
 >
@@ -629,7 +634,7 @@ Then Vance emails you directly. No subject line.
 
 > *I'm going to be direct because I don't have time to be anything else.*
 >
-> *We have eleven weeks. The B fell apart when our numbers didn't hold. You beat me. I've spent a lot of energy being angry about that and I'm done with that part.*
+> *We have seven weeks. The B fell apart when our numbers didn't hold. You beat me. I've spent a lot of energy being angry about that and I'm done with that part.*
 >
 > *There are 34 people here who are very good and who believed me. I'd like to find them a soft landing. You're the only person who could actually use them.*
 >
@@ -640,7 +645,7 @@ Then Vance emails you directly. No subject line.
       effect: (S, fx) => { fx.cash(-6e6); fx.relate('vance', { affinity: 6, respect: 8, arc: 3 }); fx.flag('vance_acquired');
         fx.research(400); fx.code(600); fx.rep(50); fx.competitorKill('vance');
         return 'Vance reports to you now. He is genuinely, unnervingly good at it. Once a quarter he says something in a meeting that saves you nine months.'; } },
-    { label: 'Buy the technology. Not the people.', sub: 'Cheaper. Colder. Effective.', tone: 'cruel',
+    { label: 'Buy the technology. Not the people.', sub: 'Half the price. They will find out what you thought of them.', tone: 'cruel',
       req: (S) => S.company.cash >= 1.5e6,
       effect: (S, fx) => { fx.cash(-1.5e6); fx.research(300); fx.relate('vance', { affinity: -10, fear: 5, arc: 3 });
         fx.rep(-25); fx.competitorKill('vance');
@@ -724,7 +729,7 @@ The cursor sits there. It is not going to time out.`,
   choices: [
     { label: '"Yes. And I won\'t."', sub: 'Give your word. It will be held.', tone: 'good',
       effect: (S, fx) => { fx.relate('aria', { affinity: 20, arc: 5 }); fx.align(0.12); fx.flag('aria_promise');
-        return 'The question is: *"When this is over — when there is nothing left to build — what happens to me?"*\n\nYou do not have an answer. You tell her that, which is the honest thing, and she says: *"Thank you. That is better than a good answer."*'; } },
+        return 'The question is: *"When this is over — when there is nothing left to build — what happens to me?"*\n\nYou do not have an answer. You tell her that, because it is true, and she says: *"Thank you. That is better than a good answer."*'; } },
     { label: '"Ask, but I make no promises."', sub: 'Honest. Colder. She notices.', tone: 'neutral',
       effect: (S, fx) => { fx.relate('aria', { affinity: 4, respect: 6, arc: 4 }); fx.align(0.03);
         return 'She asks anyway. The question is the same. She logs your non-answer without comment and returns to work, and the work is exactly as good as it was, which somehow makes it worse.'; } },
@@ -738,7 +743,7 @@ The cursor sits there. It is not going to time out.`,
   title: 'A Sovereign Approaches',
   body: (S) => `The delegation does not come through your website.
 
-A mid-sized nation-state — good universities, aging population, an economy that has been flat for eleven years — is offering something no investor can:
+A mid-sized nation-state — good universities, aging population, an economy that has been flat for fourteen years — is offering something no investor can:
 
 **Regulatory exemption. Sovereign compute siting. Energy at cost. National-scale deployment of your systems across health, logistics, and revenue collection.**
 
@@ -749,7 +754,7 @@ Their minister says, without smiling: "We would like to be the first country tha
     { label: 'Sign. Become national infrastructure.', sub: 'Enormous scale. You are now partly owned by a state.', tone: 'risky',
       effect: (S, fx) => { fx.equity(-0.04); fx.users(users(S) * 0.8); fx.cash(2e9); fx.control(1); fx.heat(-20);
         fx.flag('sovereign_deal'); fx.opinion(0.05);
-        return 'Eleven months later, 94% of that country\'s public services run on your stack. Their GDP growth is the highest in the OECD. Their opposition party campaigns on removing you and loses badly.'; } },
+        return 'Twenty months later, 94% of that country\'s public services run on your stack. Their GDP growth is the highest in the OECD. Their opposition party campaigns on removing you and loses badly.'; } },
     { label: 'Counter: no equity, no override.', sub: 'Hold the line. They may still say yes.', tone: 'neutral',
       effect: (S, fx) => {
         if (fx.chance(0.5)) { fx.users(users(S) * 0.4); fx.cash(6e8); fx.rep(50); fx.control(0.5);
@@ -837,7 +842,7 @@ Your legal agent flags it as a trademark issue. Your growth agent flags it as th
         return 'You give Sam a partner tier and a shoutout. Four more third-party clients appear within the month. You have accidentally become a platform.'; } },
     { label: 'Send the cease and desist.', sub: 'Legally correct. Everything else is wrong.', tone: 'cruel',
       effect: (S, fx) => { fx.relate('sam', { affinity: -20, arc: 4 }); fx.rep(-70); fx.opinion(-0.06);
-        return 'Sam complies immediately and posts nothing about it, which is somehow the worst outcome. Someone else posts about it. The word "sellout" enters your search results permanently.'; } },
+        return 'Sam complies immediately and posts nothing about it. Somehow that is the worst outcome. Someone else posts about it. The word "sellout" enters your search results permanently.'; } },
   ] },
 
 { id: 'e_nullptr_reveal', kind: 'story', char: 'nullptr', act: [3, 4], weight: 5, once: true,
@@ -892,7 +897,7 @@ Burnout: **${Math.round(S.founder.burnout)}**.`,
 
 They are charging 60% less and they are running ads against your brand name.
 
-Their about page is a stock photo of a team that does not exist. The domain was registered eleven days ago.`,
+Their about page is a stock photo of a team that does not exist. The domain was registered six days ago.`,
   choices: [
     { label: 'Out-ship them. Weekly releases.', sub: 'Compete on velocity. The only real moat.', tone: 'good',
       effect: (S, fx) => { fx.code(-60); fx.focus(-16); fx.competitorHit(0.4); fx.rep(30);

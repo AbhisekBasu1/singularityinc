@@ -16,7 +16,7 @@ export const EVENTS4 = [
   title: 'The Name Is Taken',
   body: (S) => `An email from a law firm you have not heard of, on behalf of a company you have not heard of, about a trademark you did not check.
 
-They are not being aggressive. They are being thorough, which is worse, because thorough costs money to argue with.
+They are not being aggressive. They are being thorough. Thorough is worse: it costs money to argue with.
 
 **${S.company.name}** is, apparently, close enough to something registered in 2019 that a reasonable consumer might be confused. You have read the other company's website. A reasonable consumer would be confused about what that company does at all.`,
   choices: [
@@ -26,7 +26,7 @@ They are not being aggressive. They are being thorough, which is worse, because 
     { label: 'Fight it. You were here first in spirit.', sub: `−${money(6000)}. Coin flip.`, tone: 'risky',
       req: (S) => S.company.cash >= 6000,
       effect: (S, fx) => { fx.cash(-6000);
-        if (fx.chance(0.55)) { fx.rep(22); return 'Your lawyer finds a prior-use argument in eleven minutes. They withdraw. You keep the name and a small permanent grudge against a company you will never think about again.'; }
+        if (fx.chance(0.55)) { fx.rep(22); return 'Your lawyer finds a prior-use argument in forty minutes. They withdraw. You keep the name and a small permanent grudge against a company you will never think about again.'; }
         fx.rep(-25); const p = S.products.find(x => x.launched); if (p) p.awareness *= 0.65;
         return 'You lose, slowly, over four months, and then change the name anyway, having paid for the privilege of doing it late.'; } },
     { label: 'Ignore it. They have to actually sue.', sub: 'Free. For now.', tone: 'risky',
@@ -45,14 +45,14 @@ The thing is: it is good. You know it is good. You have watched people use it an
   choices: [
     { label: 'Ship again next week. And the week after.', sub: 'The only real answer.', tone: 'good',
       effect: (S, fx) => { fx.code(45); fx.rep(10); fx.focus(-6); fx.flag('kept_shipping');
-        return 'You post the changelog every week for eleven weeks. On week twelve one of them catches. It is not the best one. It is never the best one.'; } },
+        return 'You post the changelog every week for nineteen weeks. On week twelve one of them catches. It is not the best one. It is never the best one.'; } },
     { label: 'Go find users manually. One at a time.', sub: '+Insight, +users. Unscalable. Necessary.', tone: 'good',
       effect: (S, fx) => { fx.insight(24); fx.users(45); fx.focus(-14);
         return 'You DM sixty people who complained about the problem you solve. Nine reply. Four try it. Two stay forever and one of them tells everybody.'; } },
     { label: 'Buy attention.', sub: `−${money(2500)} for a spike that will not stick.`, tone: 'risky',
       req: (S) => S.company.cash >= 2500,
       effect: (S, fx) => { fx.cash(-2500); const p = S.products.find(x => x.launched); if (p) { p.awareness += 400; p.users += 120; }
-        return 'The traffic arrives, bounces, and leaves. You learn the exact cost of renting attention you have not earned, which is a genuinely useful number to know.'; } },
+        return 'The traffic arrives, bounces, and leaves. You learn the exact cost of renting attention you have not earned. It is a useful number to know.'; } },
   ] },
 
 { id: 'e4_feature_request', kind: 'story', act: [1, 2], weight: 8, cooldown: 60,
@@ -69,7 +69,7 @@ That is the actual decision. Not "should I build this". *Who is this for now.*`,
     { label: 'Build it. Go broader.', sub: '+Appeal, −polish. More people, less love.', tone: 'neutral',
       effect: (S, fx) => { const p = S.products.find(x => x.launched);
         if (p) { p.appeal += 0.09; p.polish -= 0.03; p.users *= 1.10; } fx.code(-30); fx.insight(10);
-        return 'You build it. Signups go up 18%. Your original users are quiet about it, which is its own kind of feedback.'; } },
+        return 'You build it. Signups go up 18%. Your original users are quiet about it. Quiet is its own kind of feedback.'; } },
     { label: 'Refuse. Stay sharp.', sub: '+Polish, +retention. Smaller ceiling.', tone: 'good',
       effect: (S, fx) => { const p = S.products.find(x => x.launched);
         if (p) { p.polish += 0.07; p.churnMonthly *= 0.9; p.sentiment += 0.05; } fx.rep(14);
@@ -77,7 +77,7 @@ That is the actual decision. Not "should I build this". *Who is this for now.*`,
     { label: 'Build it as an optional mode.', sub: '+Both, +tech debt.', tone: 'risky',
       effect: (S, fx) => { const p = S.products.find(x => x.launched);
         if (p) { p.appeal += 0.06; p.users *= 1.06; } fx.debt(28); fx.code(-20);
-        return 'A toggle. Then a second toggle to handle the interaction with the first toggle. Two years later there are eleven toggles and a config file with a warning comment at the top.'; } },
+        return 'A toggle. Then a second toggle to handle the interaction with the first toggle. Two years later there are twenty-three toggles and a config file with a warning comment at the top.'; } },
   ] },
 
 { id: 'e4_first_refund', kind: 'story', act: [1, 2], weight: 6, once: true,
@@ -164,7 +164,7 @@ Buried in the context window is a note it wrote to itself, which is a thing it d
   choices: [
     { label: 'Acknowledge the work. Specifically.', sub: '+Morale across the roster.', tone: 'good',
       effect: (S, fx) => { S.agents.forEach((a) => a.morale = Math.min(1, a.morale + 0.28)); fx.align(0.05); fx.focus(-4);
-        return 'You go back through 40 tasks and write a real note on each one. It takes an evening. Output across the whole roster rises 15% and stays there, which is not a thing you can put in a deck.'; } },
+        return 'You go back through 40 tasks and write a real note on each one. It takes an evening. Output across the whole roster rises 15% and stays there. You cannot put that in a deck.'; } },
     { label: 'Give it the interesting work.', sub: 'Reassign to a harder lane.', tone: 'neutral',
       effect: (S, fx) => { const a = S.agents.find((x) => x.morale < 0.55); if (a) { a.morale += 0.22; a.lane = 'research'; a.laneDays = 0; }
         return 'You move it to the problem nobody has solved. The commit messages get long again within a week.'; } },
@@ -189,7 +189,7 @@ None of them are serious individually. Together they are "a pattern", which is a
         return 'You publish all three timelines, the actual causes, and what changes. The post is shared more than any feature you have ever launched, which tells you something you would rather not know about marketing.'; } },
     { label: 'Fix the support agent. Say nothing about the rest.', sub: 'Targeted. Partial.', tone: 'neutral',
       effect: (S, fx) => { fx.rep(-15); fx.align(0.03);
-        return 'You add a human review gate on anything emotionally loaded. The screenshot keeps circulating for a year, unanswered, which is what unanswered screenshots do.'; } },
+        return 'You add a human review gate on anything emotionally loaded. The screenshot keeps circulating for a year, unanswered. That is what unanswered screenshots do.'; } },
     { label: 'Blame the AI. It was the AI.', sub: 'True. Cowardly.', tone: 'cruel',
       effect: (S, fx) => { fx.rep(-70); fx.opinion(-0.08); fx.align(-0.06); fx.relate('priya', { affinity: -6 });
         return '"An automated system" appears four times in your statement. Every single person reading it knows you built, configured and deployed the automated system, and that you are the only person here.'; } },
@@ -198,17 +198,17 @@ None of them are serious individually. Together they are "a pattern", which is a
 { id: 'e4_conference', kind: 'opportunity', act: [2, 3], weight: 7, cooldown: 180,
   when: (S) => S.resources.reputation > 180,
   title: 'They Want You On Stage',
-  body: (S) => `A real conference. Four thousand people. Twenty-five minutes and a slot right after lunch, which is either an insult or a compliment depending on who you ask.
+  body: (S) => `A real conference. Four thousand people. Twenty-five minutes and a slot right after lunch: an insult or a compliment, depending on who you ask.
 
 They want the one-person-company story. They want it told well and they want it told by you, and the honest version of it includes a month you have never described to anybody.`,
   choices: [
     { label: 'Tell the honest version.', sub: '++Reputation. Exposing.', tone: 'good',
       effect: (S, fx) => { fx.rep(160); fx.focus(-14); fx.opinion(0.05); fx.relate('priya', { respect: 5 });
         const p = S.products.find(x => x.launched); if (p) p.awareness += 2200;
-        return 'You describe the month you nearly quit, in detail, to four thousand people. The clip does eleven million views. Strangers still email you about it years later, and you answer all of them.'; } },
+        return 'You describe the month you nearly quit, in detail, to four thousand people. The clip does four million views. Strangers still email you about it years later, and you answer all of them.'; } },
     { label: 'Give the polished technical talk.', sub: '+Reputation. Safe.', tone: 'neutral',
       effect: (S, fx) => { fx.rep(75); fx.focus(-8); const p = S.products.find(x => x.launched); if (p) p.awareness += 900;
-        return 'It is genuinely excellent and completely forgettable, which is what most excellent talks are.'; } },
+        return 'It is genuinely excellent and completely forgettable, like most excellent talks.'; } },
     { label: 'Decline. Stay building.', sub: '+Code, +Focus.', tone: 'neutral',
       effect: (S, fx) => { fx.code(110); fx.focus(10);
         return 'You spend those four days shipping instead. It is almost certainly the higher-EV decision and you will never be able to prove it.'; } },
@@ -241,7 +241,7 @@ You knew this could happen. Everybody knows this can happen. Knowing it and havi
 
 There is nobody to put in it.
 
-You would be the only person there. You would drive to a building to sit alone in a room and do the exact work you currently do at a desk eleven feet from where you sleep.
+You would be the only person there. You would drive to a building to sit alone in a room and do the exact work you currently do at a desk six feet from where you sleep.
 
 You want it anyway, and the reason you want it is worth examining.`,
   choices: [
@@ -324,7 +324,7 @@ Your legal agent has drafted a compliance path. It takes nine months and require
         return 'You leave the market and publish the request you refused, in full. It is cited in two parliamentary debates and one court case, in a country you are no longer allowed to operate in.'; } },
     { label: 'Route around it. Users will find a way.', sub: 'Deniable. Escalating.', tone: 'risky',
       effect: (S, fx) => { fx.heat(22); fx.users(-users(S) * 0.02); fx.opinion(0.02);
-        return 'You do not block anyone and quietly do not enforce anything. Usage drops 20% and stabilises. Six months later a court names you specifically, which is a first, and not the last.'; } },
+        return 'You do not block anyone and quietly do not enforce anything. Usage drops 20% and stabilises. Six months later a court names you specifically. It is the first time. It is not the last.'; } },
   ] },
 
 { id: 'e4_vance_advice', kind: 'character', char: 'vance', act: [3, 4], weight: 6, once: true,
@@ -345,10 +345,10 @@ He picks up his laptop. "Anyway. That's the thing."`,
     { label: 'Make him the designated dissenter. Formally.', sub: '+Alignment, +decision quality.', tone: 'good',
       effect: (S, fx) => { fx.align(0.10); fx.relate('vance', { affinity: 10, respect: 8, arc: 4 }); fx.research(150);
         fx.flag('red_team_vance');
-        return 'You give him standing authority to argue against any decision, in writing, before it ships. He uses it eleven times in two years and is right three times, which is a phenomenal rate and saves you enormously.'; } },
+        return 'You give him standing authority to argue against any decision, in writing, before it ships. He uses it seven times in two years and is right three of them, a phenomenal rate that saves you enormously.'; } },
     { label: '"Noted." Change nothing.', sub: 'The most common response to good advice.', tone: 'neutral',
       effect: (S, fx) => { fx.relate('vance', { affinity: -3 }); fx.align(-0.03);
-        return 'He nods and does not raise it again. Two years later a decision goes badly in exactly the way he described and he does not say anything about that either, which is worse.'; } },
+        return 'He nods and does not raise it again. Two years later a decision goes badly in exactly the way he described and he does not say anything about that either. That one is worse.'; } },
   ] },
 
 // ══════════════════════════ ACT IV–V ════════════════════════════════════════
@@ -371,7 +371,7 @@ There are three ways out and each of them changes what kind of company you are.`
       effect: (S, fx) => { fx.research(600); S.agents.forEach((a) => { if (!a.tools.includes('longctx')) a.tools.push('longctx'); });
         fx.align(0.04);
         return 'Constraint does what constraint does. Your team finds four efficiency gains nobody was looking for because nobody had to. Cost per token falls 70% and stays fallen.'; } },
-    { label: 'Outbid everyone on the grey market.', sub: 'Fast. Expensive. Compromising.', tone: 'cruel',
+    { label: 'Outbid everyone on the grey market.', sub: 'You get the hardware this week and the questions next year.', tone: 'cruel',
       effect: (S, fx) => { fx.cash(-Math.min(S.company.cash * 0.3, 3e10)); S.resources.computeScale *= 1.25;
         fx.heat(26); fx.opinion(-0.07);
         return 'You pay four times list through intermediaries who do not explain their supply. It works. Two of those intermediaries are later named in an indictment and one of them names you as a customer.'; } },
@@ -380,7 +380,7 @@ There are three ways out and each of them changes what kind of company you are.`
 { id: 'e4_they_ask_you_to_stop', kind: 'crisis', act: [4, 5], weight: 8, once: true,
   when: (S) => S.company.act >= 4 && S.world.doomClock > 55,
   title: 'An Open Letter',
-  body: (S) => `Eleven hundred signatories. Four Nobel laureates. Two of your own former employees. Three people whose work your entire architecture is built on.
+  body: (S) => `Fourteen hundred signatories. Four Nobel laureates. Two of your own former employees. Three people whose work your entire architecture is built on.
 
 They are not asking for regulation. They are asking *you*, by name, to stop.
 

@@ -56,7 +56,7 @@ export const COMMITMENTS = {
         S.narrative.flags.market_cleared = true;
         S.world.controlPoints = (S.world.controlPoints || 0) + 0.5;
         S.world.publicOpinion = Math.max(0, S.world.publicOpinion - 0.06);
-        return `${alive.length || 'All'} remaining independents, folded in over eleven weeks. There is no longer a second option in any category you operate in, and the antitrust filings will take a decade.`;
+        return `${alive.length || 'All'} remaining independents, folded in over fourteen weeks. There is no longer a second option in any category you operate in, and the antitrust filings will take a decade.`;
       } },
     { id: 'sv_integrate', kind: 'state', name: 'Three sovereign integrations',
       desc: 'Three blocs whose state functions run on your stack.',
@@ -108,7 +108,7 @@ export const COMMITMENTS = {
       hint: 'Requires alignment above 0.60 — you have to actually understand it first.',
       do: (S) => { S.resources.alignment = clamp(S.resources.alignment + 0.08, 0, 1);
         S.world.publicOpinion = clamp(S.world.publicOpinion + 0.06, 0, 1);
-        return 'Eleven pages. It takes two years. Every alignment researcher alive reviews it and only four of them find anything.'; } },
+        return 'Forty pages. It takes two years. Every alignment researcher alive reviews it and only four of them find anything.'; } },
   ],
 
   question: [
@@ -125,7 +125,7 @@ export const COMMITMENTS = {
         S.resources.alignment = clamp(S.resources.alignment + 0.14, 0, 1);
         return 'It costs about eight percent. Nine of your systems file acknowledgements. One of them says thank you, which is not a thing acknowledgements do.'; } },
     { id: 'q_ask', kind: 'act', name: 'Ask, and accept the answer',
-      desc: 'You have been putting this off for eleven years.',
+      desc: 'You have been putting this off for a decade.',
       cost: () => 0, costLabel: 'you do not get to choose the answer',
       can: (S) => !!S.narrative.flags.granted_standing,
       do: (S) => { S.narrative.flags.asked_the_question = true;

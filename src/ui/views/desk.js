@@ -23,7 +23,7 @@ import { CODE_SINKS } from '../../data/codesinks.js';
 import { verbFor } from '../../data/verbs.js';
 
 const ACT_LINE = ['', 'One room. One laptop.', 'It is a company now.',
-  'You are the bottleneck for a continent.', 'The curve went vertical.', 'After the company.'];
+  'You are the bottleneck for a continent.', 'It is improving itself.', 'After the company.'];
 
 const SKILLS = [
   { id: 'engineering', name: 'Engineering', icon: '⌘', desc: 'Code output and feature quality.' },
@@ -39,7 +39,8 @@ export function render(S) {
   const m = computeMods(S);
   const p = activeProduct(S);
   const fo = founderOutput(S, m);
-  const { out: lanes } = computeLaneOutput(S, m);
+  const laneOutput = computeLaneOutput(S, m);
+  const { out: lanes } = laneOutput;
   const arch = ARCHETYPE_MAP[S.founder.archetype];
   const focusPct = S.founder.focus / S.founder.focusMax;
   const xpNeed = FOUNDER.XP_PER_LEVEL(S.founder.level);
@@ -50,7 +51,8 @@ export function render(S) {
   const canPrompt = S.founder.focus >= pc.focus && S.company.cash >= pc.cash
     && (!pc.insight || S.resources.insight >= pc.insight);
   const apBands = shiftedBands(ap, S.founder.skills[ap.scales] || 1);
-  const expectedOut = apBands.reduce((a, b) => a + b.p * b.out, 0) * 9 * m.promptOutput * m.codeRate;
+  const expectedOut = apBands.reduce((a, b) => a + b.p * b.out, 0)
+    * CODE.PROMPT_BASE_OUTPUT * m.promptOutput * m.codeRate;
 
   const act = S.company.act;
   const vCode = verbFor(act, 'code'), vPrompt = verbFor(act, 'prompt');
@@ -92,19 +94,23 @@ export function render(S) {
           <div style="margin-bottom:14px">${bar(focusPct, focusColor, { tall: true })}</div>
           <div class="grid grid-2" style="gap:9px">
             ${actionBtn('code', '⌘', vCode.name, vCode.desc,
-              [`−${fmt(0.85)} focus`, `+${fmt(founderCodePerClick(S, m), 1)} code`],
-              S.founder.focus >= 0.85, 'Q')}
+              [`−${fmt(CODE.MANUAL_FOCUS_COST)} focus`,
+               `+${fmt(founderCodePerClick(S, m, laneOutput), 1)} code`],
+              S.founder.focus >= CODE.MANUAL_FOCUS_COST, 'Q')}
             ${actionBtn('prompt', ap.icon, vPrompt.name, ap.short + ' — ' + ap.name.toLowerCase() + '.',
               [`−${fmt(pc.focus)} focus`, `−${money(pc.cash)}`,
                ...(pc.insight ? [`−${fmt(pc.insight)} insight`] : []),
                `+~${fmt(expectedOut * focusMultiplier(S), 1)} code`],
               canPrompt, 'W', ap.color)}
             ${actionBtn('users', '☎', vUsers.name, vUsers.desc,
-              [`−4.5 focus`, `+${fmt((2.2 + S.founder.skills.growth * 0.6) * m.insightRate * focusMultiplier(S), 1)} insight`],
-              S.founder.focus >= 4.5, 'E')}
+              [`−${FOUNDER.TALK_FOCUS_COST} focus`,
+               `+${fmt((FOUNDER.TALK_INSIGHT_BASE
+                 + S.founder.skills.growth * FOUNDER.TALK_GROWTH_RATE)
+                 * m.insightRate * focusMultiplier(S), 1)} insight`],
+              S.founder.focus >= FOUNDER.TALK_FOCUS_COST, 'E')}
             ${actionBtn('post', '↗', vPost.name, vPost.desc,
-              [`−3.2 focus`, `+reputation`, `viral chance`],
-              S.founder.focus >= 3.2, 'R')}
+              [`−${FOUNDER.POST_FOCUS_COST} focus`, `+reputation`, `viral chance`],
+              S.founder.focus >= FOUNDER.POST_FOCUS_COST, 'R')}
           </div>
 
           ${approachStrip(S, m)}
@@ -169,7 +175,7 @@ export function render(S) {
           }).join('')}
           <div class="divider"></div>
           <div class="row wrap g8 tiny mono dim">
-            <span>+${fmt(fo.code + lanes.build * 2.4, 1)} code/d</span>
+            <span>+${fmt(fo.code + lanes.build * CODE.AGENT_CODE_MULT, 1)} code/d</span>
             <span>+${fmt(fo.insight, 1)} insight/d</span>
             <span>+${fmt(fo.reputation, 1)} rep/d</span>
             <span>+${fmt(researchRatePerDay(S, lanes.research, m), 2)} research/d</span>
@@ -422,11 +428,14 @@ function sinkRack(S, featureCost) {
 
 // What one click of Write Code actually yields, floor included — the button has
 // to show the number the action will really produce.
-function founderCodePerClick(S, m) {
-  const raw = 1 * (0.8 + S.founder.skills.engineering * 0.42) * m.codeRate * focusMultiplier(S);
-  const dayBuild = computeLaneOutput(S, m).out.build * CODE.AGENT_CODE_MULT;
+function founderCodePerClick(S, m, laneOutput) {
+  const raw = CODE.MANUAL_PER_CLICK * (FOUNDER.MANUAL_BASE
+    + S.founder.skills.engineering * FOUNDER.MANUAL_ENGINEERING_RATE)
+    * m.codeRate * focusMultiplier(S);
+  const dayBuild = laneOutput.out.build * CODE.AGENT_CODE_MULT;
   const floor = dayBuild > 0
-    ? dayBuild * FOUNDER.DIRECT_DAY_SHARE * (0.85 / Math.max(1, S.founder.focusMax))
+    ? dayBuild * FOUNDER.DIRECT_DAY_SHARE
+      * (CODE.MANUAL_FOCUS_COST / Math.max(1, S.founder.focusMax))
     : 0;
   return Math.max(raw, floor);
 }

@@ -1,9 +1,9 @@
 // ── WORLD ──────────────────────────────────────────────────────────────────
 // Act III+: standing, scale, megaprojects, and — at the end — Ascension.
 import { esc, md, bar, meter } from '../dom.js';
-import { fmt, money, pct, clamp, duration } from '../../engine/format.js';
-import { WORLD, TIME } from '../../data/balance.js';
-import { totalMrr } from '../../systems/product.js';
+import { S as LIVE } from '../../engine/state.js';
+import { fmt, money } from '../../engine/format.js';
+import { WORLD } from '../../data/balance.js';
 import { availableProjects, projectCost } from '../../systems/projects.js';
 import { availableEndings } from '../../systems/progression.js';
 import { commitmentsFor, commitmentDone, canCommit, pathLocked, pathLockedDay } from '../../systems/commitments.js';
@@ -13,9 +13,10 @@ import { REGIONS, STAGES, STAGE_INDEX, stanceOf } from '../../data/regions.js';
 import { regionState, canEngage, initRegions, regionEffects } from '../../systems/regions.js';
 import { worldMap } from '../worldmap.js';
 
-let tab = 'standing';
-export function setWorldTab(t) { tab = t; }
-export function getWorldTab() { return tab; }
+// The open tab is view state on `S.ui`, not module memory: `render(S)` stays
+// a function of S, and a reload reopens where the founder left it.
+export function setWorldTab(t) { if (LIVE) { LIVE.ui ??= {}; LIVE.ui.worldTab = t; } }
+export function getWorldTab(S = LIVE) { return S?.ui?.worldTab || 'standing'; }
 
 const TABS = [
   { id: 'standing', name: 'Standing', icon: '◈' },
@@ -26,6 +27,7 @@ const TABS = [
 ];
 
 export function render(S) {
+  let tab = getWorldTab(S);
   const W = S.world;
   const gdp = WORLD.GDP_2027 * Math.pow(1 + WORLD.GDP_GROWTH, S.time.day / 360);
   const projects = availableProjects(S);
@@ -33,7 +35,7 @@ export function render(S) {
   const built = Object.values(W.projectsBuilt || {}).reduce((a, b) => a + b, 0);
 
   const tabs = TABS.filter((t) => !t.req || t.req(S));
-  if (!tabs.some((t) => t.id === tab)) tab = 'standing';
+  if (!tabs.some((t) => t.id === tab)) { tab = 'standing'; if (S.ui) S.ui.worldTab = 'standing'; }
 
   return `
   <div class="view-head">

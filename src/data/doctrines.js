@@ -63,7 +63,7 @@ d('honest_pricing', 'Honest Pricing', '⌗', '#34d399', 80,
 d('relentless', 'Relentless', '⚡', '#ff4d9e', 120,
   'Ship at least one feature every fortnight for four months.',
   (S) => S.stats.featuresShipped >= 12,
-  (S) => (S.time.day - (S._lastShipDay ?? -99)) <= 14,
+  (S) => (S.time.day - (S.stats.lastShipDay ?? S._lastShipDay ?? -99)) <= 14,
   { codeRate: 1.15, featureCost: 0.92 },
   'The changelog has no gaps in it. People check it the way they check the weather.');
 
