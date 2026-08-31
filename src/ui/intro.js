@@ -37,6 +37,13 @@ let onStart = null;
 let onContinue = null;
 export function setHandlers(h) { onStart = h.start; onContinue = h.cont; }
 
+// The workstation dresses the title as a login screen and puts the saved run on
+// it as an account tile. It injects that block here rather than rebuilding the
+// title, so both housings show exactly the same pitch, panel and doors.
+let decorFn = null;
+export function setTitleDecor(fn) { decorFn = fn || null; }
+function decor(slot) { try { return decorFn?.(slot) || ''; } catch { return ''; } }
+
 const app = () => document.getElementById('app');
 const legacy = () => loadLegacy() || { runs: 0, unlockedArchetypes: ['hacker'] };
 
@@ -71,6 +78,7 @@ const EARNED_BY_PLAY = [
 // its backing object); older builds announced themselves in the user agent.
 // Keep all three as best-effort signals. A miss is still harmless at the
 // action boundary: main.js refuses to deep-link a page that is already hosted.
+export function hostedInChat() { return inChatGPT(); }
 function inChatGPT() {
   try {
     const mc = document?.modelContext;
@@ -231,22 +239,30 @@ export async function showTitle({ cold = null } = {}) {
   const firstEver = (L.runs || 0) === 0 && !hasSave();
   const doCold = cold === null ? firstEver : cold;
 
+  const tiles = decor('accounts');
+  app().className = '';
   app().innerHTML = `
   <div class="stage" id="stage">
+    ${doCold ? decor('post') : ''}
     <div class="stage-inner">
       <div class="cold" id="cold"></div>
       <div class="title-block" id="title-block">
         <div class="title-kicker">A solo-founder simulation</div>
         <div class="title-word">SINGULARITY,<br/>INC.</div>
-        <div class="title-sub">One person. One laptop. An unlimited supply of machines
-          that will do anything you can describe.</div>
-        <div class="title-sub dim2">Find out how far that goes.</div>
+        <!-- The break is deliberate. Left to wrap, the second question splits
+             mid-clause at 760px — "solopreneur? Or just a / person with a
+             laptop" — and the two questions stop reading as a pair. With it,
+             each one wraps inside itself at every width. -->
+        <div class="title-sub">Vibe coder. Agentic Engineer. The world's first trillionaire solopreneur?<br/>
+          Or just a person with a laptop in an age of unlimited leverage?</div>
+        <div class="title-sub dim2">When machines can do anything you describe, how far does that go?</div>
+        ${tiles}
         ${webmcpPanel({ brief: hasSave() || (L.runs || 0) > 0 })}
-        <div class="title-actions" id="title-actions">
+        ${tiles ? '' : `<div class="title-actions" id="title-actions">
           ${hasSave() ? `<button class="btn btn-primary btn-lg reveal" data-act="continue-game">Continue</button>` : ''}
           <button class="btn ${hasSave() ? 'btn-ghost' : 'btn-primary'} btn-lg reveal" data-act="new-game">
             ${hasSave() ? 'New timeline' : beginLabel()}</button>
-        </div>
+        </div>`}
         ${L.runs > 0 ? `<div class="title-legacy reveal">
           <span>${L.runs} timeline${L.runs === 1 ? '' : 's'}</span>
           <span>${L.points || 0} legacy points</span>
@@ -259,6 +275,11 @@ export async function showTitle({ cold = null } = {}) {
     </div>
   </div>`;
 
+  // The title block can outgrow a short window once the accounts tiles and the
+  // WebMCP panel are both in play. The observer inside picks up the cold open
+  // handing over to the block, so this is safe to arm before either happens.
+  stageCue();
+
   const block = document.getElementById('title-block');
   if (doCold) {
     block.classList.add('hidden-until');
@@ -268,6 +289,7 @@ export async function showTitle({ cold = null } = {}) {
     document.getElementById('skip-hint')?.remove();
     await wait(700);
     document.getElementById('cold')?.remove();
+    document.getElementById('post-line')?.remove();
     block.classList.remove('hidden-until');
   }
   block.classList.add('in');
@@ -300,10 +322,74 @@ export async function prevBeat() {
 }
 
 function leave() {
+  document.querySelector('.stage-cue')?.classList?.remove('on');
   const el = document.querySelector('.beat');
   if (!el) return Promise.resolve();
   el.classList.add('leaving');
   return wait(240);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THE STAGE CAN BE TALLER THAN THE SCREEN.
+// Eight category cards do not fit a 900px laptop: two of them sit below the
+// fold, and a beat that silently hides a quarter of its choices is a beat that
+// quietly changes the game. The stage has always scrolled; nothing ever said
+// so. This says so — a veil and a chevron pinned to the bottom of #app, which
+// is *outside* the scroller on purpose, because a cue positioned inside the
+// thing it is describing scrolls away exactly when you need it. It shows only
+// when there is something below and dissolves the moment you reach it.
+// ─────────────────────────────────────────────────────────────────────────────
+let cueOff = null;
+
+export function stageCue() {
+  try { cueOff?.(); } catch { /* the old stage is already gone */ }
+  cueOff = null;
+  const host = app();
+  const stage = host?.querySelector?.('.stage');
+  // Headless (`tools/uitest.mjs`) has no layout and no real elements. There is
+  // nothing to measure and nothing to point at, so there is nothing to do.
+  if (!stage || typeof stage.scrollTo !== 'function' || !document.createElement) return;
+
+  const cue = document.createElement('div');
+  cue.className = 'stage-cue';
+  cue.innerHTML = '<button class="stage-cue-btn" type="button" tabindex="-1" aria-label="Scroll down for more">\u25be</button>';
+  host.appendChild(cue);
+
+  const sync = () => {
+    // The opening's last screen hands #app to the game, which takes the cue
+    // with it — but not these listeners. Anything that fires after that is
+    // measuring a stage nobody can see.
+    if (!stage.isConnected) { endStageCue(); return; }
+    const over = stage.scrollHeight - stage.clientHeight;
+    cue.classList.toggle('on', over > 8);
+    cue.classList.toggle('at-end', stage.scrollTop >= over - 8);
+  };
+
+  const down = () => stage.scrollTo({ top: stage.scrollHeight, behavior: 'smooth' });
+  cue.querySelector('.stage-cue-btn')?.addEventListener('click', down);
+  stage.addEventListener('scroll', sync, { passive: true });
+  window.addEventListener('resize', sync);
+  // The plate grows while the reveals land and again when the webfont swaps in,
+  // so one measurement at mount is a measurement of the wrong page.
+  let ro = null;
+  try {
+    ro = new ResizeObserver(sync);
+    ro.observe(stage);
+    if (stage.firstElementChild) ro.observe(stage.firstElementChild);
+  } catch { /* no ResizeObserver: the scroll and resize listeners still hold */ }
+
+  cueOff = () => {
+    try { ro?.disconnect(); } catch { /* already torn down */ }
+    stage.removeEventListener('scroll', sync);
+    window.removeEventListener('resize', sync);
+    cue.remove();
+  };
+  sync();
+}
+
+export function endStageCue() {
+  try { cueOff?.(); } catch { /* the stage is already gone */ }
+  cueOff = null;
 }
 
 function chrome(index) {
@@ -318,10 +404,14 @@ function chrome(index) {
 
 async function renderBeat() {
   const id = BEATS[beat];
-  if (id === 'who') return beatWho();
-  if (id === 'founder') return beatFounder();
-  if (id === 'building') return beatBuilding();
-  return beatThreshold();
+  const fn = id === 'who' ? beatWho : id === 'founder' ? beatFounder
+    : id === 'building' ? beatBuilding : beatThreshold;
+  // Each beat writes its innerHTML before its first `await`, so the stage is on
+  // the page the moment the call returns its promise — measure it now rather
+  // than after every reveal has finished landing.
+  const done = fn();
+  stageCue();
+  return done;
 }
 
 // ── 1. Who ──────────────────────────────────────────────────────────────────
@@ -579,6 +669,7 @@ export function setDraft(k, v) { draft[k] = v; if (BEATS[beat] === 'threshold') 
 // ── The curtain ─────────────────────────────────────────────────────────────
 // A held beat between choosing and playing, so the game does not simply appear.
 export async function curtain(lines, { hold = 900 } = {}) {
+  endStageCue();                       // the opening is over; so is its cue
   const el = document.createElement('div');
   el.className = 'curtain';
   el.innerHTML = '<div class="curtain-lines" id="curtain-lines"></div>';

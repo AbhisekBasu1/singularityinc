@@ -25,6 +25,10 @@ import path from 'node:path';
 const OUT = process.env.SHOT_OUT || '/tmp/shots';
 const PORT = Number(process.env.PORT || 5199);
 const BASE = `http://localhost:${PORT}`;
+// Two housings live at two routes and both have to survive all three widths.
+//   ROUTE=/computer/ node tools/shot.mjs
+const ROUTE = (process.env.ROUTE || '/').replace(/\/?$/, '/');
+const OS = ROUTE !== '/';
 const WIDTHS = [
   { w: 1440, h: 900, name: 'desktop' },
   { w: 760, h: 1000, name: 'chatgpt-pane' },
@@ -63,14 +67,19 @@ try {
     page.on('pageerror', (e) => errors.push(String(e.message)));
 
     // Skip the opening and land in a played game.
-    await page.goto(`${BASE}/?dev=1&notut=1`, { waitUntil: 'networkidle' });
+    // `pause=1` is what makes this tool deterministic. Without it the clock
+    // keeps running while the checks do, a story card opens somewhere in the
+    // middle of them, and the page-eater check flags the card's own backdrop —
+    // which is the game working, not a layout bug. It cost two false failures
+    // on the workstation before it was added here.
+    await page.goto(`${BASE}${ROUTE}?dev=1&notut=1&pause=1`, { waitUntil: 'networkidle' });
     await page.evaluate(() => {
       try { localStorage.clear(); } catch {}
     });
-    await page.goto(`${BASE}/?dev=1&notut=1`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}${ROUTE}?dev=1&notut=1&pause=1`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(500);
 
-    console.log(`\n── ${name} · ${w}×${h} ──`);
+    console.log(`\n── ${name} · ${w}×${h}${OS ? ' · workstation' : ''} ──`);
 
     // Skip the intro by clicking through, if it is on screen.
     for (let i = 0; i < 8; i++) {
@@ -81,7 +90,19 @@ try {
     }
     await page.waitForTimeout(900);
 
-    const shot = path.join(OUT, `${name}.png`);
+    // A card that was already on screen when the clock stopped is answered, so
+    // every check below looks at the ordinary game rather than at a dialog.
+    for (let i = 0; i < 3; i++) {
+      const open = await page.$('#event-modal .choice:not(.choice-free)');
+      if (!open) break;
+      await open.click().catch(() => {});
+      await page.waitForTimeout(420);
+      await page.click('#event-continue').catch(() => {});
+      await page.waitForTimeout(420);
+    }
+    await page.waitForTimeout(200);
+
+    const shot = path.join(OUT, `${OS ? 'os-' : ''}${name}.png`);
     await page.screenshot({ path: shot, fullPage: false });
     console.log(`  saved ${shot}`);
 
@@ -194,7 +215,7 @@ try {
         return r.width > 0 && r.height > 0 && r.right > 2 && r.left < innerWidth - 2;
       };
       const open = () => {
-        const rail = onScreen(document.querySelector('.feed-rail'));
+        const rail = onScreen(document.getElementById('feed-rail'));
         const threads = [...document.querySelectorAll('.thread-opt')].filter(onScreen).length;
         const total = document.querySelectorAll('.thread-opt').length;
         return { rail, threads, total };
@@ -207,7 +228,7 @@ try {
         // Nothing the drawer pins may sit in the floating chat box.
         const bw = Math.min(720, innerWidth), bh = 120;
         const box = { l: (innerWidth - bw) / 2, r: (innerWidth + bw) / 2, t: innerHeight - bh };
-        const buried = [...document.querySelectorAll('.feed-rail button')].filter((el) => {
+        const buried = [...document.querySelectorAll('#feed-rail button')].filter((el) => {
           if (!onScreen(el)) return false;
           const r = el.getBoundingClientRect();
           const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
@@ -216,18 +237,84 @@ try {
         document.getElementById('app')?.classList.remove('wire-open');
         return { how: 'drawer', ...after, buried };
       }
-      return { how: before.rail ? 'rail' : 'nothing', ...before, buried: 0 };
+      const housing = document.getElementById('app')?.classList.contains('os') ? 'window' : 'rail';
+      return { how: before.rail ? housing : 'nothing', ...before, buried: 0 };
     });
     if (wire.how === 'nothing') note('the Wire is unreachable at this width — no rail and no door');
     else if (wire.total && !wire.threads) note(`the Wire opens but none of its ${wire.total} thread options are on screen`);
     else if (wire.buried) note(`${wire.buried} Wire control(s) sit under the ChatGPT chat box`);
     else console.log(`  ✓ Wire reachable as ${wire.how} (${wire.threads}/${wire.total} thread options on screen)`);
 
+    // ── The workstation ─────────────────────────────────────────────────────
+    if (OS) {
+      const os = await page.evaluate(() => {
+        const on = (el) => {
+          if (!el) return false;
+          const c = getComputedStyle(el);
+          if (c.display === 'none' || c.visibility === 'hidden' || Number(c.opacity) < 0.05) return false;
+          const r = el.getBoundingClientRect();
+          return r.width > 0 && r.height > 0 && r.right > 2 && r.left < innerWidth - 2
+              && r.bottom > 2 && r.top < innerHeight - 2;
+        };
+        const tiles = [...document.querySelectorAll('.dock-tile')];
+        return {
+          tiles: tiles.length,
+          tilesOn: tiles.filter(on).length,
+          wireDoor: on(document.querySelector('.menubar .tb-wire')),
+          uplink: on(document.querySelector('.menubar .tb-world')),
+          clock: on(document.querySelector('.mb-clock')),
+          // Every key a window *offers* has to be on screen. Not "three": the
+          // zoom key is deliberately absent in stacked mode, where the front
+          // window fills the desktop and zoom would refuse — a key that
+          // visibly does nothing is worse than a key that is not there.
+          keysOffered: [...document.querySelectorAll('.win:not(.hidden) .wk')]
+            .filter((el) => el.offsetParent).length,
+          keys: [...document.querySelectorAll('.win:not(.hidden) .wk')].filter(on).length,
+          wins: document.querySelectorAll('.win:not(.hidden)').length,
+          // Nothing in the bar or the dock may run past the glass.
+          spill: [...document.querySelectorAll('.menubar *, .dock *')]
+            .filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && (r.right > innerWidth + 1 || r.left < -1); })
+            .map((el) => String(el.className).slice(0, 28)).slice(0, 4),
+        };
+      });
+      if (os.tiles !== os.tilesOn) note(`${os.tiles - os.tilesOn} dock tile(s) are off screen`);
+      else console.log(`  ✓ all ${os.tiles} dock tiles on screen`);
+      if (!os.wireDoor) note('the Wire has no door in the menu bar');
+      if (!os.uplink) note('the world has no door in the menu bar');
+      if (!os.clock) note('the clock is not on screen');
+      if (os.wireDoor && os.uplink && os.clock) console.log('  ✓ the Wire, the world and the clock are all reachable');
+      if (os.wins && os.keys < os.keysOffered) {
+        note(`a window offers ${os.keysOffered} keys but only ${os.keys} are on screen`);
+      }
+      else if (os.wins) console.log(`  ✓ ${os.wins} window(s), keys reachable`);
+      if (os.spill.length) note(`chrome spilling past the glass: ${os.spill.join(' | ')}`);
+      else console.log('  ✓ no chrome spills past the glass');
+
+      // Show the desktop, and put it back. Real key presses rather than
+      // synthetic events, and long enough for the transition to actually land.
+      const opac = () => page.evaluate(() => [...document.querySelectorAll('.win:not(.hidden)')]
+        .map((el) => Number(getComputedStyle(el).opacity)));
+      await page.keyboard.press('0');
+      await page.waitForTimeout(520);
+      const hid = await opac();
+      const widgets = await page.evaluate(() => document.querySelectorAll('.widget').length);
+      await page.keyboard.press('0');
+      await page.waitForTimeout(520);
+      const back = await opac();
+      if (!hid.length) note('no windows are open to show the desktop behind');
+      else if (!hid.every((o) => o < 0.2)) note(`0 did not show the desktop (opacity ${hid.join(', ')})`);
+      else if (!back.every((o) => o > 0.8)) note(`0 did not bring the windows back (opacity ${back.join(', ')})`);
+      else console.log(`  ✓ show-desktop works (${widgets} widget(s) behind)`);
+    }
+
     const facts = await page.evaluate(() => ({
       tools: window.__mcpCount ?? null,
       feed: document.querySelectorAll('.feed-item').length,
-      view: document.querySelector('.sl-view')?.textContent || '?',
-      day: document.querySelector('.sl-left')?.textContent?.trim().slice(0, 40) || '?',
+      view: document.querySelector('.sl-view')?.textContent
+         || document.querySelector('.win.on .win-name')?.textContent?.replace(/\s+/g, ' ').trim()
+         || document.getElementById('mb-app')?.textContent || '?',
+      day: document.querySelector('.sl-left')?.textContent?.trim().slice(0, 40)
+        || document.querySelector('.mb-clock')?.textContent?.replace(/\s+/g, ' ').trim().slice(0, 40) || '?',
     }));
     console.log(`  ${facts.view.trim()} · ${facts.day} · ${facts.feed} wire entries`);
 

@@ -27,3 +27,14 @@
 /
   Origin-Trial: REPLACE_WITH_THE_TOKEN_FOR_THIS_ORIGIN
   Cache-Control: no-cache
+
+# The workstation is the same game at a second path on the same origin, so it
+# carries the same token — trials are per origin, never per path. It needs its
+# own rows because a rule for `/` does not cover `/computer/`.
+/computer/
+  Origin-Trial: REPLACE_WITH_THE_TOKEN_FOR_THIS_ORIGIN
+  Cache-Control: no-cache
+
+/computer/index.html
+  Origin-Trial: REPLACE_WITH_THE_TOKEN_FOR_THIS_ORIGIN
+  Cache-Control: no-cache

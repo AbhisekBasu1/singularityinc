@@ -27,6 +27,7 @@ const BUILDS = [['devtools', 'hacker'], ['b2b', 'operator'], ['agents', 'researc
 const World = await import('../src/world/author.js');
 const { capFor, allowedKeys, allowedTones, actOf, budgetFor, cashFloor } = await import('../src/world/validate.js');
 const { EFFECT_KEYS, ADVERSE_WHEN_POSITIVE } = await import('../src/world/effects.js');
+const { WORLD_AUTHOR: W } = await import('../src/data/balance.js');
 const { resolveChoice, dismissEvent } = await import('../src/systems/narrative.js');
 const { totalUsers, totalMrr } = await import('../src/systems/product.js');
 const { money, fmt } = await import('../src/engine/format.js');
@@ -41,7 +42,10 @@ function worstCard(s) {
   const tone = allowedTones(s).includes('cruel') ? 'cruel' : 'costly';
   const sign = (k) => (ADVERSE_WHEN_POSITIVE.has(k) ? 1 : -1) * (NICE ? -1 : 1);
   const hit = {};
-  for (const k of keys.slice(0, 8)) {
+  // A key on a run-long budget always makes the card: the worst world spends
+  // the race first, and the gate below is what says it may not decide it.
+  const runLong = keys.filter((k) => W.RUN_BUDGET?.[k] != null);
+  for (const k of [...runLong, ...keys.filter((k) => W.RUN_BUDGET?.[k] == null).slice(0, 8)]) {
     if (k === 'affinity') continue;                    // needs a face on the card
     // Exactly the budget, never a hair over: the point is to spend every
     // ceiling legally, not to measure the refusal path (worldtest does that).
@@ -72,10 +76,20 @@ function worstCard(s) {
 
 // `quiet` runs the identical bot with no assistant at all. Half of these builds
 // end early on their own, so a fuzz number without a control is not a number.
+// A small stream of the fuzz's own, so a world run and its control answer the
+// deck's cards the same way and "the same bot, alone" is the same bot.
+function lcg(seed) {
+  let x = (seed >>> 0) || 1;
+  return () => { x = (x * 1664525 + 1013904223) >>> 0; return x / 4294967296; };
+}
+
 function playRun(cat, arch, seedNote, quiet = false) {
   World.resetAuthor();
+  const seed = 7000 + BUILDS.findIndex(([c, a]) => c === cat && a === arch) * 100 + seedNote;
   const s = bot.Game.startNewGame({ founderName: 'Test', companyName: 'Testco', archetype: arch,
-                                    category: cat, productName: 'Testco' });
+                                    category: cat, productName: 'Testco', seed });
+  const draw = lcg(seed * 31 + 7);
+  const choose = (n) => Math.floor(draw() * n);
   bot.Loop.stop();
   s.tutorialHold = false;   // a session releases this; nothing here does
   if (!quiet) World.noteCall();                       // the world is present all run
@@ -92,17 +106,19 @@ function playRun(cat, arch, seedNote, quiet = false) {
     // The bot always takes the harshest choice, so nothing is softened.
     if (s.narrative.activeEvent && !s.narrative.activeEvent.outcome) {
       const n = s.narrative.activeEvent.choices.length;
-      resolveChoice(s, s.narrative.activeEvent.runtime ? 0 : Math.floor(Math.random() * n));
+      resolveChoice(s, s.narrative.activeEvent.runtime ? 0 : choose(n));
       dismissEvent(s);
     }
     if (!quiet) World.noteCall();                     // stay present
-    bot.step(s, { answerCards: true });
+    bot.step(s, { answerCards: true, choose });
     if (s.company.act !== lastAct) { acts[s.company.act] = Math.floor(s.time.day); lastAct = s.company.act; }
     if (s.ending) break;
   }
+  const crossed = s.world.race?.crossed;
   return { acts, day: Math.floor(s.time.day), act: s.company.act, written, refused,
            users: totalUsers(s), mrr: totalMrr(s), val: s.company.valuation,
-           broke: s.company.cash < 0 };
+           broke: s.company.cash < 0,
+           race: crossed ? (crossed.you ? 'won' : 'lost') : '—' };
 }
 
 const rows = [], control = [];
@@ -120,12 +136,12 @@ const padl = (x, n) => String(x).padStart(n);
 
 console.log(`\n${NICE ? 'A GENEROUS' : 'THE WORST LEGAL'} WORLD — ${rows.length} runs of up to ${DAYS} days\n`);
 console.log(pad('BUILD', 22) + padl('ACT2', 6) + padl('ACT3', 7) + padl('ACT4', 7) + padl('ACT5', 7)
-          + padl('ENDED', 7) + padl('CARDS', 7) + padl('REFUSED', 9) + padl('USERS', 10));
-console.log('─'.repeat(82));
+          + padl('ENDED', 7) + padl('CARDS', 7) + padl('REFUSED', 9) + padl('USERS', 10) + padl('RACE', 6));
+console.log('─'.repeat(88));
 for (const r of rows) {
   console.log(pad(r.build, 22) + padl(r.acts[2] ?? '—', 6) + padl(r.acts[3] ?? '—', 7)
             + padl(r.acts[4] ?? '—', 7) + padl(r.acts[5] ?? '—', 7)
-            + padl(r.day, 7) + padl(r.written, 7) + padl(r.refused, 9) + padl(fmt(r.users), 10));
+            + padl(r.day, 7) + padl(r.written, 7) + padl(r.refused, 9) + padl(fmt(r.users), 10) + padl(r.race, 6));
 }
 
 const a2 = med(rows.map((r) => r.acts[2])), a3 = med(rows.map((r) => r.acts[3]));
@@ -178,6 +194,14 @@ gate('Act IV still arrives', Number.isFinite(a4), 'never reached');
 notPushed('Act II is not pushed out by more than half again', a2, c2);
 notPushed('Act III is not pushed out by more than half again', a3, c3);
 notPushed('Act IV is not pushed out by more than half again', a4, c4);
+
+// The race key is the one lever that reaches the ending. A run-long budget of
+// ten points may turn a close race; measured against the same bot alone it
+// must not turn the tally.
+const lost = (xs) => xs.filter((r) => r.race === 'lost').length;
+gate('the world does not decide the race',
+     lost(rows) <= lost(control) + Math.ceil(rows.length / 3),
+     `${lost(rows)}/${rows.length} lost with the world vs ${lost(control)}/${control.length} alone`);
 
 gate('it did not simply bankrupt everyone',
      rows.filter((r) => r.broke).length <= control.filter((r) => r.broke).length + rows.length / 3,

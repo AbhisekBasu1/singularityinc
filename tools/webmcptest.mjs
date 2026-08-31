@@ -17,6 +17,7 @@ const { capFor, metCharacters } = await import('../src/world/validate.js');
 const { resolveChoice, dismissEvent, presentEvent, eligibleEvents, repairEventHistory }
   = await import('../src/systems/narrative.js');
 const { EVENT_MAP } = await import('../src/data/events.js');
+const { resolveThread } = await import('../src/systems/feed.js');
 const { emit, on } = await import('../src/engine/bus.js');
 const { actionWriteCode } = await import('../src/systems/founder.js');
 const { S } = await import('../src/engine/state.js');
@@ -1278,6 +1279,202 @@ await section('the late start deals the whole hand', async () => {
   ok('a brief panel keeps the status and the hand-off', /wm-status/.test(brief) && /assistant-open/.test(brief) && /assistant-link/.test(brief));
   ok('the late start remains at the informed threshold', !/new-game-act3/.test(brief));
   ok('and drops the hand', !/wm-tool"/.test(brief));
+});
+
+// ── The world can read the card, ask in the Wire, and reach the race ────────
+// The late-start game above is the live singleton now: Act III, nothing open.
+const late2 = (await import('../src/engine/state.js')).S;
+late2.tutorialHold = false;
+late2.meta.realtime = false;
+World.noteCall();
+await Surface.reconcile(late2, 'test');
+
+await section('a deck card opening is news the world receives, in full', async () => {
+  if (late2.narrative.activeEvent) dismissEvent(late2);
+  clearWorldInbox(late2);
+  World.clearPending('test');
+  const deck = Object.values(EVENT_MAP).find((e) => (e.choices?.length || 0) >= 2 && !e.chained && !e.char);
+  const waiting = mc.call('wait_for_world');
+  await new Promise((r) => setTimeout(r, 0));
+  presentEvent(late2, deck);
+  const heard = await waiting;
+  eq('the wait wakes for the card', heard.status, 'card_opened');
+  eq('it names it', heard.card?.title, deck.title);
+  ok('and carries the body', typeof heard.card?.body === 'string' && heard.card.body.length > 20, heard.card?.body);
+  ok('and every choice with its tone', Array.isArray(heard.card?.choices) && heard.card.choices.length >= 2
+     && heard.card.choices.every((c) => c.label && c.tone), JSON.stringify(heard.card?.choices));
+  ok('and tells the world not to decide for them', /Do not decide/.test(heard.next), heard.next);
+  const b = await mc.call('briefing');
+  eq('briefing shows what they are reading', b.founderIsReading?.card, deck.title);
+  ok('with the buttons', b.founderIsReading?.choices?.length >= 2, JSON.stringify(b.founderIsReading));
+  const story = await mc.call('inspect_module', { module: 'story' });
+  ok('inspect_module story has the whole card', story.body?.length > 20 && story.choices?.length >= 2,
+     JSON.stringify({ card: story.card, body: story.body, choices: story.choices }).slice(0, 200));
+  eq('and knows whose it is', story.cardBy, 'deck');
+  eq('the clock will not move under it', (await mc.call('advance_time', { days: 3 })).status, 'refused');
+  resolveChoice(late2, 0); dismissEvent(late2);
+  clearWorldInbox(late2);
+
+  // Answered between turns: the opening is stale news and is dropped; the choice is not.
+  const deck2 = Object.values(EVENT_MAP).filter((e) => (e.choices?.length || 0) >= 2 && !e.chained && !e.char)[1];
+  presentEvent(late2, deck2);
+  eq('with no wait open the opening is held', World.authorState(late2).inbox[0]?.status, 'card_opened');
+  resolveChoice(late2, 0); dismissEvent(late2);
+  const later = await mc.call('wait_for_world');
+  eq('answered between turns, the opening is dropped and the choice delivered', later.status, 'founder_chose');
+  eq('for that card', later.card?.title, deck2.title);
+  clearWorldInbox(late2);
+
+  // The world's own cards are not announced back to their author.
+  late2.world.author.recent.cardDays = [];
+  const w = await mc.call('write_event', goodCard({ title: 'Not news to its author' }));
+  eq('a world card opens', w.status, 'ok');
+  eq('and is not announced back to its author', World.authorState(late2).inbox.length, 0);
+  resolveChoice(late2, 1); dismissEvent(late2);
+  clearWorldInbox(late2);
+  late2.world.author.recent.taken = [];
+});
+
+await section('a voice may ask, and the reply comes back through the wait', async () => {
+  const voice = R.list().find((n) => n.startsWith('post_as_'));
+  ok('there is a voice to ask with', !!voice, R.list().join(','));
+  const def = mc.toolNamed(voice);
+  ok('its schema offers ask', !!def.inputSchema.properties.ask, Object.keys(def.inputSchema.properties).join(','));
+  ok('and does not require it', !def.inputSchema.required.includes('ask'));
+  const who = voice === 'post_as_character' ? metCharacters(late2)[0] : voice.slice(8);
+  late2.world.author.recent.postDays = [];
+  late2.feed = late2.feed.filter((f) => !f.runtime);
+  clearWorldInbox(late2);
+  const args = { text: 'is {company} still one person? asking for a friend.',
+    ask: [{ label: 'Answer in public', outcome: 'It gets 400 likes.', effects: { rep: 3, focus: -1 } },
+          { label: 'Say nothing', outcome: 'It scrolls off by Thursday.', effects: { focus: 1 } }] };
+  const r = await mc.call(voice, voice === 'post_as_character' ? { character: who, ...args } : args);
+  eq('it posts', r.status, 'ok');
+  ok('and says it asked', /replies/.test(r.asked || ''), JSON.stringify(r));
+  const item = late2.feed.find((f) => f.runtime?.opts && !f.resolved);
+  ok('the Wire holds it as a thread', !!item, JSON.stringify(late2.feed[0]).slice(0, 160));
+  ok('the tokens were filled', !/\{company\}/.test(item?.text || ''), item?.text);
+  const waiting = mc.call('wait_for_world');
+  await new Promise((res) => setTimeout(res, 0));
+  const rep0 = late2.resources.reputation;
+  resolveThread(late2, item.id, 0);
+  const heard = await waiting;
+  eq('the founder\'s reply wakes the wait', heard.status, 'founder_chose');
+  eq('from the Wire', heard.surface, 'wire');
+  eq('with the reply', heard.choice, 'Answer in public');
+  eq('and the effects already landed', Math.round(late2.resources.reputation - rep0), 3);
+  ok('on the same ledger as a card', (late2.world.author.recent.taken || []).some(([, k]) => k === 'focus'));
+  late2.world.author.recent.taken = [];
+});
+
+await section('the reads say what could be, not only what is', async () => {
+  const res = await mc.call('inspect_module', { module: 'research' });
+  ok('research lists what could start, with a cost', Array.isArray(res.state?.available)
+     && res.state.available.every((n) => n.name && n.cost > 0), JSON.stringify(res.state?.available).slice(0, 200));
+  const ag = await mc.call('inspect_module', { module: 'agents' });
+  ok('agents says what a hire costs', /\$/.test(ag.state?.hiring?.cost || '') && / of /.test(ag.state?.hiring?.roster || ''),
+     JSON.stringify(ag.state?.hiring));
+  const Rng = await import('../src/engine/rng.js');
+  const before = JSON.stringify(Rng.rngState());
+  const mk = await mc.call('inspect_module', { module: 'market' });
+  ok('market names the rounds on offer', Array.isArray(mk.state?.onOffer), JSON.stringify(mk.state?.onOffer));
+  eq('and reading a term sheet draws nothing from the stream', JSON.stringify(Rng.rngState()), before);
+});
+
+await section('the race is in the world\'s hand from Act III, on a run-long budget', async () => {
+  const { initRace, raceStandings } = await import('../src/systems/agirace.js');
+  initRace(late2);
+  await Surface.reconcile(late2, 'test');
+  const fx = mc.toolNamed('write_event').inputSchema.properties.choices.items.properties.effects.properties;
+  ok('write_event offers race', !!fx.race, Object.keys(fx).join(','));
+  ok('and says it is run-long', /whole run/.test(fx.race?.description || ''), fx.race?.description);
+  ok('and offers compute as give-only', /Give only/.test(fx.compute?.description || ''), fx.compute?.description);
+  const b = await mc.call('briefing');
+  ok('briefing counts what is left of it', /points left/.test(b.youMay?.race || ''), JSON.stringify(b.youMay));
+  late2.world.author.recent.cardDays = [];
+  if (late2.narrative.activeEvent) dismissEvent(late2);
+  const lead = () => raceStandings(late2).filter((x) => !x.you)[0];
+  const before = lead().progress;
+  const w = await mc.call('write_event', goodCard({ title: 'The leak', choices: [
+    { label: 'Let it go', tone: 'neutral', sub: 'They gain a step', outcome: 'Their paper cites your paper.', effects: { race: 1 } },
+    { label: 'Publish first', tone: 'costly', sub: 'Costs you a week', outcome: 'You are first.', effects: { focus: -6, race: -1 } },
+  ] }));
+  eq('a card that moves the race is accepted', w.status, 'ok', JSON.stringify(w).slice(0, 200));
+  resolveChoice(late2, 0); dismissEvent(late2);
+  ok('and the leading lab moved by exactly that', Math.abs(lead().progress - before - 1) < 1e-9, `${before} → ${lead().progress}`);
+  clearWorldInbox(late2);
+});
+
+await section('a maximum-length card still reads whole', async () => {
+  if (late2.narrative.activeEvent) dismissEvent(late2);
+  late2.world.author.recent.cardDays = [];
+  late2.world.author.recent.taken = [];
+  const fill = (word, max) => word.repeat(Math.ceil(max / word.length)).slice(0, max).trim();
+  const big = goodCard({
+    title: fill('Nine hundred words of teardown ', W.TITLE_MAX),
+    body: fill('The post is 900 words long and right about six of them, which is the part that stings. ', W.BODY_MAX),
+    choices: [['focus', 1], ['code', 2], ['insight', 1], ['rep', 1]].map(([k, v], i) => ({
+      label: fill(`Reply number ${i} with the whole timeline `, W.LABEL_MAX), tone: 'neutral',
+      sub: fill('costs an evening and most of the goodwill ', W.SUB_MAX),
+      outcome: fill('You answer in the thread with the actual cause and it takes the evening. ', W.OUTCOME_MAX),
+      effects: { [k]: v } })),
+  });
+  const w = await mc.call('write_event', big);
+  eq('the biggest legal card opens', w.status, 'ok', JSON.stringify(w).slice(0, 200));
+  const r = await mc.call('inspect_module', { module: 'story' });
+  const bytes = JSON.stringify(r).length;
+  ok('the read fits the cap', bytes <= 1500, `${bytes}`);
+  ok('and still names the card', typeof r.card === 'string' && big.title.startsWith(r.card.replace(/…$/, '')), r.card);
+  ok('with most of the body', typeof r.body === 'string' && r.body.length >= 120, `${r.body?.length} chars`);
+  ok('and at least two of the choices', Array.isArray(r.choices) && r.choices.length >= 2, JSON.stringify(r.choices));
+  resolveChoice(late2, 0); dismissEvent(late2);
+  clearWorldInbox(late2);
+  late2.world.author.recent.taken = [];
+});
+
+await section('the full cast still fits every description', async () => {
+  for (const id of ['vance', 'priya', 'crane', 'sam', 'yuki', 'dorne', 'kai', 'weaver', 'nullptr']) {
+    late2.narrative.relationships[id] = { met: true, affinity: 2, respect: 1, fear: 0, arc: 2 };
+  }
+  await Surface.reconcile(late2, 'full cast');
+  ok('the voices collapsed into one tool', R.has('post_as_character'), R.list().join(','));
+  const walk = (schema, path, out) => {
+    if (!schema || typeof schema !== 'object') return;
+    for (const [k, v] of Object.entries(schema.properties || {})) {
+      if (v === undefined) { out.push(`${path}.${k} is undefined`); continue; }
+      if (v?.enum && !v.enum.length) out.push(`${path}.${k} has an empty enum`);
+      walk(v, `${path}.${k}`, out);
+      if (v?.items) walk(v.items, `${path}.${k}[]`, out);
+    }
+  };
+  for (const name of R.list()) {
+    const def = mc.toolNamed(name);
+    ok(`${name} is written to fit`, def.description.length <= 485, `${def.description.length} chars`);
+    const bad = [];
+    walk(def.inputSchema, name, bad);
+    ok(`${name} schema is sound all the way down`, !bad.length, bad.join(', '));
+  }
+  const fx = mc.toolNamed('post_as_character').inputSchema.properties.ask.items.properties.effects.properties;
+  ok('a reply is offered only what it may move', !fx.compute && !fx.race && !!fx.rep, Object.keys(fx).join(','));
+});
+
+await section('a thread the world wrote survives a reload', async () => {
+  late2.world.author.recent.postDays = [];
+  late2.feed = late2.feed.filter((f) => !f.runtime);
+  const who = metCharacters(late2)[0];
+  const r = World.postAs(late2, who, 'still one person?', { ask: [
+    { label: 'Yes', outcome: 'Yes.', effects: { rep: 2 } },
+    { label: 'No comment', outcome: 'Silence.', effects: {} } ] });
+  ok('it posts', r.ok, JSON.stringify(r.problems || []).slice(0, 160));
+  Save.save(late2);
+  const reloaded = Save.load();
+  const item = reloaded.feed.find((f) => f.thread === r.thread);
+  ok('the thread reloads with its replies', Array.isArray(item?.runtime?.opts) && item.runtime.opts.length === 2,
+     JSON.stringify(item).slice(0, 160));
+  const rep0 = reloaded.resources.reputation;
+  const done = resolveThread(reloaded, item.id, 0);
+  ok('and still resolves through the world\'s hand', !!done && Math.round(reloaded.resources.reputation - rep0) === 2,
+     `${rep0} → ${reloaded.resources.reputation}`);
 });
 
 report('webmcp');

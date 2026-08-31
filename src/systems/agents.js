@@ -103,6 +103,17 @@ export function fireAgent(S, id, reason = 'released') {
   if (i < 0) return false;
   const [a] = S.agents.splice(i, 1);
   S.stats.agentsLost = (S.stats.agentsLost || 0) + 1;
+  // The tombstone. Until this, an agent was spliced out of the roster and that
+  // was the whole of it — no name, no date, no reason, nothing to look at
+  // later. `agents/archive` in the Record reads this, and the sentence it
+  // prints for each reason lives in `src/data/machine.js`. Keep the last
+  // memory: it is the only thing the agent said that anybody wrote down.
+  (S.agentsLeft ??= []).unshift({
+    id: a.id, name: a.name, model: a.model, spec: a.spec, lane: a.lane,
+    level: a.level, hiredDay: a.hiredDay, day: Math.floor(S.time.day), reason,
+    memory: (a.memory || [])[0]?.text || '',
+  });
+  if (S.agentsLeft.length > AGENTS.ARCHIVE_KEEP) S.agentsLeft.length = AGENTS.ARCHIVE_KEEP;
   markDirty();
   emit('agent:left', { agent: a, reason });
   return a;

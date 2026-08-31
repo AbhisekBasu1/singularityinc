@@ -80,7 +80,8 @@ function agentCard(S, a, m, lanesAvail) {
     * Math.pow(AGENTS.UPGRADE_COST_GROWTH, MODELS[nextModel].tier - 1)) : 0;
   const tools = AGENT_TOOLS.filter((t) => !t.req || S.research.done[t.req]);
 
-  return `<div class="agent-card" style="--agent-color:${model.color};--agent-bg:${model.color}18">
+  return `<div class="agent-card" data-ctx="agent" data-id="${esc(a.id)}"
+    style="--agent-color:${model.color};--agent-bg:${model.color}18">
     <div class="agent-top">
       <div class="agent-avatar">${spec?.icon || '◈'}</div>
       <div style="flex:1;min-width:0">

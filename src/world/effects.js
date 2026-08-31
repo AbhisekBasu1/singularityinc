@@ -8,8 +8,10 @@
 // world cannot touch it — no equity, no research unlocks, no firing your
 // agents, no ending the run.
 // ─────────────────────────────────────────────────────────────────────────────
+import { WORLD_AUTHOR as W } from '../data/balance.js';
 import { makeFx } from '../systems/narrative.js';
 import { THREAD_FX } from '../systems/feed.js';
+import { nudgeRivalFrontier } from '../systems/agirace.js';
 import { fmt, money } from '../engine/format.js';
 
 // key → how it is spent. `fx` names a method on makeFx(); `thread` names one of
@@ -27,12 +29,24 @@ export const EFFECT_KEYS = {
   debt:      { via: 'fx',     label: 'tech debt',   unit: 'int' },
   research:  { via: 'fx',     label: 'research',    unit: 'int' },
   influence: { via: 'fx',     label: 'influence',   unit: 'int' },
+  // Granted capacity, the way the deck grants it. Give-only: the written game
+  // never takes compute away, so the derived ceiling on taking it is zero.
+  compute:   { via: 'fx',     label: 'compute',     unit: 'int',
+               hint: 'granted capacity; the world may give it, never take it' },
   awareness: { via: 'thread', label: 'awareness',   unit: 'int' },
   sentiment: { via: 'thread', label: 'sentiment',   unit: 'ratio' },
   affinity:  { via: 'rel',    label: 'affinity',    unit: 'int' },
+  // The leading rival lab's progress, 0–100. Positive is them gaining ground
+  // — adverse, like heat — and negative is a setback. Act III on, and on a
+  // budget for the whole run rather than a rolling month, because the race
+  // is decided by under twenty-five points and a monthly allowance would
+  // decide it. See `nudgeRivalFrontier` for what it may never do.
+  race:      { via: 'race',   label: 'rival frontier', unit: 'int',
+               hint: 'the leading rival lab gains (+) or slips (−); one small budget for the whole run' },
 };
 
 export const EFFECT_KEY_LIST = Object.keys(EFFECT_KEYS);
+const spec_of = (k) => EFFECT_KEYS[k];
 
 // Deliberately absent, and the reason for each, because the next person to read
 // this will want to add one of them:
@@ -41,6 +55,8 @@ export const EFFECT_KEY_LIST = Object.keys(EFFECT_KEYS);
 //   unlock, achieve the tech tree and the trophy case are earned, not given
 //   control         territory is taken through the World module
 //   competitorHit / competitorKill   rivals live or die by the market, not by fiat
+//   (`race` is the narrow exception: the leading frontier lab may be nudged a
+//    few points either way, on a budget for the whole run, and never over the line)
 //   fireAll, killRogue, constrainRogue, clearRogue   never touch the roster
 //   endRun          the world cannot end your run. That is the whole promise.
 //   chain           authored arcs are authored
@@ -61,12 +77,16 @@ export function applyEffectsWith(fx, S, effects = {}, charId = null) {
   // The rolling budget is spent here rather than at validation, because what
   // matters is what the founder actually chose, not what they were offered.
   const rec = S?.world?.author?.recent;
-  if (rec) {
+  const charge = (k, v) => {
+    if (!rec) return;
     rec.taken = rec.taken || [];
-    for (const [k, v] of Object.entries(effects)) {
-      if (k === 'flags' || !Number.isFinite(v)) continue;
-      if (isAdverse(k, v)) rec.taken.push([S.time.day, k, v]);
-    }
+    // A key on a run-long budget is charged in both directions: handing
+    // the founder the race is as decisive as handing it to the rival.
+    if (isAdverse(k, v) || W.RUN_BUDGET?.[k] != null) rec.taken.push([S.time.day, k, v]);
+  };
+  for (const [k, v] of Object.entries(effects)) {
+    if (k === 'flags' || !Number.isFinite(v) || spec_of(k)?.via === 'race') continue;
+    charge(k, v);
   }
   for (const [k, v] of Object.entries(effects)) {
     if (k === 'flags') continue;
@@ -75,6 +95,13 @@ export function applyEffectsWith(fx, S, effects = {}, charId = null) {
     if (spec.via === 'fx') { fx[k](v); }
     else if (spec.via === 'thread') { THREAD_FX[k]?.(S, v); log.push([k, v]); }
     else if (spec.via === 'rel' && charId) { fx.relate(charId, { affinity: v }); }
+    else if (spec.via === 'race') {
+      // Near the ceiling a lab moves less than asked; the journal gets the
+      // truth, and so does the run ledger below it.
+      const r = nudgeRivalFrontier(S, v);
+      const moved = r ? r.progress - r.before : 0;
+      if (moved) { log.push([k, moved]); charge(k, moved); }
+    }
   }
   // Continuity markers. Prefixed so nothing the authored deck reads can be
   // forged, and so a save tells you which flags a world wrote.
@@ -106,7 +133,7 @@ export function describeEffects(effects = {}) {
 // rule, which forbids a card that is adverse on the same axis whichever button
 // the founder presses.
 // Heat is the one key where "up" is bad. Everything else reads the normal way.
-export const ADVERSE_WHEN_POSITIVE = new Set(['heat', 'debt']);
+export const ADVERSE_WHEN_POSITIVE = new Set(['heat', 'debt', 'race']);
 
 export function isAdverse(key, value) {
   if (!Number.isFinite(value) || value === 0) return false;

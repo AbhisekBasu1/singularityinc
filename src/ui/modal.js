@@ -231,6 +231,22 @@ export function showProposal(ev, proposal) {
 
 export function setEventHandlers({ choose, dismiss }) { onChoose = choose; onDismiss = dismiss; }
 
+// ── Where a dialog hangs from ───────────────────────────────────────────────
+// The console centres everything, because there is one screen and one view. The
+// workstation hangs an ordinary dialog off the window whose action opened it —
+// a sheet — and centres the rest. The shell supplies the rect; this module only
+// writes it onto the backdrop and lets `styles/os.css` do the geometry, so the
+// console (which never sets a provider) is untouched.
+let placementFn = null;
+export function setPlacement(fn) { placementFn = fn || null; }
+function placementFor(opts) {
+  if (!placementFn || opts.centred) return null;
+  try {
+    const p = placementFn(opts);
+    return p && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.w) ? p : null;
+  } catch { return null; }
+}
+
 // The right column's heading, which outlives the choices it was written for:
 // `showOutcome` and `showProposal` both replace what is under it.
 function setKicker(text, note = '') {
@@ -330,6 +346,8 @@ const EFFECT_META = {
   days: { label: 'Days', fmt: (v) => fmt(v) + 'd', icon: '☾', invert: true },
   control: { label: 'Control', fmt: (v) => fmt(v), icon: '⊕' },
   rivals: { label: 'Rivals', fmt: (v) => (v * 100).toFixed(0) + '%', icon: '⚔' },
+  compute: { label: 'Compute', fmt: (v) => fmt(v), icon: '▦' },
+  race: { label: 'Rival frontier', fmt: (v) => fmt(v) + 'pt', icon: '✦', invert: true },
 };
 
 export function showOutcome(ev, outcome, effects) {
@@ -423,8 +441,12 @@ export function showActTransition(act, onDone) {
 }
 
 // ── Generic dialog ─────────────────────────────────────────────────────────
-export function dialog({ title, body, actions = [], wide = false, onClose }) {
-  const html = `<div class="modal-backdrop" id="generic-modal">
+export function dialog({ title, body, actions = [], wide = false, onClose, centred = false, kind = '' }) {
+  const p = placementFor({ wide, centred, kind });
+  const attrs = p
+    ? `class="modal-backdrop sheet" style="--sheet-x:${p.x}px;--sheet-y:${p.y}px;--sheet-w:${p.w}px"`
+    : `class="modal-backdrop"`;
+  const html = `<div ${attrs} id="generic-modal">
     <div class="modal ${wide ? 'wide' : ''}" role="dialog" aria-modal="true" aria-labelledby="dialog-title" tabindex="-1">
       <div class="modal-top">
         <div style="flex:1"><div class="event-title" id="dialog-title" style="font-size:18px">${esc(title)}</div></div>

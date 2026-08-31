@@ -173,6 +173,11 @@ function syncSlider(el, v) {
 
 let dragging = null;
 document.addEventListener('pointerdown', (e) => {
+  // Left button only. Without this a right-click on an allocation slider set
+  // the lane to wherever the cursor happened to be — a committed change the
+  // founder never asked for, and one they would not connect to the menu that
+  // opened over it a moment later.
+  if (e.button !== undefined && e.button !== 0) return;
   const el = e.target.closest?.('.slider');
   if (!el) return;
   dragging = el;
@@ -218,6 +223,18 @@ document.addEventListener('keydown', (e) => {
 // ── Click delegation ───────────────────────────────────────────────────────
 const actions = new Map();
 export function onAction(name, fn) { actions.set(name, fn); }
+
+// Perform an action by name, without a click. A keyboard shortcut that calls
+// its handler directly binds itself to whichever module wrote that line; going
+// through the registry means the housing that registered last answers it — so
+// `?` opens the console's manual dialog and the workstation's Manual window,
+// and neither of them needs to know the other exists.
+export function runAction(name, data = {}) {
+  const fn = actions.get(name);
+  if (!fn) return false;
+  fn({ ...data }, null, null);
+  return true;
+}
 document.addEventListener('click', (e) => {
   const el = e.target.closest?.('[data-act]');
   if (!el) return;
@@ -269,12 +286,27 @@ function openTip(hit, source = 'pointer') {
   showTip(hit.text, hit.title, hit.el);
 }
 
+// `pointerover` and `pointerout` bubble, so they fire again for every
+// descendant the pointer crosses inside the *same* tipped element — and a
+// tipped element is usually a button with an icon, a label and a number in it.
+// Taking each of those as a fresh arrival and departure is what made a tooltip
+// blink three or four times on the way in, with the hand still moving toward
+// it. Both handlers ask the same question instead: has the *tipped ancestor*
+// changed? Crossing between two children of one anchor is not an arrival, and
+// leaving one for another child of the same anchor is not a departure.
 document.addEventListener('pointerover', (e) => {
   if (e.pointerType === 'touch') return;      // touch is handled below
-  openTip(tipFor(e.target));
+  const hit = tipFor(e.target);
+  if (hit && hit.el === tipAnchor) return;    // already open, for this very thing
+  openTip(hit);
 });
 document.addEventListener('pointerout', (e) => {
   if (e.pointerType === 'touch') return;
+  if (!tipAnchor) return;
+  // `relatedTarget` is where the pointer is going — null when it leaves the
+  // window entirely, which is a departure like any other.
+  const to = e.relatedTarget;
+  if (to && tipAnchor.contains?.(to)) return;
   if (tipFor(e.target)) hideTip();
 });
 

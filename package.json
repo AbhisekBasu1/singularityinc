@@ -7,12 +7,15 @@
   "scripts": {
     "start": "node tools/serve.js",
     "dev": "node tools/serve.js",
-    "test": "node tools/lint.mjs && node tools/uitest.mjs && node tools/tutorialtest.mjs && node tools/fmttest.mjs && node tools/savetest.mjs && node tools/worldtest.mjs && node tools/webmcptest.mjs && node tools/choreo.mjs",
+    "test": "node tools/lint.mjs && node tools/uitest.mjs && node tools/ostest.mjs && node tools/tutorialtest.mjs && node tools/fmttest.mjs && node tools/savetest.mjs && node tools/worldtest.mjs && node tools/webmcptest.mjs && node tools/choreo.mjs",
     "evals": "node evals/select.mjs && node evals/baseline.mjs && node evals/capsfuzz.mjs",
     "balance": "RUNS=3 DAYS=2000 node tools/balance.mjs",
     "caps": "node tools/capsderive.mjs",
     "shot": "node tools/shot.mjs",
-    "shot:world": "node tools/liveworld.mjs"
+    "shot:world": "node tools/liveworld.mjs",
+    "shot:os": "ROUTE=/computer/ node tools/shot.mjs",
+    "dev:os": "node tools/serve.js",
+    "os": "node tools/oslive.mjs"
   },
   "license": "MIT"
 }

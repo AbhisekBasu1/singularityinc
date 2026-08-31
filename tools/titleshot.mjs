@@ -16,6 +16,7 @@ import fs from 'node:fs';
 const OUT = process.env.SHOT_OUT || '/tmp/shots';
 fs.mkdirSync(OUT, { recursive: true });
 const PORT = Number(process.env.PORT || 5211), BASE = `http://localhost:${PORT}`;
+const ROUTE = (process.env.ROUTE || '/').replace(/\/?$/, '/');
 let chromium;
 try {
   const mod = await import(process.env.PLAYWRIGHT
@@ -55,7 +56,7 @@ try {
       page.on('console', (x) => { if (x.type() === 'error') errors.push(x.text()); });
       if (m.init) await page.addInitScript(m.init);
       // First sight: the cold open plays, and a hand clicks through it.
-      await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+      await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'networkidle' });
       for (let i = 0; i < 14 && !(await page.$('.title-block.in')); i++) {
         await page.mouse.click(w / 2, h / 2).catch(() => {});
         await page.waitForTimeout(260);
@@ -110,7 +111,7 @@ try {
     const page = await ctx.newPage();
     await page.addInitScript(MC);
     await page.addInitScript(() => { try { localStorage.setItem('singularity_inc_legacy_v1', JSON.stringify({ points: 0, spent: 0, perks: {}, runs: 1, bestValuation: 0, bestAct: 1, unlockedArchetypes: ['hacker'], endings: {}, totalDays: 0, log: [] })); } catch {} });
-    await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'networkidle' });
     await page.waitForSelector('.title-webmcp', { timeout: 8000 }).catch(() => {});
     await page.waitForTimeout(2200);
     await page.screenshot({ path: `${OUT}/title-brief-desktop.png`, fullPage: false });
@@ -129,7 +130,7 @@ try {
     page.on('pageerror', (e) => errors.push(String(e.message)));
     await page.addInitScript(MC);
     await page.addInitScript(() => { try { localStorage.setItem('singularity_inc_legacy_v1', JSON.stringify({ points: 0, spent: 0, perks: {}, runs: 1, bestValuation: 0, bestAct: 1, unlockedArchetypes: ['hacker'], endings: {}, totalDays: 0, log: [] })); } catch {} });
-    await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'networkidle' });
     await page.waitForSelector('[data-act="new-game"]', { timeout: 8000 });
     await page.waitForTimeout(1500);
     await page.click('[data-act="new-game"]');

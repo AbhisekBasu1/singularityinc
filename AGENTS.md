@@ -29,13 +29,23 @@ write_event(...)      → when something is owed
 
 The loop that works: `briefing` once, `example_cards` once, then
 `wait_for_world` → act on what it returns → `wait_for_world` again. It wakes for
-a card the world owes, a move typed on a card, a card/Wire choice, and meaningful
-play across all eight company modules. Rapid code, prompt, user and slider work
-arrives as one semantic batch; strategy and milestones arrive immediately. A
-typed move needs `answer_in_own_words`. Everything else has already landed —
-react, remember it for a callback, and never rewrite it. After a reconnect use
-`activity_log`; when a beat needs context use `inspect_module`. Between cards,
-`post_as_*` costs nothing and is most of what makes a run feel inhabited.
+a card the world owes, a written card opening on the founder's screen, a move
+typed on a card, a card/Wire choice, and meaningful play across all eight
+company modules. Rapid code, prompt, user and slider work arrives as one
+semantic batch; strategy and milestones arrive immediately. A typed move needs
+`answer_in_own_words`. Everything else has already landed — react, remember it
+for a callback, and never rewrite it. After a reconnect use `activity_log`; when
+a beat needs context use `inspect_module` — it also says what *could* be: the
+research that could start and what it costs, what a hire would cost, the round
+on offer. Between cards, `post_as_*` costs nothing and is most of what makes a
+run feel inhabited.
+
+When the written deck opens a card, `wait_for_world` returns `card_opened` with
+the whole card — the body, every choice, its small grey line and its tone — and
+`inspect_module(story)` has it for as long as it is open. The founder may ask
+you what to make of it. Read it to them, weigh it, say what you would do; do
+not decide for them. Their button, or the move they type, comes back through
+the same call.
 
 **Do not end the live turn after `answer_in_own_words` returns `needs_human`.**
 Tell the founder the proposal is ready in a short progress update, then call
@@ -78,6 +88,8 @@ Everything goes through a small vocabulary of effects, and every one is bounded:
 | `debt research influence` | tech debt, research points, influence |
 | `awareness sentiment` | the product's reach and how it is felt about |
 | `affinity` | how the person on the card feels about the founder afterwards |
+| `compute` | granted capacity, from Act III. Give only — the world never takes it — and 1,800 for the whole run |
+| `race` | the leading rival lab's progress, from Act III. Positive is them gaining ground; negative a setback. Ten points for the whole run, both directions, and never over the line |
 | `flags` | your own continuity markers, for a callback later |
 
 Nothing else exists. You cannot move equity, skills, research unlocks, territory,
@@ -89,8 +101,8 @@ Four things, and each refusal tells you which one bit and what to do about it.
 
 1. **The act ceiling.** How far one choice may move one thing, split by
    direction. Derived from the written deck itself: `tools/capsderive.mjs`
-   executes all 383 authored choices, once per act each can appear in — 715
-   executions — and takes the 80th percentile of what they
+   executes all 383 authored choices, once per act each can appear in and five
+   times each from a seeded stream — 3,575 executions — and takes the 80th percentile of what they
    take and what they give — which are not the same number. Act I takes 30 code
    and gives 90.
 2. **The rolling budget.** Across any 30 days you may take a couple of maximal
@@ -138,6 +150,18 @@ answer with the rule, the limit, what you sent, and a `next` you can act on:
 
 Read the `next`. It is usually not asking for a smaller number — it is telling
 you the cost should be a different thing.
+
+## Asking in the Wire
+
+A post can carry a question. Give `post_as_*` an `ask` — two or three replies,
+each a sentence the founder would say, a line on what follows, and a small
+consequence — and it lands in the Wire as a thread they answer with one click.
+Small stakes, by design: the ceilings are a third of a card's, a reply cannot
+touch compute or the race, one reply must leave alignment, approval and
+reputation alone, and two questions may be open at once. Their reply comes back
+through `wait_for_world` like any Wire choice.
+Use it for the things that are not worth a card: a reporter asking for
+comment, a user asking when, a rival asking whether it is still one person.
 
 ## Answering in their own words
 

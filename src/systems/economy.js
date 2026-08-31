@@ -9,6 +9,7 @@ import { clamp, soften } from '../engine/format.js';
 import { rand, gaussian, chance } from '../engine/rng.js';
 import { markDirty } from './modifiers.js';
 import { emit } from '../engine/bus.js';
+import { fireAgent } from './agents.js';
 
 export function expenseBreakdown(S, m = computeMods(S)) {
   const users = totalUsers(S);
@@ -195,8 +196,11 @@ export function tickEmergency(S, days) {
       && S.agents.length > 0 && chance(ECON.EMERGENCY_AGENT_CHANCE * days)) {
     const a = S.agents[S.agents.length - 1];
     acts.push(`${a.name} spun down`);
-    S.agents.pop();
-    markDirty();
+    // Through `fireAgent`, not a bare pop: it is the only thing that writes the
+    // tombstone, and half the ways to lose an agent used to leave the archive
+    // with nothing in it. Already inside the `!S._offline` guard, so a closed
+    // tab does not fill the archive while nobody is looking.
+    fireAgent(S, a.id, 'spun_down');
   }
   // Halt any in-flight megaproject. Same rule: not while you are gone.
   if (!S._offline && S.world.projectQueue?.length

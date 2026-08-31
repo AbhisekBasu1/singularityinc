@@ -9,12 +9,17 @@ import { slider as sliderHtml } from './dom.js';
 import { toast } from './toast.js';
 import { play as sfx, setEnabled as setAudio, initAudio, setAmbient } from './audio.js';
 import { setBackgroundEnabled } from './background.js';
+import { isOs } from './shell.js';
 
 const actOf = () => S?.company.act || 1;
 
 export function showSettings() {
-  const el = Modal.dialog({ title: 'Settings', wide: false,
-    body: `<div class="col g12">
+  const el = Modal.dialog({ title: 'Settings', wide: false, body: settingsBody() });
+  bindSettings(el);
+}
+
+export function settingsBody() {
+  return `<div class="col g12">
       ${toggle('sound', 'Sound', S.settings.sound)}
       ${toggle('ambient', 'Ambient bed', S.settings.ambient !== false)}
       <div class="row between g12">
@@ -29,6 +34,7 @@ export function showSettings() {
       <div class="divider"></div>
       <button class="btn btn-sm btn-ghost btn-block" data-act="assistant-link">Play with your assistant</button>
       <button class="btn btn-sm btn-ghost btn-block" data-act="help">Manual — keys, glossary, walkthroughs</button>
+      ${isOs() ? '' : '<button class="btn btn-sm btn-ghost btn-block" data-set="workstation">Open the workstation — the same save, on a desktop</button>'}
       <div class="divider"></div>
       <div class="row g8">
         <button class="btn btn-sm" data-set="export">Copy save to clipboard</button>
@@ -38,8 +44,11 @@ export function showSettings() {
         <button class="btn btn-sm btn-danger" data-set="reset">Abandon this run</button>
       </div>
       <div class="tiny dimmer">Saves live in your browser's local storage. Exporting gives you a portable string.</div>
-    </div>`, actions: [] });
+    </div>`;
+}
 
+export function bindSettings(el) {
+  if (!el) return;
   el.querySelectorAll('[data-toggle]').forEach((b) => b.addEventListener('click', () => {
     const k = b.dataset.toggle; S.settings[k] = !S.settings[k];
     if (k === 'sound') { setAudio(S.settings.sound);
@@ -59,6 +68,9 @@ export function showSettings() {
       await navigator.clipboard.writeText(str);
       toast({ icon: '⌗', title: 'Save copied.', kind: 'good' });
     }
+    // The other housing, on the same save. Write first: the workstation is a
+    // fresh document and an unsaved minute would be a minute lost.
+    if (k === 'workstation') { Save.save(S); location.href = '/computer/'; }
     if (k === 'import') { const v = prompt('Paste save string:'); if (v && Save.importSave(v)) { location.reload(); } }
     if (k === 'reset') { if (confirm('Abandon this run? Legacy points are kept.')) { Save.clearSave(); location.reload(); } }
   }));

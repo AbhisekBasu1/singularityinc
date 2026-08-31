@@ -28,11 +28,32 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  /* Cut sizes. Every user of a --cut-* polygon sets its own --ch; this is only
-     the fallback that keeps the polygon valid if one forgets, because an
-     unresolved var() inside clip-path silently becomes `none`. */
+  /* The default cut. Anything that does not set its own inherits this. */
   --ch: 12px;
 
+  /* The steel a plate is cut from. */
+  --hud-plate: linear-gradient(168deg, #0e121b 0%, #0a0d15 44%, #06080d 100%);
+  --hud-line:  rgba(255,255,255,0.16);
+}
+
+/* ── WHY THIS IS ON `*` AND NOT ON `:root` ──────────────────────────────────
+   A custom property whose value contains `var()` is substituted where it is
+   *declared*, not where it is used. Written on `:root`, these four polygons
+   computed once against `:root`'s own `--ch` — and every plate in the game
+   inherited that one resolved string. A pill saying `--ch: 4px`, a keycap
+   saying 3px and a modal saying 20px were all cut at 12px, which is the
+   fallback, which is why an 11px control came out a triangle and why the whole
+   size hierarchy this file is built on had never actually shipped.
+
+   Declaring them on `*` gives every element its own computed copy, resolved
+   against the `--ch` that element actually has. It is the only place in these
+   stylesheets that uses the universal selector, and this is the reason.
+
+   Two things follow. Set `--ch` on the same rule as the `clip-path`, never on
+   an ancestor and never in a later rule that loses on specificity. And when
+   you write a new cut shape, put it here beside the others rather than
+   inlining a polygon — a shape that is not in this block will not resolve. */
+* {
   --cut-tlbr: polygon(var(--ch) 0, 100% 0, 100% calc(100% - var(--ch)), calc(100% - var(--ch)) 100%, 0 100%, 0 var(--ch));
   /* Inset by 1px on every side. The diagonal has to shrink by less than the
      straight edges do or the 1px line pinches to nothing at the cut: at
@@ -42,10 +63,6 @@
 
   --cut-br:    polygon(0 0, 100% 0, 100% calc(100% - var(--ch)), calc(100% - var(--ch)) 100%, 0 100%);
   --cut-br-in: polygon(0 0, 100% 0, 100% calc(100% - var(--ch) + 0.5px), calc(100% - var(--ch) + 0.5px) 100%, 0 100%);
-
-  /* The steel a plate is cut from. */
-  --hud-plate: linear-gradient(168deg, #0e121b 0%, #0a0d15 44%, #06080d 100%);
-  --hud-line:  rgba(255,255,255,0.16);
 }
 
 @keyframes hudSweep {

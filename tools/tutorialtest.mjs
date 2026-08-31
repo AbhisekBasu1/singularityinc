@@ -111,6 +111,22 @@ for (const c of CHAPTERS) {
   }
 }
 
+// The research walkthrough used to spotlight only the branch tabs while
+// asking for a node click. The tutorial panes correctly swallow clicks outside
+// the spotlight, which made the requested node impossible to press. Keep the
+// two interactions as two separately anchored steps.
+const compounding = CHAPTERS.find((c) => c.id === 'compounding');
+const branchStep = compounding?.steps.find((st) => st.id === 'branch');
+const nodeStep = compounding?.steps.find((st) => st.id === 'queue');
+checks++;
+if (branchStep?.anchor !== '.branch-tabs' || branchStep?.advance?.act !== 'branch') {
+  fail('compounding: branch choice must be its own branch-tabs action step');
+}
+checks++;
+if (nodeStep?.anchor !== '.tier-nodes' || typeof nodeStep?.advance?.pred !== 'function') {
+  fail('compounding: node choice must have its own clickable tier-nodes step');
+}
+
 // ── Gates evaluate ─────────────────────────────────────────────────────────
 // when()/auto()/pred() must survive a fresh state and a fully grown one.
 const early = newGame({});

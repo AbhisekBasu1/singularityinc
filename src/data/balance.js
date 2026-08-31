@@ -355,6 +355,10 @@ export const CODE = {
 };
 
 export const AGENTS = {
+  // How many departures the archive keeps. Generous — this is the only funeral
+  // the company holds, and a run that loses forty agents should still be able
+  // to look at the first one.
+  ARCHIVE_KEEP: 60,
   BASE_HIRE_COST: 900,
   HIRE_COST_GROWTH: 1.29,
   UPKEEP_MULT: 1.0,
@@ -551,6 +555,30 @@ export const EVENTS = {
   // game into a slideshow of modals.
   MIN_REAL_SECONDS: 26,
   MIN_REAL_SECONDS_PRIORITY: 10,
+
+  // ── Fatigue ───────────────────────────────────────────────────────────────
+  // A repeatable card's only brake used to be its cooldown, which is a floor on
+  // *when* it may come back and says nothing about how often it already has. So
+  // a 900-day run drew "They Disagree" seven times and "The Codebase Fights
+  // Back" five, and by the fourth the player has stopped reading the card and
+  // started looking for the button. Every draw now halves the odds of the next
+  // one (0.55^n against a fresh card's 1.0), and DRAW_CAP is the hard stop.
+  //
+  // The number that matters is not the cap, it is the decay: a card seen once
+  // is still likely, seen three times is a rarity, and the deck spreads across
+  // its own breadth instead of orbiting a dozen high-weight favourites.
+  FATIGUE: 0.55,
+  // The Log is the founder's own story and it used to be a ring buffer 200
+  // deep. A 1,600-day run resolves 250–300 cards, so Day One, ARIA and the
+  // first dollar were silently deleted somewhere in Act III — the player scrolls
+  // back for the beginning of their company and finds a compute contract.
+  // The cap is higher now, and the trim is selective: milestones and anything
+  // with a face are the spine and go last.
+  JOURNAL_CAP: 320,
+  DRAW_CAP: 4,            // default ceiling on how many times one card may fire
+  // A card that has written escalation prose earns a higher ceiling, because
+  // its repeats are *not* repeats — see `times()` in systems/narrative.js.
+  DRAW_CAP_ESCALATING: 6,
 };
 
 export const WORLD = {
@@ -751,13 +779,17 @@ export const RACE = {
   POST_CROSS_CEILING: 99, // progress ceiling for non-winners after the race ends
   LAB_FAILURE_PROGRESS: 20, // progress required before a lab can fail
   LAB_FAILURE_CHANCE: 0.00025, // daily chance of lab shutdown at zero safety
+  // As far as a world card may carry a rival lab. The last point is the
+  // lab's own: the world nudges the race, it never decides it.
+  WORLD_LAB_CEILING: 99,
 };
 
 // ── The world, played ───────────────────────────────────────────────────────
 // When an assistant is present it authors cards into the same deck the game
 // ships with. Its limits are not a guess: `tools/capsderive.mjs` executes all
-// 383 authored choices, once per act each can appear in (715 executions),
-// against a representative state per act and reports the
+// 383 authored choices, once per act each can appear in and five times each
+// from a seeded stream (3,575 executions), against a representative state per
+// act and reports the
 // magnitude of everything each one moved. CAPS below is the deck's own 80th
 // percentile — the world may write a typical card, never an outlier.
 //
@@ -822,8 +854,8 @@ export const WORLD_AUTHOR = {
 
   // ── Per-act ceilings on a single choice's effects ─────────────────────────
   // Split by direction, because the deck is. `tools/capsderive.mjs` separates
-  // what the deck's 383 choices *take* from what they *give* (715 executions,
-  // one per act each card can appear in), and they are
+  // what the deck's 383 choices *take* from what they *give* (3,575 seeded
+  // executions, five per act each card can appear in), and they are
   // not the same shape at all: in Act I the written game takes 30 code and
   // gives 90, takes no users and gives 600. Deriving a ceiling on damage from
   // the size of the game's own rewards was the first version of this table, and
@@ -831,41 +863,72 @@ export const WORLD_AUTHOR = {
   //
   // TAKE is the p80 of what the deck takes. GIVE is the p80 of what it gives.
   // For `heat` and `debt`, taking means raising and giving means lowering.
+  // Re-derived against the 167-card deck (497 authored choices) after the lore
+  // pass. The invariant is that the world may never take MORE than the written
+  // game takes: where a hand-tuned cap sat above `capsderive`'s p80 it comes
+  // down to it, and where it sits below — align, heat and affinity in act 1,
+  // deliberately tighter than the deck — it stays where it is. Growing the deck
+  // moved this: thirty-eight mostly-late character cards pulled the p80 of what
+  // the deck takes in cash and focus down, and the caps did not follow, so the
+  // world was allowed to be harsher than anything the game does to itself.
   TAKE: {
-    1: { cash: 6000,   rep: 30,  insight: 8,  code: 30,  focus: 15, users: 200,
+    1: { cash: 6000,   rep: 25,  insight: 8,  code: 30,  focus: 15, users: 200,
          align: 0.05, heat: 5,  opinion: 0.04, debt: 30, research: 10,   influence: 0,
-         awareness: 20,  sentiment: 0.03, affinity: 2 },
-    2: { cash: 6000,   rep: 70,  insight: 15, code: 70,  focus: 16, users: 800,
+         awareness: 20,  sentiment: 0.03, affinity: 2,
+         compute: 0, race: 0 },
+    2: { cash: 6000,   rep: 60,  insight: 10, code: 60,  focus: 16, users: 800,
          align: 0.06, heat: 8,  opinion: 0.08, debt: 30, research: 40,   influence: 0,
-         awareness: 50,  sentiment: 0.04, affinity: 2 },
-    3: { cash: 2.4e6,  rep: 70,  insight: 40, code: 90,  focus: 20, users: 7e4,
-         align: 0.07, heat: 20, opinion: 0.10, debt: 50, research: 60,   influence: 8,
-         awareness: 120, sentiment: 0.05, affinity: 3 },
-    4: { cash: 8e9,    rep: 100, insight: 40, code: 120, focus: 22, users: 1.3e7,
-         align: 0.08, heat: 24, opinion: 0.12, debt: 50, research: 300,  influence: 25,
-         awareness: 250, sentiment: 0.05, affinity: 3 },
-    5: { cash: 1.6e11, rep: 120, insight: 60, code: 90,  focus: 30, users: 5e8,
-         align: 0.08, heat: 24, opinion: 0.16, debt: 50, research: 1500, influence: 50,
-         awareness: 350, sentiment: 0.05, affinity: 3 },
+         awareness: 50,  sentiment: 0.04, affinity: 2,
+         compute: 0, race: 0 },
+    3: { cash: 2.0e6,  rep: 70,  insight: 40, code: 90,  focus: 16, users: 3.4e4,
+         align: 0.07, heat: 20, opinion: 0.09, debt: 50, research: 60,   influence: 8,
+         awareness: 120, sentiment: 0.05, affinity: 3,
+         compute: 0, race: 2 },
+    4: { cash: 3.0e9,  rep: 90,  insight: 40, code: 120, focus: 16, users: 9.1e6,
+         align: 0.08, heat: 24, opinion: 0.12, debt: 45, research: 300,  influence: 25,
+         awareness: 250, sentiment: 0.05, affinity: 3,
+         compute: 0, race: 4 },
+    5: { cash: 2.0e10, rep: 120, insight: 60, code: 90,  focus: 14, users: 5e8,
+         align: 0.08, heat: 22, opinion: 0.16, debt: 36, research: 1500, influence: 50,
+         awareness: 350, sentiment: 0.05, affinity: 3,
+         compute: 0, race: 6 },
   },
   GIVE: {
     1: { cash: 18000,  rep: 38,  insight: 22,  code: 90,  focus: 25, users: 600,
          align: 0.05, heat: 14, opinion: 0.05, debt: 18,  research: 20,   influence: 0,
-         awareness: 25,  sentiment: 0.04, affinity: 2 },
+         awareness: 25,  sentiment: 0.04, affinity: 2,
+         compute: 0, race: 0 },
     2: { cash: 100000, rep: 45,  insight: 30,  code: 120, focus: 30, users: 840,
          align: 0.06, heat: 14, opinion: 0.05, debt: 150, research: 60,   influence: 0,
-         awareness: 60,  sentiment: 0.05, affinity: 2 },
+         awareness: 60,  sentiment: 0.05, affinity: 2,
+         compute: 0, race: 0 },
     3: { cash: 1.4e8,  rep: 70,  insight: 48,  code: 240, focus: 45, users: 3.5e5,
          align: 0.07, heat: 14, opinion: 0.09, debt: 250, research: 400,  influence: 10,
-         awareness: 150, sentiment: 0.06, affinity: 3 },
+         awareness: 150, sentiment: 0.06, affinity: 3,
+         compute: 300, race: 2 },
     4: { cash: 1e12,   rep: 140, insight: 120, code: 320, focus: 60, users: 1.3e8,
          align: 0.08, heat: 25, opinion: 0.12, debt: 50,  research: 900,  influence: 30,
-         awareness: 300, sentiment: 0.06, affinity: 3 },
+         awareness: 300, sentiment: 0.06, affinity: 3,
+         compute: 300, race: 3 },
     5: { cash: 1.1e13, rep: 250, insight: 400, code: 320, focus: 50, users: 1.6e9,
          align: 0.08, heat: 30, opinion: 0.16, debt: 50,  research: 3000, influence: 60,
-         awareness: 400, sentiment: 0.06, affinity: 3 },
+         awareness: 400, sentiment: 0.06, affinity: 3,
+         compute: 300, race: 6 },
   },
 
+  // `compute` and `race` are diffed around each choice rather than read from
+  // the fx log, because the deck writes them straight onto state, and they
+  // are sampled five times per choice from a seeded stream, because the
+  // grants sit behind `chance()` branches (REPS in capsderive). Compute is
+  // give-only — the written game never takes it away, so TAKE is zero and a
+  // negative number is refused by name — and Act V carries the grant forward,
+  // because the Act V deck scales compute instead of granting it and a
+  // company at that size still gets offered capacity. The race is the one
+  // key deliberately tighter than the measurement: the deck takes 4 in Act IV
+  // and 8 in Act V and gives 3 and 6, and taking is held to 6, with 2 in Act
+  // III where the deck has no race card at all. A race decided by under
+  // twenty-five points cannot have a key that moves eight of them.
+  //
   // Kept as the union of the two, for anything that wants "is this key in play
   // at all this act" without caring which way it points.
   get CAPS() {
@@ -940,6 +1003,29 @@ export const WORLD_AUTHOR = {
 
   // Held directives narrow the world's hand.
   FORTIFY_CAP_MULT: 0.8,
+
+  // Keys on a budget for the whole run rather than a rolling month, charged
+  // in both directions. The rolling budget is right for stocks, which the
+  // company earns back; it is wrong for the race, which nobody earns back.
+  // Ten points is a little under the median margin the player wins by (11)
+  // and well over the margin they lose by (0–3): enough to turn a close race,
+  // never enough to manufacture a lost one from a comfortable lead.
+  // Compute is give-only, and a gift with no ceiling is a tap: a card every
+  // five days at the ceiling would out-build the deck several times over.
+  // Six of the derived grant for the run is about what the written game
+  // itself hands out across Acts III and IV.
+  RUN_BUDGET: { race: 10, compute: 1800 },
+
+  // A post that asks: two or three one-click replies in the Wire, judged like
+  // a card's choices at a fraction of the ceilings. Small stakes, by design —
+  // the deck's own threads move six reputation and a point of focus.
+  THREAD_ASK_MIN: 2, THREAD_ASK_MAX: 3,
+  THREAD_OUT_MAX: 200,
+  THREAD_CAP_MULT: 0.35,
+  MAX_OPEN_WORLD_THREADS: 2,
+  THREAD_EXPIRES_DAYS: 45,    // the same shelf life the deck's threads get
+  // Not behind a one-click reply: infrastructure, and the ending.
+  THREAD_EXCLUDE: ['compute', 'race'],
 
   // No card may be uniformly adverse on any of these: at least one choice must
   // leave each of them alone or improve it. A dilemma is two different costs,

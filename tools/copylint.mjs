@@ -46,10 +46,21 @@ const MODULES = {
   endings: (await import('../src/systems/progression.js')).ENDINGS,
   epilogues: (await import('../src/data/epilogues.js')).EPILOGUES,
   advice: (await import('../src/data/advice.js')).ADVICE,
+  // The machine's own copy: folder blurbs and empty states are objects with
+  // prose keys; DEPARTURES, CTX and EMPTY are flat id -> sentence maps, which
+  // this wraps so the same walker sees them.
+  machineFolders: (await import('../src/data/machine.js')).FOLDERS,
+  machineDepartures: Object.entries((await import('../src/data/machine.js')).DEPARTURES)
+    .map(([id, text]) => ({ id, text })),
+  machineCtx: Object.entries((await import('../src/data/machine.js')).CTX)
+    .map(([id, text]) => ({ id, text })),
+  machineEmpty: Object.entries((await import('../src/data/machine.js')).EMPTY)
+    .map(([id, text]) => ({ id, text })),
 };
 
 const PROSE_KEYS = new Set(['name', 'title', 'desc', 'desc2', 'body', 'text', 'flavour', 'flavor', 'label',
-  'sub', 'out', 'hint', 'blurb', 'req', 'tagline', 'line', 'bio', 'note', 'short', 'costLabel', 'perk']);
+  'sub', 'out', 'hint', 'blurb', 'req', 'tagline', 'line', 'bio', 'note', 'short', 'costLabel', 'perk',
+  'empty']);
 
 let issues = 0, checked = 0;
 const bad = (where, msg, s) => { issues++; console.log(`  ✗ ${where}: ${msg}\n      "${String(s).slice(0, 140).replace(/\n/g, ' ⏎ ')}"`); };

@@ -7,7 +7,7 @@ import { fmt, money } from './engine/format.js';
 import * as Game from './game.js';
 import * as Loop from './engine/loop.js';
 import * as Save from './engine/save.js';
-import { onAction, onKey, onSlider, isDragging, esc, md, tipOpen } from './ui/dom.js';
+import { onAction, onKey, onSlider, runAction, isDragging, esc, md, tipOpen } from './ui/dom.js';
 import { toast, floatFromEvent, shake } from './ui/toast.js';
 import * as Modal from './ui/modal.js';
 import * as Shell from './ui/shell.js';
@@ -57,6 +57,24 @@ import { KIND_TEXT } from './data/approaches.js';
 import { ENDINGS, triggerEnding } from './systems/progression.js';
 import { PROJECT_MAP } from './data/projects.js';
 import { PLATFORM } from './data/platform.js';
+
+// ═══ WHICH HOUSING ══════════════════════════════════════════════════════════
+// Two shells play the same game: the console (the original) and the
+// workstation, a desktop at `/computer/`. The choice is made here, before
+// anything is registered with it, and everything below is written as though
+// there were only one.
+const Q = new URLSearchParams(typeof location !== 'undefined' ? location.search : '');
+const wantOs = (typeof document !== 'undefined'
+  && document.documentElement?.dataset?.shell === 'os') || Q.get('shell') === 'os';
+if (wantOs) {
+  try {
+    const Os = await import('./ui/os/shell.js');
+    Shell.use(Os);
+    // The title becomes a login screen: the same pitch, the same panel and the
+    // same doors, with the saved run on it as an account you log into.
+    Intro.setTitleDecor(Os.titleDecor);
+  } catch (e) { console.error('[shell] the workstation did not load; falling back', e); }
+}
 
 Shell.registerViews({
   desk: DeskView, product: ProductView, agents: AgentsView, research: ResearchView,
@@ -166,6 +184,9 @@ function enterGame() {
   Tutorial.registerShell({
     setView: Shell.setView,
     getView: Shell.getView,
+    alias: Shell.anchorAlias,
+    showing: Shell.showing,
+    os: Shell.isOs(),
     onEnd: () => { Shell.paintMain(); Shell.paintTopbar(); Shell.paintNav(); Shell.paintStatus(); nudge.tutorial = true; nudgeWorld(); },
   });
   // The first lesson waits for the power-on to finish so it is not competing
@@ -208,6 +229,11 @@ let worldMounted = false;
 let redrawOpenCard = false;
 function bootWorld() {
   Shell.registerWorldChip(() => WorldConsole.statusChip());
+  // The Uplink shows the hand an assistant would arrive with when there is no
+  // world layer to report on. `intro.js` owns that list; the console is told,
+  // rather than importing it, because the import would close a cycle through
+  // the whole WebMCP surface.
+  WorldConsole.registerHand(() => Intro.openingHand());
   Modal.setFreeTextProvider(() => World.founderInputState(S));
   Modal.setOwnWordsHandlers({
     submit: (text) => {
@@ -274,7 +300,11 @@ function bootWorld() {
   MCP.boot({
     screen: screenTools({
       setView: (id) => { Shell.setView(id); },
-      views: (s) => Shell.VIEWS.filter((v) => !v.req || v.req(s)),
+      // The eight modules, plus whatever else this housing can be told to open.
+      // On the workstation that is the Record, the Uplink, ARIA, the Manual and
+      // Settings; on the console it is nothing, and the enum is the same eight
+      // it has always been.
+      views: (s) => Shell.VIEWS.filter((v) => !v.req || v.req(s)).concat(Shell.extraViews(s)),
       spotlight: {
         anchors: () => Tutorial.spotlightAnchors(),
         anchorHelp: () => Tutorial.spotlightAnchorHelp(),
@@ -332,6 +362,9 @@ onAction('wire-toggle', () => {
 
 onAction('author-dialog', () => {
   sfx('click');
+  // The workstation has a window for this and opens it instead; the console
+  // has one home for the panel and it is a dialog.
+  if (Shell.showWorldConsole()) return;
   Modal.dialog({ title: 'The world', wide: true,
     body: `<div class="world-console in-dialog">${WorldConsole.panelBody({ full: true })}</div>`,
     actions: [{ label: 'Close' }] });
@@ -408,13 +441,22 @@ onAction('assistant-link', () => {
 });
 
 // ── Speed / view ───────────────────────────────────────────────────────────
-onAction('speed', (d) => {
+onAction('speed', (d, el, e) => {
   const v = Number(d.v);
   if (v === 0) S.settings.paused = !S.settings.paused;
   else { S.settings.paused = false; S.settings.speed = v; }
+  // A transport key clicked with the mouse keeps focus, and a focused button
+  // answers Space itself — so the next Space both toggled pause here and
+  // re-activated the button, which is a pause and an unpause in one keystroke.
+  // `detail` is 0 for a click synthesised from the keyboard and ≥ 1 for a real
+  // pointer, so this hands focus back only to the hand that did not ask for it.
+  if (e && e.detail > 0) { try { el?.blur?.(); } catch { /* not focusable */ } }
   Shell.paintTopbar();
 });
 onAction('view', (d) => Shell.setView(d.v));
+// The dock is a toggle, not a shortcut: pressing the tile of the app you are
+// looking at puts it away. The console has no dock and ignores this.
+onAction('os-dock', (d) => Shell.toggleFromDock(d.v));
 onAction('branch', (d) => { ResearchView.setBranch(d.v); Shell.paintMain(); });
 onAction('world-tab', (d) => { WorldView.setWorldTab(d.v); sfx('click'); Shell.paintMain(); });
 
@@ -717,11 +759,12 @@ onAction('prestige', () => {
     body: `<div class="small dim" style="line-height:1.7">This run ends here. You keep your legacy points, perks, achievements and unlocked archetypes — and you keep knowing how all of it works.
       <br/><br/>Everything else resets to an empty repository and a cursor.</div>`,
     actions: [{ label: 'Not yet', cls: 'btn-ghost' },
-      { label: 'Reset the timeline', cls: 'btn-violet', fn: () => {
+      { label: 'Reset the timeline', cls: 'btn-violet', fn: async () => {
         const { gain } = Game.prestige(S);
         Loop.stop();
         inGame = false;
         Modal.closeModal();
+        await Shell.powerDown();
         Intro.showTitle({ cold: false });
         toast({ icon: '∞', title: `+${gain} legacy points`, sub: 'A new timeline begins.', kind: 'good', ms: 6000 });
       } }] });
@@ -793,9 +836,13 @@ onAction('focus-region', (d) => {
 });
 
 onAction('help', showHelp);
-onKey('?', () => { if (inGame && !Modal.isModalOpen()) showHelp(); });
-onKey('a', () => { if (inGame && !Modal.isModalOpen()) document.querySelector('[data-act="ask-aria"]')?.click(); });
-onKey('/', () => { if (inGame && !Modal.isModalOpen()) showHelp(); });
+// Through the registry, not straight to the function: the workstation answers
+// all three of these with a window rather than a dialog, and it does that by
+// registering over them.
+const key = (name) => () => { if (inGame && !Modal.isModalOpen()) runAction(name); };
+onKey('?', key('help'));
+onKey('/', key('help'));
+onKey('a', key('ask-aria'));
 
 // ── Settings ───────────────────────────────────────────────────────────────
 onAction('settings', showSettings);
@@ -842,11 +889,9 @@ for (let i = 1; i <= 9; i++) {
       if (btn) btn.click();
       return;
     }
-    // Otherwise the digits are the module rack, in the order the nav shows them.
-    if (inGame && !Modal.isModalOpen()) {
-      const item = document.querySelectorAll('.nav-item[data-act="view"]')[i - 1];
-      if (item) { item.click(); return; }
-    }
+    // Otherwise the digits are the module rack, in the order the housing shows
+    // them — the nav in the console, the dock on the workstation.
+    if (inGame && !Modal.isModalOpen()) { Shell.viewByIndex(i - 1); return; }
   });
 }
 onKey('enter', () => {
@@ -859,6 +904,10 @@ onKey('arrowright', () => { if (!inGame) document.querySelector('[data-act="beat
 onKey('arrowleft', () => { if (!inGame) document.querySelector('[data-act="beat-back"]')?.click(); });
 onKey('escape', () => {
   if (AssistantHandoff.isOpen()) { AssistantHandoff.dismiss(); return; }
+  // A menu, a popover or the Notification Center is the shallowest thing open
+  // on the workstation and Escape belongs to it first. The console has none of
+  // those and says so.
+  if (Shell.escape()) return;
   const app = document.getElementById('app');
   if (app?.classList.contains('wire-open') && !Modal.isModalOpen()) {
     app.classList.remove('wire-open'); return;
@@ -889,7 +938,15 @@ Modal.setEventHandlers({
   dismiss: () => { dismissEvent(S); Modal.closeModal(); Shell.paintMain(); Shell.paintNav(); },
 });
 
-on('event:present', (ev) => { sfx('event'); Modal.showEvent(ev); });
+// A card from a person announces itself on the workstation before it opens —
+// the founder's machine says who is calling. Everything else, and every card in
+// the console, opens straight away.
+on('event:present', (ev) => {
+  sfx('event');
+  const ann = Shell.announceCard(ev);
+  if (ann && typeof ann.then === 'function') ann.then(() => { if (S?.narrative.activeEvent === ev) Modal.showEvent(ev); });
+  else Modal.showEvent(ev);
+});
 on('objective', (o) => { sfx('money'); toast({ icon: '✓', title: `**${o.title}**`, sub: 'Objective complete', kind: 'good', ms: 3400 }); });
 on('agent:hired', () => sfx('hire'));
 on('project:started', () => sfx('project'));
@@ -945,7 +1002,10 @@ on('ending', ({ ending, state }) => {
   showEnding(ending);
 });
 
-function showEnding(ending) {
+async function showEnding(ending) {
+  // The machine goes down before the retrospective comes up. In the console
+  // this resolves at once and nothing has changed.
+  await Shell.powerDown();
   sfx('act');
   showEndingScreen(S, ending, () => {
     const { gain } = Game.prestige(S);
@@ -1017,7 +1077,6 @@ on('frame', () => {
 // Dev harness: ?dev=1&cat=devtools&arch=hacker&days=400&view=research&event=e_first_user
 // It is its own module, fetched only when asked for — nothing in it ships to a
 // player who did not put `dev=1` in the address bar.
-const Q = new URLSearchParams(location.search);
 if (Q.has('setup')) Intro.showIntro(Number(Q.get('setup')) || 0);
 else if (Q.has('dev')) {
   import('./dev.js').then((D) => D.devBoot(Q, { enterGame, showEnding }));

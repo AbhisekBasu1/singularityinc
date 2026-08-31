@@ -27,6 +27,7 @@ import { spawn } from 'node:child_process';
 
 const PORT = Number(process.env.PORT || 5217);
 const BASE = `http://localhost:${PORT}`;
+const ROUTE = (process.env.ROUTE || '/').replace(/\/?$/, '/');
 
 // Hairlines that separate one region or row from the next. These are meant to
 // be one-sided and always will be.
@@ -35,6 +36,18 @@ const EXPECTED = new Set([
   'time-block', 'view-head', 'modal-top', 'sinks', 'approach-strip', 'thread-out',
   'ch-head', 'ch-foot', 'nem-moves', 'nem-move', 'nem-counters', 'quote', 'wm-status',
   'modal-act', 'act-head', 'own-words-footer',
+  // The workstation's own dividers: chrome edges and the rules inside a window
+  // title bar, a menu and the Notification Center. Structure, not accent.
+  'menubar', 'dock', 'win-title', 'menu-sep', 'nc', 'nc-head', 'widget-head',
+  'wm-head', 'wm-key', 'ch-head', 'tr-goal', 'set-group',
+  // The rule between "what an assistant would hold" and the status above it,
+  // in the Uplink. A divider between two regions of one readout, like
+  // `set-group` — neutral, and it does not carry a colour.
+  'wc-offer',
+  // The Record's and Find's own region rules: the head/body divider in each
+  // pane, the rail's footer, and the palette's field and footer. Neutral
+  // hairlines between regions, none of them carrying a colour.
+  'rec-rule', 'rec-rail-foot', 'rec-list', 'rec-read', 'find-field', 'find-foot',
 ]);
 
 let pw;
@@ -89,7 +102,7 @@ const found = new Map();
 
 for (const [name, q, setup] of VIEWS) {
   const page = await ctx.newPage();
-  await page.goto(`${BASE}/${q}`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}${ROUTE}${q}`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(2200);
   if (setup) await setup(page);
   const hits = await page.evaluate(() => {

@@ -1,0 +1,1901 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE WORKSTATION — the founder's machine, as a machine.
+
+   Loaded after hud.css, so this file has the last word. It inherits every rule
+   the other four already settled and adds exactly one new thing: a housing.
+
+   The three rules from hud.css hold everywhere below, and breaking one is what
+   every bug in this file has been:
+
+     1. CHAMFER, NOT RADIUS. A window cuts two corners — the same silhouette a
+        dispatch has, because a window has presence. A panel inside it cuts one.
+        A tile, a key, a chip cuts small. Nothing is round.
+
+     2. THE FRAME IS A LAYER. `clip-path` throws a border away at the cut, so
+        every plate is two shapes: the element *is* the 1px line and a
+        pseudo-element inset by 1px is the opaque fill, at `z-index: -1` so
+        static text still paints above it. `filter: drop-shadow()`, never
+        `box-shadow` — a box-shadow ignores the clip and draws a rectangle.
+        A window's shadow lives on its own layer so the filter rasterises once
+        per move rather than on every repaint of a body that repaints seven
+        times a second.
+
+     3. COLOUR IS STRUCTURE, AND IT CLOSES. Each app owns an accent. It lights
+        the focused window's bezel and its two brackets, the ring of its dock
+        tile and the tick beneath it — all four sides of each, never one. An
+        unfocused window drops to steel, and that difference is how you see
+        where your hands are.
+
+   Everything is scoped to `html[data-shell="os"]`, so the classic console at
+   `/` cannot be touched by a rule in here even by accident.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+html[data-shell="os"] {
+  --os-menubar-h: 30px;
+  --os-dock-h: 68px;
+  --os-dock-w: 58px;
+  --os-title-h: 32px;
+  --os-tile: 44px;
+  --os-inset: 12px;
+  --os-wire-w: 356px;
+  --keepout-bottom: 0px;
+
+  --os-bezel: rgba(255,255,255,0.155);
+  --os-bezel-dim: rgba(255,255,255,0.085);
+  --os-chrome: rgba(6,8,13,0.94);
+  --os-chrome-line: rgba(255,255,255,0.10);
+  --os-menu-plate: linear-gradient(172deg, #0f131c 0%, #0a0d15 52%, #070a11 100%);
+}
+
+/* ═══ THE SHELL ════════════════════════════════════════════════════════════
+   A flex column: bar, desktop, dock. All three are in normal flow — nothing is
+   `fixed`, because `tools/shot.mjs` calls anything with a fixed or sticky
+   ancestor *pinned* and flags it under ChatGPT's floating chat input, and the
+   whole point of the dock is that it is reachable in that pane. */
+
+html[data-shell="os"] #app.os {
+  display: flex; flex-direction: column;
+  height: 100%; min-height: 0; overflow: hidden;
+}
+
+.os .desktop {
+  position: relative;
+  flex: 1 1 auto; min-height: 0;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+/* ── Wallpaper ─────────────────────────────────────────────────────────────
+   The act's own banner, at a fifth. Two plates so the act change crossfades
+   rather than cuts: the photograph is mood and the windows are the picture. */
+.os .wallpaper { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.os .wall-plate {
+  position: absolute; inset: 0;
+  background-size: cover; background-position: center 30%;
+  opacity: 0; transition: opacity 1400ms cubic-bezier(.4,0,.2,1);
+}
+.os .wall-plate.on { opacity: 0.34; }
+/* The desk under the photograph. At 22% with a heavy vignette on top, the
+   wallpaper was so far down that the twelve pixels of gutter around a window
+   read as dead black, and a window mounted on nothing looks like a web page in
+   a dark theme rather than a panel on a machine. A fine ruled grid gives the
+   surface something to be even where the picture is dark; it never changes, so
+   it composites once. */
+.os .wallpaper::before {
+  content: ''; position: absolute; inset: 0; z-index: 0;
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.020) 0 1px, transparent 1px 44px),
+    repeating-linear-gradient(0deg,  rgba(255,255,255,0.014) 0 1px, transparent 1px 44px),
+    radial-gradient(ellipse 90% 70% at 50% 42%, rgba(19,26,38,0.55), rgba(5,7,12,0.9) 78%);
+  mask-image: radial-gradient(ellipse 96% 86% at 50% 46%, black 30%, transparent 96%);
+}
+/* A slow vignette that sits on the photograph, not on the windows. */
+.os .wallpaper::after {
+  content: ''; position: absolute; inset: 0;
+  background:
+    radial-gradient(ellipse 132% 100% at 50% 8%, transparent 48%, rgba(3,5,9,0.60) 100%),
+    linear-gradient(180deg, rgba(3,5,9,0.22), transparent 44%, rgba(3,5,9,0.48));
+}
+/* Four brackets at the corners of the desk. The act card's reticle, at the
+   scale of the whole machine: it makes the gutter read as a measured field
+   rather than as margin, and it is the one thing on the desktop that is the
+   machine talking about itself. */
+.os .desktop::after {
+  content: ''; position: absolute; inset: 5px; z-index: 0; pointer-events: none;
+  background:
+    linear-gradient(rgba(255,255,255,0.13), rgba(255,255,255,0.13)) 0    0    / 30px 1px no-repeat,
+    linear-gradient(rgba(255,255,255,0.13), rgba(255,255,255,0.13)) 0    0    / 1px 30px no-repeat,
+    linear-gradient(rgba(255,255,255,0.13), rgba(255,255,255,0.13)) 100% 0    / 30px 1px no-repeat,
+    linear-gradient(rgba(255,255,255,0.13), rgba(255,255,255,0.13)) 100% 0    / 1px 30px no-repeat,
+    linear-gradient(rgba(255,255,255,0.13), rgba(255,255,255,0.13)) 0    100% / 30px 1px no-repeat,
+    linear-gradient(rgba(255,255,255,0.13), rgba(255,255,255,0.13)) 0    100% / 1px 30px no-repeat,
+    linear-gradient(rgba(255,255,255,0.13), rgba(255,255,255,0.13)) 100% 100% / 30px 1px no-repeat,
+    linear-gradient(rgba(255,255,255,0.13), rgba(255,255,255,0.13)) 100% 100% / 1px 30px no-repeat;
+}
+
+/* ═══ THE MENU BAR ═════════════════════════════════════════════════════════
+   The most legible instrument in the game. It carries what the topbar and the
+   status line carried between them, plus the thing the console never had: the
+   whole vocabulary of the app in front of you, each item with its key. */
+
+.os .menubar {
+  flex: 0 0 auto;
+  height: var(--os-menubar-h);
+  display: flex; align-items: stretch; gap: 0;
+  padding: 0 8px 0 6px;
+  background: var(--os-chrome);
+  border-bottom: 1px solid var(--os-chrome-line);
+  box-shadow: inset 0 -1px 0 rgba(255,255,255,0.03), 0 1px 0 rgba(0,0,0,0.75);
+  position: relative; z-index: 45;
+  font-family: var(--mono);
+  user-select: none;
+}
+.os .mb-left, .os .mb-right { display: flex; align-items: center; }
+.os .mb-left { gap: 1px; flex: 0 0 auto; min-width: 0; }
+.os .mb-right { gap: 4px; margin-left: auto; flex: 0 0 auto; }
+/* Nothing on the right may shrink. A squeezed flex item overflows its own box
+   without changing `scrollWidth`, so the overflow rule would never see it and
+   the alerts would print straight over the numbers. */
+.os .mb-right > * { flex: 0 0 auto; }
+.os .menubar { overflow: hidden; }
+
+.os .mb-title {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: calc(var(--os-menubar-h) - 6px); margin-top: 3px;
+  padding: 0 9px;
+  --ch: 5px; clip-path: var(--cut-br);
+  font-family: var(--mono); font-size: 10px; font-weight: 600;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ink-3); background: transparent;
+  transition: background .12s, color .12s;
+}
+.os .mb-title:hover { background: rgba(255,255,255,0.06); color: var(--ink-2); }
+.os .mb-title.lit { background: rgba(255,255,255,0.11); color: var(--ink); }
+.os .mb-app { color: var(--ink-2); font-weight: 700; letter-spacing: 0.16em; }
+.os .mb-mark { padding-left: 6px; }
+.os .mb-mark-glyph {
+  width: 16px; height: 16px; flex: 0 0 16px;
+  display: grid; place-items: center;
+  --ch: 4px; clip-path: var(--cut-tlbr);
+  background: linear-gradient(150deg, var(--violet), var(--green));
+  color: #05060a; font-weight: 800; font-size: 9px; letter-spacing: 0;
+  filter: drop-shadow(0 0 8px rgba(139,92,246,0.55));
+}
+
+/* ── The numbers ───────────────────────────────────────────────────────────
+   The console's own stat cells, in a shorter housing. Same ids, same tips,
+   same flash, so `readouts.js` paints both without being told which. */
+.os .menubar .stat-strip { display: flex; align-items: center; gap: 0; padding: 0; overflow: visible; }
+.os .menubar .stat {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0;
+  padding: 0 10px; border-radius: 0; position: relative;
+  line-height: 1.05;
+}
+.os .menubar .stat + .stat::before {
+  content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 1px; height: 15px; background: rgba(255,255,255,0.055);
+}
+.os .menubar .stat:hover { background: rgba(255,255,255,0.04); }
+.os .menubar .stat-label { font-size: 7px; letter-spacing: 0.18em; color: var(--ink-5); }
+.os .menubar .stat-value { font-size: 12px; letter-spacing: -0.01em; text-shadow: 0 0 12px currentColor; }
+.os .menubar .stat-value.sm { font-size: 11px; }
+
+.os .mb-more {
+  --ch: 3px; clip-path: var(--cut-br);
+  height: 18px; padding: 0 5px; margin-left: 2px;
+  background: rgba(255,255,255,0.05); color: var(--ink-4);
+  font-family: var(--mono); font-size: 9px;
+}
+.os .mb-more:hover { background: rgba(255,255,255,0.12); color: var(--ink-2); }
+
+/* ── What is going wrong ───────────────────────────────────────────────────
+   The status line's middle, beside the numbers it is about. Same classes, same
+   thresholds; hud.css already gives them a closed frame. */
+.os .mb-alerts { display: flex; align-items: center; gap: 5px; padding: 0 4px; }
+.os .mb-alerts .sl-alert {
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; padding: 2px 6px; white-space: nowrap;
+}
+.os .mb-nominal {
+  width: 5px; height: 5px; margin: 0 6px; flex: 0 0 5px;
+  background: rgba(0,229,160,0.5);
+  box-shadow: 0 0 8px rgba(0,229,160,0.45);
+}
+
+/* ── What goes when the bar runs out of room ───────────────────────────────
+   `menubar.js` sheds in a fixed order and marks the bar with one class per
+   step. Each rule here is one of those steps and nothing else knows about
+   them, so the order lives in one place: the comment above `SHED`. */
+.os .menubar.sh-aria .mb-aria { display: none; }
+.os .menubar.sh-company #mb-company { display: none; }
+.os .menubar.sh-company .mb-mark { padding-right: 6px; gap: 0; }
+.os .menubar.sh-date .mb-date, .os .menubar.sh-date .mb-clock .mb-dot:last-of-type { display: none; }
+.os .menubar.sh-alerts .mb-alerts .sl-alert:not(:first-child) { display: none; }
+.os .menubar.sh-alerts .mb-alerts[data-more]::after {
+  content: attr(data-more);
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.08em;
+  color: var(--ink-4); padding: 2px 4px; margin-left: 2px;
+}
+.os .menubar.sh-nostats .stat-strip { display: none; }
+.os .menubar.sh-nostats .mb-more { display: inline-flex; }
+.os .menubar.sh-day .mb-day, .os .menubar.sh-day .mb-clock .mb-dot { display: none; }
+/* The last two rungs. Below ~400px the deck chip goes (the world's dock tile
+   still wears its badge) and then the alert chips go with it (the notification
+   centre keeps the count). Nothing here is the only route to anything. */
+.os .menubar.sh-world #mb-world { display: none; }
+.os .menubar.sh-speed #mb-speed { display: none; }
+.os .menubar.sh-power #mb-power { display: none; }
+.os .menubar.sh-noalerts .mb-alerts { display: none; }
+
+/* ── Extras ────────────────────────────────────────────────────────────────*/
+.os .mb-x {
+  display: inline-grid; place-items: center;
+  width: 24px; height: 22px;
+  --ch: 4px; clip-path: var(--cut-br);
+  background: rgba(255,255,255,0.035);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10);
+  color: var(--ink-4); font-size: 11px;
+  transition: background .13s, color .13s, box-shadow .13s;
+}
+.os .mb-x:hover { background: rgba(255,255,255,0.11); color: var(--ink); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.34); }
+.os .mb-aria.spoke {
+  color: var(--violet); background: rgba(139,92,246,0.16);
+  box-shadow: inset 0 0 0 1px rgba(139,92,246,0.65);
+  animation: mbAria 2.2s ease-in-out infinite;
+}
+@keyframes mbAria { 50% { box-shadow: inset 0 0 0 1px rgba(139,92,246,0.95), 0 0 14px -3px var(--violet); } }
+.os .mb-nc.has::after {
+  content: ''; position: absolute; margin: -13px 0 0 13px;
+  width: 4px; height: 4px; background: var(--cyan); box-shadow: 0 0 7px var(--cyan);
+}
+.os .mb-nc { position: relative; }
+
+/* The Wire and the Uplink keep the console's own buttons — same classes, same
+   states, so `tools/liveworld.mjs` reads the one it already reads.
+   hud.css hides the Wire's door above 1120px, because in the console the rail
+   is always on screen there and the door would be a button to something you
+   are already looking at. On the workstation the Wire is a window you can
+   close, so the door stays at every width. */
+.os .menubar .tb-wire, .os .menubar .tb-world { height: 22px; margin: 0; }
+@media (min-width: 1121px) { .os .menubar .tb-wire { display: inline-flex; } }
+
+/* ── The clock ─────────────────────────────────────────────────────────────*/
+/* The power cell. A battery for the one human being this company employs, in
+   the row that already carries the signal, the messages and the clock. The fill
+   is a child of a clipped host, so it stays inside it — no bar hanging out past
+   the cut. Fixed width, so a focus change never re-measures the bar. */
+.os .mb-power {
+  display: inline-flex; align-items: center; gap: 5px;
+  flex: 0 0 auto; padding: 0 6px 0 5px; height: 18px;
+  --ch: 4px; clip-path: var(--cut-br);
+  background: rgba(255,255,255,0.10);
+}
+.os .mb-power .pw-cell {
+  position: relative; width: 22px; height: 8px;
+  background: rgba(255,255,255,0.10);
+  --ch: 2px; clip-path: var(--cut-br);
+  overflow: hidden;
+}
+.os .mb-power .pw-cell i {
+  position: absolute; inset: 1px auto 1px 1px; display: block;
+  background: var(--green); transition: width .2s ease, background .2s ease;
+}
+.os .mb-power .pw-n {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.04em;
+  color: var(--ink-4); min-width: 18px; text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.os .mb-power.warn .pw-cell i { background: var(--amber); }
+.os .mb-power.low .pw-cell i { background: var(--red); }
+.os .mb-power.warn .pw-n { color: var(--amber); }
+.os .mb-power.low .pw-n { color: var(--red); }
+html[data-shell="os"].reduced-motion .mb-power .pw-cell i { transition: none; }
+
+/* The transport, in the bar. Five keycaps in one plate — the console's four
+   speeds plus its pause, at the size the bar can afford. */
+.os .mb-speed {
+  display: inline-flex; align-items: stretch; gap: 1px;
+  --ch: 5px; clip-path: var(--cut-br);
+  background: rgba(255,255,255,0.10);
+  padding: 1px;
+}
+.os .mb-speed .sp {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.04em;
+  padding: 0 6px; min-width: 21px; height: 18px;
+  display: grid; place-items: center;
+  background: rgba(9,12,18,0.96); color: var(--ink-5);
+  transition: color .12s, background .12s;
+}
+.os .mb-speed .sp:hover { color: var(--ink-2); background: rgba(24,30,42,0.98); }
+.os .mb-speed .sp.on { background: var(--green); color: #04120c; font-weight: 700; }
+.os .mb-speed .sp:first-child.on { background: var(--amber); color: #1a1204; }
+.os .mb-speed .sp:focus-visible { outline: 2px solid var(--green); outline-offset: 1px; }
+
+.os .mb-clock {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 22px; padding: 0 9px;
+  --ch: 4px; clip-path: var(--cut-br);
+  background: rgba(255,255,255,0.035);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10);
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.12em;
+  color: var(--ink-3); white-space: nowrap;
+  transition: background .13s, color .13s, box-shadow .13s;
+}
+.os .mb-clock:hover { background: rgba(255,255,255,0.11); color: var(--ink); }
+.os .mb-clock .mb-act { color: var(--ink-2); }
+.os .mb-clock .mb-dot { color: var(--ink-5); }
+.os .mb-clock .mb-date { color: var(--ink-4); }
+.os .mb-clock.paused {
+  color: var(--amber); box-shadow: inset 0 0 0 1px rgba(245,166,35,0.55);
+  background: rgba(245,166,35,0.10);
+}
+.os .mb-clock.paused .mb-act, .os .mb-clock.paused .mb-date { color: var(--amber); }
+.os .mb-pause { animation: pulse 2s infinite; }
+
+/* ═══ MENUS ════════════════════════════════════════════════════════════════
+   A dropdown is a plate like any other. It opens 4px below its title with a
+   short drop and a blur, and it closes faster than it opens — which is what
+   makes a menu bar feel responsive rather than animated. */
+
+.os .menus { position: fixed; inset: 0; z-index: 320; pointer-events: none; }
+.os .menus > * { pointer-events: auto; }
+
+.os .menu {
+  position: fixed; min-width: 232px; max-width: min(360px, 92vw);
+  padding: 5px 0;
+  --ch: 8px; clip-path: var(--cut-br);
+  background: var(--hud-line);
+  filter: drop-shadow(0 22px 46px rgba(0,0,0,0.82));
+  opacity: 0; transform: translateY(-5px);
+  transition: opacity .12s cubic-bezier(.16,1,.3,1), transform .12s cubic-bezier(.16,1,.3,1);
+}
+.os .menu::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-br-in);
+  background: var(--os-menu-plate);
+}
+.os .menu.in { opacity: 1; transform: none; }
+.os .menu.popover { min-width: 268px; padding: 12px 14px 13px; }
+
+.os .menu-item {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 5px 12px 5px 8px; text-align: left;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.045em;
+  color: var(--ink-2); background: none;
+  transition: background .1s, color .1s;
+}
+.os .menu-item:hover:not(.disabled), .os .menu-item.sel:not(.disabled) {
+  background: linear-gradient(90deg, rgba(0,229,160,0.16), rgba(0,229,160,0.03) 78%);
+  color: var(--ink); outline: none;
+}
+.os .menu-item.disabled { color: var(--ink-5); cursor: default; }
+.os .menu-item.quiet { color: var(--ink-5); font-size: 9px; letter-spacing: 0.16em; }
+.os .menu-item.danger:hover { background: linear-gradient(90deg, rgba(255,77,94,0.18), rgba(255,77,94,0.03) 78%); color: #ffd7db; }
+.os .mi-check { width: 11px; flex: 0 0 11px; color: var(--green); font-size: 9px; text-align: center; }
+.os .menu-item.danger .mi-check { color: var(--red); }
+.os .mi-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.os .mi-note { color: var(--ink-5); font-size: 8.5px; letter-spacing: 0.12em; text-transform: uppercase; white-space: nowrap; }
+.os .mi-key {
+  --ch: 2px; clip-path: var(--cut-br); border-radius: 0; border: none;
+  min-width: 0; padding: 1px 5px; margin-left: 2px;
+  background: rgba(255,255,255,0.06); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.13);
+  font-size: 8.5px; color: var(--ink-4);
+}
+.os .menu-sep { height: 1px; margin: 4px 8px; background: rgba(255,255,255,0.075); }
+.os .menu-head {
+  padding: 7px 12px 4px 8px;
+  font-family: var(--mono); font-size: 7.5px; letter-spacing: 0.22em;
+  text-transform: uppercase; color: var(--ink-5);
+}
+
+/* ── The right-click ───────────────────────────────────────────────────────
+   A context menu is a `.menu` and nothing else: the same plate, the same
+   `::before` fill, the same items, the same motion. All this adds is the layer
+   it opens on and a scroller for a menu longer than the room under the pointer.
+
+   The layer sits over the menu bar's own drops (320) and the notification
+   centre (310), and under a modal (420) — a decision still outranks a
+   right-click. `pointer-events: none` on the layer is what keeps
+   `tools/shot.mjs` from calling a full-screen fixed div a page-eater; the
+   plate inside it takes its own presses back. */
+
+.os .ctx-layer { position: fixed; inset: 0; z-index: 330; pointer-events: none; }
+.os .ctx-layer > * { pointer-events: auto; }
+
+/* The plate's fill is a pseudo-element pinned to the padding box, so the host
+   must never be the scroller — the fill would slide out from under its own
+   bezel. The list scrolls instead, and it is the only thing that does. */
+.os .ctx-scroll { overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; }
+.os .ctx-scroll::-webkit-scrollbar { width: 6px; }
+.os .ctx-scroll::-webkit-scrollbar-track { background: transparent; }
+.os .ctx-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); }
+
+/* Flipped up over the pointer, it grows from its bottom edge rather than
+   dropping into it. */
+.os .ctx-menu.up { transform: translateY(5px); }
+.os .ctx-menu.up.in { transform: none; }
+
+/* ── The transport ─────────────────────────────────────────────────────────*/
+.os .transport { display: flex; flex-direction: column; gap: 11px; }
+.os .tr-speeds { display: flex; gap: 3px; }
+.os .tr-speeds .speed-btn { flex: 1; height: 26px; min-width: 0; }
+.os .tr-rows { display: flex; flex-direction: column; gap: 4px; }
+.os .tr-row, .os .tr-goal {
+  display: flex; gap: 10px; align-items: baseline;
+  font-family: var(--mono); font-size: 10px; color: var(--ink-2);
+}
+.os .tr-goal { align-items: flex-start; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.07); line-height: 1.5; }
+.os .tr-goal b { color: var(--ink); font-weight: 500; }
+.os .tr-k {
+  flex: 0 0 46px; font-size: 7.5px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--ink-5);
+}
+
+/* ── ARIA, briefly ─────────────────────────────────────────────────────────*/
+.os .aria-pop {
+  position: fixed; max-width: 320px; padding: 9px 12px;
+  --ch: 7px; clip-path: var(--cut-br);
+  background: rgba(139,92,246,0.55);
+  filter: drop-shadow(0 14px 34px rgba(0,0,0,0.7));
+  opacity: 0; transform: translateY(-6px);
+  transition: opacity .22s, transform .22s cubic-bezier(.16,1,.3,1);
+}
+.os .aria-pop::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-br-in);
+  background: linear-gradient(150deg, #14101f, #0b0910);
+}
+.os .aria-pop.in { opacity: 1; transform: none; }
+.os .aria-pop-who {
+  display: block; font-family: var(--mono); font-size: 7.5px;
+  letter-spacing: 0.22em; color: var(--violet); margin-bottom: 4px;
+}
+.os .aria-pop-line { font-size: 11.5px; line-height: 1.55; color: var(--ink-2); font-style: italic; }
+
+/* ═══ WINDOWS ══════════════════════════════════════════════════════════════ */
+
+.os .win {
+  position: absolute; z-index: 10;
+  display: block;
+  transition: opacity .18s ease;
+}
+.os .win.hidden { display: none; }
+
+/* The shadow is its own static layer. A `filter` re-rasterises its subtree
+   every time that subtree paints, and a window body paints seven times a
+   second; this one never changes, so it costs once per move. */
+.os .win-shadow {
+  position: absolute; inset: 0;
+  --ch: 18px; clip-path: var(--cut-tlbr);
+  background: #05070c;
+  filter: drop-shadow(0 24px 54px rgba(0,0,0,0.78));
+}
+
+.os .win-plate {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; min-height: 0;
+  --ch: 18px; clip-path: var(--cut-tlbr);
+  background: var(--os-bezel-dim);
+  transition: background .16s;
+}
+/* The fill carries a whisper of the app's colour — four per cent at the top
+   corner, gone by two thirds down. Enough that Research is cool and Market is
+   warm before you have read a word; not enough to be a tint. The last layer is
+   opaque and stays opaque: everything above it is translucent, and a
+   translucent stack over nothing is how the bezel colour floods a plate. */
+.os .win-plate::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-tlbr-in);
+  background:
+    radial-gradient(120% 62% at 0% 0%, color-mix(in srgb, var(--accent, #fff) 6%, transparent), transparent 66%),
+    radial-gradient(140% 90% at 0% 0%, rgba(255,255,255,0.030), transparent 58%),
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.011) 0 1px, transparent 1px 3px),
+    linear-gradient(168deg, #0d111a 0%, #0a0d15 46%, #070911 100%);
+}
+/* The window in front says so along its whole head, not just at one corner —
+   a wash down the title bar and the accent on the hairline that divides it from
+   the body. That hairline is a divider between regions, which is the one place
+   `oneside.mjs` allows a single edge; the accent frame around the whole window
+   is what closes the colour. */
+.os .win.on > .win-plate > .win-title {
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--accent, #fff) 11%, transparent),
+    color-mix(in srgb, var(--accent, #fff) 2%, transparent) 78%, transparent);
+  border-bottom-color: color-mix(in srgb, var(--accent, #fff) 38%, transparent);
+}
+/* Brackets on the two corners the chamfer left square. */
+.os .win-plate::after {
+  content: ''; position: absolute; inset: 0; z-index: 6; pointer-events: none;
+  background:
+    linear-gradient(var(--wk, rgba(255,255,255,0.22)), var(--wk, rgba(255,255,255,0.22))) 100% 0   / 26px 2px no-repeat,
+    linear-gradient(var(--wk, rgba(255,255,255,0.22)), var(--wk, rgba(255,255,255,0.22))) 100% 0   / 2px 26px no-repeat,
+    linear-gradient(var(--wk, rgba(255,255,255,0.22)), var(--wk, rgba(255,255,255,0.22))) 0    100% / 26px 2px no-repeat,
+    linear-gradient(var(--wk, rgba(255,255,255,0.22)), var(--wk, rgba(255,255,255,0.22))) 0    100% / 2px 26px no-repeat;
+  transition: background .16s;
+}
+.os .win.on > .win-plate {
+  background: color-mix(in srgb, var(--accent, #fff) 62%, rgba(255,255,255,0.18));
+  --wk: var(--accent, #fff);
+}
+.os .win.on > .win-plate::after { filter: drop-shadow(0 0 7px color-mix(in srgb, var(--accent, #fff) 65%, transparent)); }
+/* Two shadows and not three. The long soft drop is the fall to the desk and the
+   accent bloom is the window's own light, and a third — a tight contact shadow
+   under the edge — looked better and cost forty-five frames a second: measured
+   with a GPU, three chained `drop-shadow` passes on this layer run at 42fps
+   against 77 for any two of them. The cliff is the third pass, not the blur
+   radius; two large ones are as cheap as one. Anything added here gets measured
+   before it ships.
+
+   They live on `.win-shadow`, which never changes and so rasterises once per
+   move — a `filter` on the plate would re-rasterise a subtree that paints seven
+   times a second. */
+.os .win.on > .win-shadow {
+  filter: drop-shadow(0 28px 60px rgba(0,0,0,0.82))
+          drop-shadow(0 0 44px color-mix(in srgb, var(--accent, #fff) 20%, transparent));
+}
+/* Unfocused windows step back behind a thin veil rather than a filter — a
+   filter on a repainting subtree is the one thing this layout cannot afford. */
+.os .win:not(.on) > .win-plate > .win-body::after {
+  content: ''; position: absolute; inset: 0; z-index: 5; pointer-events: none;
+  background: rgba(4,6,11,0.40);
+  transition: background .18s;
+}
+.os .win-body { position: relative; }
+
+/* ── Title bar ─────────────────────────────────────────────────────────────*/
+.os .win-title {
+  flex: 0 0 auto; height: var(--os-title-h);
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 12px; cursor: default;
+  border-bottom: 1px solid rgba(255,255,255,0.055);
+  user-select: none; position: relative; z-index: 2;
+}
+.os .win-keys { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+.os .wk {
+  width: 11px; height: 11px; padding: 0; flex: 0 0 11px;
+  --ch: 3px; clip-path: var(--cut-br);
+  display: grid; place-items: center;
+  font-size: 7px; line-height: 1; color: transparent;
+  transition: color .12s, filter .12s;
+}
+.os .wk i { font-style: normal; transform: translateY(-0.5px); }
+.os .wk-close { background: rgba(255,77,94,0.78); }
+.os .wk-min   { background: rgba(245,166,35,0.78); }
+.os .wk-zoom  { background: rgba(0,229,160,0.78); }
+.os .win-keys:hover .wk { color: rgba(0,0,0,0.72); }
+.os .win:not(.on) .wk { background: rgba(255,255,255,0.16); }
+.os .win.on .wk-close:hover { background: var(--red); filter: drop-shadow(0 0 7px var(--red)); }
+.os .win.on .wk-min:hover { background: var(--amber); filter: drop-shadow(0 0 7px var(--amber)); }
+.os .win.on .wk-zoom:hover { background: var(--green); filter: drop-shadow(0 0 7px var(--green)); }
+
+.os .win-name {
+  flex: 1 1 auto; min-width: 0; text-align: center;
+  display: inline-flex; align-items: baseline; justify-content: center; gap: 7px;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 650;
+  letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  transition: color .16s;
+}
+.os .win.on .win-name { color: var(--ink); }
+.os .win-idx { font-size: 8px; letter-spacing: 0.1em; color: var(--ink-5); }
+.os .win.on .win-idx { color: var(--accent, var(--ink-3)); }
+/* An app's mark, in its own colour, always — focused or not. A stack of windows
+   whose only difference is a 1px frame on whichever one is in front is a stack
+   of grey slabs; the glyph is what makes R&D read as R&D from across the room,
+   and it is the same glyph that app wears in the dock. */
+.os .win-glyph {
+  font-size: 11px; line-height: 1; color: var(--accent, var(--ink-3));
+  opacity: 0.55; transition: opacity .16s, filter .16s; align-self: center;
+}
+.os .win.on .win-glyph {
+  opacity: 1;
+  filter: drop-shadow(0 0 7px color-mix(in srgb, var(--accent, #fff) 55%, transparent));
+}
+.os .win-readout {
+  flex: 0 1 auto; min-width: 0; max-width: 46%;
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em;
+  color: var(--ink-5); text-align: right;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  transition: color .16s;
+}
+.os .win.on .win-readout { color: var(--ink-4); }
+
+/* ── Body ──────────────────────────────────────────────────────────────────
+   The old `.main`, with the same scroll behaviour and the same faint top light.
+   `container-type` is what lets the views' own breakpoints answer to the window
+   rather than to the browser — see the container queries at the foot of this
+   file. */
+.os .win-body {
+  flex: 1 1 auto; min-height: 0;
+  overflow: hidden auto; overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  padding: 16px 18px calc(48px + var(--os-body-pad, 0px));
+  container-type: inline-size;
+  background: radial-gradient(ellipse 100% 46% at 50% 0%, rgba(255,255,255,0.012), transparent 70%);
+}
+.os .win-body:focus { outline: none; }
+
+/* ── No blur inside a window ───────────────────────────────────────────────
+   `hud.css` gives every `.panel::before` a `backdrop-filter`, because in the
+   console a panel floats over the drifting background and the blur is the
+   point. Inside a window there is nothing behind it but the window's own
+   opaque fill, so the blur buys nothing — and it costs something real: a
+   `backdrop-filter` on a `z-index: -1` fill promotes the backdrop root, the
+   fill is painted *behind* the plate's own background, and the plate's bezel
+   colour floods everything below the first blurred panel. On the World window,
+   whose accent is pink, that was the bottom half of the screen.
+
+   Same family as `clip-path: none`. If you put a blur on a plate, check that
+   its fill still covers it. */
+.os .win .panel::before,
+.os .win .stat-tile::before,
+.os .win .agent-card::after,
+.os .win .tech-node::before { backdrop-filter: none; }
+
+/* The Wire is a rail, not a page: no padding, and its own head is sticky. */
+.os .win-wire .win-body { padding: 0; display: flex; flex-direction: column; }
+.os .win-wire .feed-list { flex: 1 1 auto; min-height: 0; }
+.os .win-wire .world-console { border-top: none; }
+.os .win-wire .feed-head { position: sticky; top: 0; z-index: 3; background: rgba(9,12,18,0.96); backdrop-filter: blur(10px); }
+
+/* The Uplink is the one window that earns the terminal look outright. */
+.os .win[data-app="uplink"] .win-body { padding: 12px; background: rgba(0,0,0,0.36); }
+.os .win[data-app="uplink"] .world-console.in-dialog { border: none; background: none; padding: 0; }
+
+/* Three windows whose content is rows of prose and one control each. A view
+   fills its window because a view is a working surface; a list of walkthroughs
+   is a document, and a document with its title at one end of a fifteen-hundred
+   pixel row and its Start button at the other is a document nobody can read.
+   They cap and centre, the way a page does. */
+.os .man-win, .os .set-win, .os .aria-win {
+  display: block; max-width: 1020px; margin: 0 auto;
+}
+/* The Uplink is a console readout, not a page — narrower still, and its call to
+   action is a button rather than a fifteen-hundred-pixel bar. */
+.os .win .world-console.in-dialog { max-width: 720px; margin: 0 auto; }
+.os .set-group { display: flex; flex-direction: column; gap: 10px; }
+.os .set-k {
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--ink-5);
+}
+.os .set-k::before {
+  content: ''; display: inline-block; width: 10px; height: 1px; vertical-align: middle;
+  background: currentColor; opacity: .5; margin-right: 8px;
+}
+
+/* ── Grips ─────────────────────────────────────────────────────────────────
+   The bottom-right chamfer is the handle, etched with three hairlines. The
+   edges are invisible bands; a resize you can only start from one corner is a
+   resize people think is broken. */
+.os .win-grip {
+  position: absolute; right: 0; bottom: 0; width: 18px; height: 18px;
+  cursor: nwse-resize; z-index: 7;
+  background:
+    linear-gradient(135deg, transparent 46%, rgba(255,255,255,0.30) 46%, rgba(255,255,255,0.30) 52%, transparent 52%) 0 0 / 18px 18px,
+    linear-gradient(135deg, transparent 62%, rgba(255,255,255,0.22) 62%, rgba(255,255,255,0.22) 68%, transparent 68%) 0 0 / 18px 18px,
+    linear-gradient(135deg, transparent 78%, rgba(255,255,255,0.14) 78%, rgba(255,255,255,0.14) 84%, transparent 84%) 0 0 / 18px 18px;
+  opacity: 0; transition: opacity .16s;
+}
+.os .win.on .win-grip, .os .win:hover .win-grip { opacity: 1; }
+.os .win-edge { position: absolute; z-index: 7; }
+.os .e-n { top: 0; left: 14px; right: 14px; height: 6px; cursor: ns-resize; }
+.os .e-s { bottom: 0; left: 14px; right: 22px; height: 6px; cursor: ns-resize; }
+.os .e-e { right: 0; top: 14px; bottom: 22px; width: 6px; cursor: ew-resize; }
+.os .e-w { left: 0; top: 22px; bottom: 14px; width: 6px; cursor: ew-resize; }
+.os .e-ne { right: 0; top: 0; width: 14px; height: 14px; cursor: nesw-resize; }
+.os .e-nw { left: 0; top: 0; width: 14px; height: 14px; cursor: nwse-resize; }
+.os .e-sw { left: 0; bottom: 0; width: 14px; height: 14px; cursor: nesw-resize; }
+
+.os .win.dragging { will-change: transform; }
+.os .win.dragging .win-body, .os .win.resizing .win-body { pointer-events: none; }
+.os .win.dragging .win-title { cursor: grabbing; }
+
+/* Where it will land, previewed rather than applied.
+
+   This is the one plate in the build whose fill *cannot* be opaque — it is a
+   preview, you have to see the desktop through it — so the usual two-shape
+   trick inverts: a translucent fill does not hide the bezel behind it, it lets
+   the bezel colour flood the whole region, which is how this used to paint a
+   solid emerald slab across half the screen. A frame that is genuinely hollow
+   is the answer: one `evenodd` path, the chamfered outline followed by the same
+   outline 1px in, so the interior winds twice and drops out. */
+.os .win-ghost {
+  position: absolute; z-index: 9; pointer-events: none;
+  --ch: 18px; clip-path: var(--cut-tlbr);
+  background:
+    radial-gradient(120% 90% at 50% 0%, rgba(0,229,160,0.13), rgba(0,229,160,0.045) 62%),
+    rgba(0,229,160,0.05);
+  opacity: 0; transition: opacity .12s, left .12s, top .12s, width .12s, height .12s;
+}
+.os .win-ghost::before {
+  content: ''; position: absolute; inset: 0;
+  clip-path: polygon(evenodd,
+    var(--ch) 0, 100% 0, 100% calc(100% - var(--ch)), calc(100% - var(--ch)) 100%, 0 100%, 0 var(--ch),
+    calc(var(--ch) + 0.5px) 1px, calc(100% - 1px) 1px,
+    calc(100% - 1px) calc(100% - var(--ch) - 0.5px),
+    calc(100% - var(--ch) - 0.5px) calc(100% - 1px),
+    1px calc(100% - 1px), 1px calc(var(--ch) + 0.5px));
+  background: color-mix(in srgb, var(--green) 62%, transparent);
+}
+/* Four brackets standing off the frame: the machine measuring the region rather
+   than a rectangle sitting on it. Same reticle the act card wears. The inset
+   has to clear the 18px chamfer or the host's own clip eats the two corners
+   that are cut — 13px puts the elbow 8px inside the diagonal. */
+.os .win-ghost::after {
+  content: ''; position: absolute; inset: 13px;
+  background:
+    linear-gradient(var(--green), var(--green)) 0 0 / 18px 1px no-repeat,
+    linear-gradient(var(--green), var(--green)) 0 0 / 1px 18px no-repeat,
+    linear-gradient(var(--green), var(--green)) 100% 0 / 18px 1px no-repeat,
+    linear-gradient(var(--green), var(--green)) 100% 0 / 1px 18px no-repeat,
+    linear-gradient(var(--green), var(--green)) 0 100% / 18px 1px no-repeat,
+    linear-gradient(var(--green), var(--green)) 0 100% / 1px 18px no-repeat,
+    linear-gradient(var(--green), var(--green)) 100% 100% / 18px 1px no-repeat,
+    linear-gradient(var(--green), var(--green)) 100% 100% / 1px 18px no-repeat;
+  opacity: 0.5;
+}
+.os .win-ghost.on { opacity: 1; }
+
+/* ── The flight between a window and its tile ──────────────────────────────*/
+.os .win.win-in { animation: winIn 240ms cubic-bezier(.16,1,.3,1); }
+.os .win.win-out { animation: winOut 240ms cubic-bezier(.4,0,.2,1) forwards; }
+@keyframes winIn {
+  from { opacity: 0; transform: translate(var(--fly-x, 0), var(--fly-y, 0)) scale(.86); filter: blur(6px); }
+  to   { opacity: 1; transform: none; filter: none; }
+}
+@keyframes winOut {
+  from { opacity: 1; transform: none; filter: none; }
+  to   { opacity: 0; transform: translate(var(--fly-x, 0), var(--fly-y, 0)) scale(.12); filter: blur(4px); }
+}
+
+/* Show the desktop: everything steps aside at once. */
+.os .desktop.peek .win { opacity: 0; transform: translateY(14px); pointer-events: none; }
+.os .desktop.peek .win { transition: opacity .2s ease, transform .2s cubic-bezier(.16,1,.3,1); }
+
+/* ═══ WIDGETS ══════════════════════════════════════════════════════════════
+   The nav's two cards and the topbar's numbers, written on the wallpaper for
+   the stretch of a run where the Desk is not the window in front. They step
+   back to 42% so they are furniture until you look at them. */
+
+.os .widgets {
+  position: absolute; inset: var(--os-inset);
+  z-index: 1; pointer-events: none;
+  display: flex; justify-content: space-between; align-items: flex-start;
+}
+.os .widgets.off { display: none; }
+.os .widget {
+  width: 300px; max-width: 42%; pointer-events: auto;
+  padding: 12px 13px 13px;
+  --ch: 10px; clip-path: var(--cut-br);
+  background: rgba(255,255,255,0.10);
+  /* Furniture until you look at it — but legible furniture. At 42% the
+     objectives could not actually be read, which makes a widget a decoration. */
+  opacity: 0.66; transition: opacity .2s;
+}
+.os .widget::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-br-in);
+  background: linear-gradient(168deg, rgba(11,15,23,0.90), rgba(7,10,16,0.94));
+  backdrop-filter: blur(10px);
+}
+.os .widget:hover { opacity: 1; }
+.os .widget-readouts { margin-left: auto; }
+.os .widget-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 9px; }
+.os .widget-k {
+  font-family: var(--mono); font-size: 8px; letter-spacing: 0.24em;
+  text-transform: uppercase; color: var(--green);
+}
+.os .widget-n { margin-left: auto; font-family: var(--mono); font-size: 8.5px; color: var(--ink-5); letter-spacing: 0.12em; }
+
+.os .w-goal, .os .w-research, .os .w-obj {
+  display: flex; flex-direction: column; gap: 3px; width: 100%; text-align: left;
+  padding: 8px 10px; margin-bottom: 5px;
+  --ch: 6px; clip-path: var(--cut-br);
+  background: rgba(255,255,255,0.10);
+  transition: background .14s;
+}
+.os .w-goal::before, .os .w-research::before, .os .w-obj::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1; clip-path: var(--cut-br-in);
+  background: rgba(8,11,17,0.86);
+}
+.os .w-goal, .os .w-research, .os .w-obj { position: relative; }
+.os .w-goal:hover, .os .w-research:hover, .os .w-obj:hover { background: rgba(255,255,255,0.30); }
+.os .w-goal-k {
+  font-family: var(--mono); font-size: 7.5px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--violet);
+}
+.os .w-research .w-goal-k { color: var(--cyan); }
+.os .w-research.idle .w-goal-k { color: var(--amber); }
+.os .w-goal-name, .os .w-res-name {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.09em;
+  text-transform: uppercase; color: var(--ink);
+}
+.os .w-goal-hint { font-size: 10.5px; line-height: 1.42; color: var(--ink-4); }
+.os .w-goal-ready { font-size: 10px; color: var(--green); }
+.os .w-research .bar { margin-top: 5px; }
+.os .w-objs { display: flex; flex-direction: column; margin-top: 7px; }
+.os .w-obj { flex-direction: row; align-items: flex-start; gap: 8px; }
+.os .w-obj-dot {
+  width: 5px; height: 5px; flex: 0 0 5px; margin-top: 5px;
+  background: var(--green); box-shadow: 0 0 7px var(--green);
+}
+.os .w-obj-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.os .w-obj-title { font-size: 11px; font-weight: 600; color: var(--ink-2); }
+.os .w-obj-hint { font-size: 10px; color: var(--ink-5); line-height: 1.4; }
+
+.os .w-reads { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+/* Five readouts in two columns leave the fifth sitting beside a hole, and the
+   count is odd for most of the run — five in Act II, seven from Act IV. The
+   last one takes the whole row instead, which is also the only place a
+   sparkline has ever wanted to be. */
+.os .w-read:last-child:nth-child(odd) { grid-column: 1 / -1; }
+.os .w-read {
+  min-width: 0; display: flex; flex-direction: column; gap: 1px;
+  padding: 6px 8px 5px;
+  --ch: 5px; clip-path: var(--cut-br);
+  background: rgba(255,255,255,0.035);
+}
+.os .w-read .stat-label { font-size: 7.5px; letter-spacing: 0.18em; color: var(--ink-5); }
+.os .w-read-v {
+  font-family: var(--mono); font-size: 15px; font-weight: 620;
+  letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
+  line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.os .w-read .spark { height: 17px; margin-top: 2px; opacity: 0.9; }
+/* A stat with no history keeps the same height, so the grid never jitters as
+   one series starts and another has not. */
+.os .w-read-flat { display: block; height: 17px; margin-top: 2px; }
+
+/* ═══ THE DOCK ═════════════════════════════════════════════════════════════
+   The nav's rack, along the bottom. Same order, same indices, same badges,
+   same lock rule — so the digits, the walkthrough and the founder's hands all
+   still point at the same eight things. It does not magnify or bounce. */
+
+.os .dock {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  gap: 0; padding: 0 12px;
+  height: var(--os-dock-h);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.028), transparent 42%),
+    linear-gradient(0deg, rgba(4,6,10,0.985), rgba(11,15,22,0.93));
+  border-top: 1px solid rgba(255,255,255,0.13);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 -14px 34px -22px rgba(0,0,0,0.9);
+  position: relative; z-index: 44;
+  user-select: none;
+}
+.os .dock-inner { display: flex; align-items: center; gap: 8px; }
+.os .dock > * { flex: 0 0 auto; }
+.os .dock { gap: 8px; }
+
+/* The tile is a chamfered plate that has to let two things live *outside* it:
+   the running tick below and the badge over the top corner. A clip-path on the
+   host clips every descendant, absolutely-positioned ones included — which is
+   what silently deleted the dock's running indicator, cropped its badges and
+   swallowed its attention flash whole. So the cut moves off the button: the
+   `::after` is the 1px chamfered line, the `::before` is the opaque fill 1px
+   inside it, and the button itself carries no clip at all. `isolation: isolate`
+   puts back the stacking context the clip-path used to provide for free, or
+   both negative-index pseudos fall through to behind the dock. */
+.os .dock-tile {
+  position: relative; isolation: isolate;
+  width: var(--os-tile); height: var(--os-tile);
+  display: grid; place-items: center;
+  --ch: 7px;
+  --tile-bezel: color-mix(in srgb, var(--accent, #fff) 26%, rgba(255,255,255,0.10));
+  background: none;
+  transition: transform .14s cubic-bezier(.2,.8,.3,1);
+}
+.os .dock-tile::after {
+  content: ''; position: absolute; inset: 0; z-index: -2;
+  clip-path: var(--cut-br); background: var(--tile-bezel);
+  transition: background .14s;
+}
+.os .dock-tile::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-br-in);
+  background: linear-gradient(168deg, rgba(16,21,30,0.96), rgba(9,12,19,0.98));
+  transition: background .14s;
+}
+.os .dock-glyph {
+  font-size: 19px; line-height: 1; color: var(--accent, var(--ink-3));
+  opacity: 0.95; transition: opacity .14s, filter .14s;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent, #fff) 26%, transparent));
+}
+.os .dock-face {
+  width: 29px; height: 29px;
+  --ch: 5px; clip-path: var(--cut-tlbr);
+  background-size: cover; background-position: center top;
+  filter: saturate(0.62) brightness(1.06) contrast(1.05);
+  transition: filter .16s;
+}
+.os .dock-idx {
+  position: absolute; top: 3px; left: 4px;
+  font-family: var(--mono); font-size: 7px; letter-spacing: 0.06em;
+  color: var(--ink-5); transition: color .14s;
+}
+.os .dock-tile:hover {
+  --tile-bezel: color-mix(in srgb, var(--accent, #fff) 60%, rgba(255,255,255,0.16));
+  transform: translateY(-2px);
+}
+.os .dock-tile:hover .dock-glyph { opacity: 1; filter: drop-shadow(0 0 9px color-mix(in srgb, var(--accent, #fff) 60%, transparent)); }
+.os .dock-tile:hover .dock-face { filter: saturate(1) brightness(1.16); }
+.os .dock-tile.running { --tile-bezel: color-mix(in srgb, var(--accent, #fff) 44%, rgba(255,255,255,0.12)); }
+.os .dock-tile.running .dock-glyph { opacity: 1; }
+.os .dock-tile.on {
+  --tile-bezel: color-mix(in srgb, var(--accent, #fff) 88%, rgba(255,255,255,0.12));
+}
+.os .dock-tile.on .dock-glyph { opacity: 1; filter: drop-shadow(0 0 10px color-mix(in srgb, var(--accent, #fff) 70%, transparent)); }
+.os .dock-tile.on .dock-idx { color: var(--accent, var(--ink-3)); }
+.os .dock-tile.on .dock-face { filter: saturate(1) brightness(1.2); }
+
+/* The running mark is a segment, like every other meter in this game — never a
+   dot, which is somebody else's idiom. */
+.os .dock-tick {
+  position: absolute; left: 50%; bottom: -7px; transform: translateX(-50%);
+  width: 0; height: 3px; background: var(--accent, #fff);
+  transition: width .2s cubic-bezier(.16,1,.3,1), opacity .2s;
+  opacity: 0;
+}
+.os .dock-tile.running .dock-tick { width: 14px; opacity: 0.55; }
+.os .dock-tile.min .dock-tick { width: 8px; opacity: 0.32; }
+.os .dock-tile.on .dock-tick {
+  width: 24px; opacity: 1; box-shadow: 0 0 9px color-mix(in srgb, var(--accent, #fff) 80%, transparent);
+}
+
+.os .dock-tile.locked { opacity: 0.30; cursor: not-allowed; }
+.os .dock-tile.locked .dock-glyph { color: var(--ink-4); }
+.os .dock-tile .nav-badge {
+  position: absolute; top: -5px; right: -5px; margin: 0;
+  min-width: 15px; height: 15px; font-size: 8.5px; padding: 0 4px;
+}
+/* A two-digit badge overhangs into the next tile's column, and the next tile
+   paints an opaque fill — later sibling, same stacking level, so it wins and
+   eats the last digit. The tile wearing a badge stands one layer proud. */
+.os .dock-tile:has(.nav-badge) { z-index: 2; }
+.os .dock-tile .nav-badge.amber {
+  background: rgba(245,166,35,0.18); color: #ffd699;
+  box-shadow: inset 0 0 0 1px rgba(245,166,35,0.7), 0 0 11px -3px var(--amber);
+}
+.os .dock-sep { width: 1px; height: 24px; background: rgba(255,255,255,0.09); margin: 0 4px; }
+
+.os .dock-tile.wants { animation: dockWants 1.3s ease-in-out 2; }
+@keyframes dockWants {
+  0%, 100% { filter: none; }
+  50% { filter: drop-shadow(0 0 3px var(--amber)) drop-shadow(0 0 10px rgb(245 166 35 / .6)); }
+}
+.os .dock-tile.unlocked { animation: dockUnlock .7s cubic-bezier(.16,1,.3,1); }
+@keyframes dockUnlock {
+  0%   { transform: scale(1.16); filter: brightness(1.7); }
+  100% { transform: none; filter: none; }
+}
+
+/* ── The left rail ─────────────────────────────────────────────────────────
+   Stacked mode, and inside the ChatGPT pane, where a bottom dock would sit
+   under the floating chat input. It is the console's narrow nav. */
+.os.dock-left { flex-direction: column; }
+.os.dock-left .menubar { order: 0; }
+.os.dock-left .dock {
+  order: 2;
+  position: absolute; left: 0; top: var(--os-menubar-h); bottom: 0;
+  width: var(--os-dock-w); height: auto;
+  flex-direction: column; justify-content: flex-start;
+  padding: 10px 0 calc(10px + var(--keepout-bottom));
+  border-top: none; border-right: 1px solid var(--os-chrome-line);
+  box-shadow: inset -1px 0 0 rgba(255,255,255,0.02);
+  overflow: hidden auto; scrollbar-width: none;
+}
+.os.dock-left .dock::-webkit-scrollbar { display: none; }
+.os.dock-left .desktop { margin-left: var(--os-dock-w); }
+.os.dock-left .dock-sep { width: 24px; height: 1px; margin: 4px 0; }
+.os.dock-left .dock-idx { display: none; }
+.os.dock-left .dock-tick { left: -7px; bottom: 50%; transform: translateY(50%); width: 3px; height: 0; }
+.os.dock-left .dock-tile.running .dock-tick { height: 14px; width: 3px; }
+.os.dock-left .dock-tile.on .dock-tick { height: 24px; width: 3px; }
+
+/* ═══ NOTIFICATIONS ════════════════════════════════════════════════════════
+   The toast lane moves to the top-right, under the bar. The game's own toasts
+   are unchanged; these are the two the machine adds. */
+
+html[data-shell="os"] #toast-root {
+  top: calc(var(--os-menubar-h) + 8px); bottom: auto;
+  /* The right edge of the *field*, not of the screen: the docked Wire owns the
+     last 356px and a toast printed across it hides the threads waiting on an
+     answer. `--os-rail-taken` is set by `syncWireClass`. */
+  right: calc(12px + var(--os-rail-taken, 0px)); left: auto;
+  flex-direction: column; align-items: flex-end;
+  max-width: 332px; gap: 7px;
+}
+/* The centre opens under the same corner, so the lane slides clear of it. */
+html[data-shell="os"] #toast-root.nc-open {
+  right: calc(12px + max(var(--os-rail-taken, 0px), min(360px, 92vw)));
+}
+html[data-shell="os"] #toast-root { transition: right .3s cubic-bezier(.16,1,.3,1); }
+html[data-shell="os"] .toast { animation: osToastIn .34s cubic-bezier(.16,1,.3,1); }
+html[data-shell="os"] .toast.out { animation: osToastOut .26s ease forwards; }
+@keyframes osToastIn { from { opacity: 0; transform: translateX(22px); } to { opacity: 1; transform: none; } }
+@keyframes osToastOut { to { opacity: 0; transform: translateX(20px); } }
+
+.os-banner {
+  width: 332px; max-width: calc(100vw - 24px);
+  padding: 10px 12px 11px;
+  --ch: 9px; clip-path: var(--cut-br);
+  background: rgba(255,255,255,0.20);
+  filter: drop-shadow(0 12px 30px rgba(0,0,0,0.72));
+  pointer-events: auto;
+  opacity: 0; transform: translateX(22px);
+  transition: opacity .28s cubic-bezier(.16,1,.3,1), transform .28s cubic-bezier(.16,1,.3,1);
+}
+.os-banner::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-br-in);
+  background: linear-gradient(150deg, rgba(15,19,28,0.98), rgba(9,12,19,0.98));
+}
+.os-banner.in { opacity: 1; transform: none; }
+.os-banner.out { opacity: 0; transform: translateX(20px); }
+.os-banner.thread { background: color-mix(in srgb, var(--amber) 62%, rgba(255,255,255,0.14)); }
+.os-banner.call { background: color-mix(in srgb, var(--cyan) 46%, rgba(255,255,255,0.14)); }
+
+.os .ob-head, .os-banner .ob-head {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+}
+.os-banner .ob-k {
+  font-family: var(--mono); font-size: 7.5px; letter-spacing: 0.22em;
+  text-transform: uppercase; color: var(--ink-5);
+}
+.os-banner .ob-live {
+  font-family: var(--mono); font-size: 7.5px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--amber);
+  padding: 1px 5px; box-shadow: inset 0 0 0 1px rgba(245,166,35,0.55);
+  animation: pulse 2.4s infinite;
+}
+.os-banner .ob-x {
+  margin-left: auto; width: 16px; height: 16px; display: grid; place-items: center;
+  color: var(--ink-5); font-size: 9px; background: none;
+}
+.os-banner .ob-x:hover { color: var(--ink); }
+.os-banner .ob-body { font-size: 11.5px; line-height: 1.5; color: var(--ink-2); }
+.os-banner .thread-opts { margin-top: 8px; }
+.os-banner .ob-more {
+  width: 100%; margin-top: 7px; padding: 4px 0;
+  font-family: var(--mono); font-size: 8px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--ink-5); background: none;
+}
+.os-banner .ob-more:hover { color: var(--ink-2); }
+
+.os-banner .ob-call { display: flex; align-items: center; gap: 11px; }
+.os-banner .ob-face {
+  width: 46px; height: 46px; flex: 0 0 46px;
+  --ch: 8px; clip-path: var(--cut-tlbr);
+  background-size: cover; background-position: center top;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cc, #fff) 50%, transparent);
+}
+.os-banner .ob-who { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.os-banner .ob-name {
+  font-family: var(--mono); font-size: 12.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.os-banner .ob-role { font-size: 10.5px; color: var(--ink-4); }
+
+/* ── Notification Center ───────────────────────────────────────────────────*/
+.os .nc {
+  position: absolute; top: var(--os-menubar-h); right: 0;
+  bottom: var(--keepout-bottom);
+  width: min(360px, 92vw); z-index: 310;
+  display: flex; flex-direction: column;
+  background: linear-gradient(180deg, rgba(8,10,16,0.98), rgba(5,7,11,0.99));
+  border-left: 1px solid var(--edge);
+  backdrop-filter: blur(18px);
+  transform: translateX(101%);
+  transition: transform .3s cubic-bezier(.16,1,.3,1);
+  box-shadow: -30px 0 70px -30px rgba(0,0,0,0.9);
+}
+.os .nc.on { transform: none; }
+.os .nc-head {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border-bottom: 1px solid var(--edge);
+}
+.os .nc-k { font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.24em; color: var(--ink-4); }
+.os .nc-clear, .os .nc-close {
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--ink-5); padding: 3px 6px; background: none;
+}
+.os .nc-clear:hover, .os .nc-close:hover { color: var(--ink-2); }
+.os .nc-list {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  padding: 8px 10px 20px; display: flex; flex-direction: column; gap: 6px;
+}
+.os .nc-day {
+  font-family: var(--mono); font-size: 7.5px; letter-spacing: 0.22em;
+  color: var(--ink-5); padding: 9px 2px 1px;
+}
+/* Each record closes into its own frame, the way a Wire transmission does two
+   inches to the left of it. A stack of rows divided by a hairline is a feed;
+   this is a log, and the two sit side by side on the same screen — they cannot
+   be speaking different languages. The kind lights all four sides. */
+.os .nc-item {
+  position: relative;
+  display: flex; gap: 10px; padding: 9px 11px;
+  --nk: rgba(255,255,255,0.11);
+  --ch: 6px; clip-path: var(--cut-br);
+  background: var(--nk);
+}
+.os .nc-item::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-br-in);
+  background: linear-gradient(158deg, rgba(17,22,31,0.99), rgba(11,14,20,0.99));
+}
+.os .nc-item.good { --nk: color-mix(in srgb, var(--green) 42%, rgba(255,255,255,0.10)); }
+.os .nc-item.bad { --nk: color-mix(in srgb, var(--red) 46%, rgba(255,255,255,0.10)); }
+.os .nc-item.achievement { --nk: color-mix(in srgb, var(--amber) 48%, rgba(255,255,255,0.10)); }
+.os .nc-icon { width: 16px; flex: 0 0 16px; text-align: center; font-size: 12px; color: var(--ink-3); }
+.os .nc-item.good .nc-icon { color: var(--green); }
+.os .nc-item.bad .nc-icon { color: var(--red); }
+.os .nc-item.achievement .nc-icon { color: var(--amber); }
+.os .nc-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.os .nc-title { font-size: 11.5px; color: var(--ink-2); line-height: 1.4; }
+.os .nc-title b, .os .nc-title strong { color: var(--ink); }
+.os .nc-sub { font-size: 10.5px; color: var(--ink-5); line-height: 1.4; }
+.os .nc-empty {
+  padding: 40px 20px; text-align: center; color: var(--ink-5);
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em; line-height: 1.9;
+}
+
+/* ═══ SHEETS ═══════════════════════════════════════════════════════════════
+   An ordinary dialog hangs from the window whose control opened it. Anything
+   the machine raises on its own — a card, the handoff, the briefing — is
+   centred, and `modal.js` only ever sets these variables when the shell asks. */
+
+.modal-backdrop.sheet {
+  align-items: flex-start; justify-content: flex-start; padding: 0;
+  /* A sheet belongs to one window, and you have to be able to see which. The
+     full backdrop hid it completely, which made the whole idea invisible: it
+     read as a centred dialog that had wandered off-centre. */
+  background: rgba(3,4,7,0.46);
+  backdrop-filter: blur(2px);
+}
+.modal-backdrop.sheet > .modal {
+  position: absolute;
+  left: var(--sheet-x); top: var(--sheet-y);
+  width: min(720px, calc(var(--sheet-w) - 28px));
+  transform: translateX(-50%);
+  animation: sheetIn .3s cubic-bezier(.16,1,.3,1);
+  max-height: min(74vh, 760px);
+  /* Square along the top, where it meets the title bar, and cut at the far
+     bottom corner — the silhouette of a thing hanging off a rail rather than a
+     card that happens to be up there. */
+  --ch: 14px; clip-path: var(--cut-br);
+}
+.modal-backdrop.sheet > .modal::before { clip-path: var(--cut-br-in); }
+/* The seam. One hairline of the card's own colour where it meets the bar, so
+   the eye reads "this came out of that window". */
+.modal-backdrop.sheet > .modal::after {
+  background:
+    linear-gradient(var(--kc), var(--kc)) 0 0 / 100% 2px no-repeat,
+    linear-gradient(var(--kc), var(--kc)) 100% 100% / 30px 2px no-repeat,
+    linear-gradient(var(--kc), var(--kc)) 100% 100% / 2px 30px no-repeat;
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--kc) 55%, transparent));
+}
+@keyframes sheetIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(-14px); filter: blur(4px); }
+  to   { opacity: 1; transform: translateX(-50%); filter: none; }
+}
+
+/* A card is the one full-attention surface, and the desktop steps back for it. */
+html[data-shell="os"] .modal-backdrop:not(.sheet) { background: rgba(3,4,7,0.86); }
+
+/* ═══ THE LOGIN SCREEN ═════════════════════════════════════════════════════
+   The title, dressed as the door to a machine. The pitch, the panel and the
+   doors are the same markup the console shows; the saved run arrives as an
+   account you log into, because that is what continuing a run is. */
+
+html[data-shell="os"] .post-line {
+  position: absolute; top: 14px; left: 18px; z-index: 3;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.24em;
+  text-transform: uppercase; color: rgba(0,229,160,0.55);
+}
+html[data-shell="os"] .post-line::after {
+  content: '▍'; margin-left: 2px; animation: caret 1s steps(1) infinite;
+}
+
+html[data-shell="os"] .login-tiles {
+  display: flex; gap: 12px; justify-content: center; flex-wrap: wrap;
+  margin: 30px 0 4px;
+}
+html[data-shell="os"] .login-tile {
+  position: relative; width: 264px; max-width: 100%;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 16px 16px 14px; text-align: left;
+  --ch: 12px; clip-path: var(--cut-br);
+  background: color-mix(in srgb, var(--tc, var(--green)) 40%, rgba(255,255,255,0.14));
+  transition: background .18s, transform .18s cubic-bezier(.2,.8,.3,1);
+}
+html[data-shell="os"] .login-tile::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-br-in);
+  background: linear-gradient(160deg, rgba(14,18,27,0.96), rgba(8,11,17,0.98));
+}
+html[data-shell="os"] .login-tile:hover,
+html[data-shell="os"] .login-tile.new:hover {
+  background: color-mix(in srgb, var(--tc, var(--green)) 92%, rgba(255,255,255,0.14));
+  transform: translateY(-2px);
+}
+html[data-shell="os"] .lt-face {
+  width: 42px; height: 42px; display: grid; place-items: center;
+  --ch: 8px; clip-path: var(--cut-tlbr);
+  background: color-mix(in srgb, var(--tc, var(--green)) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tc, var(--green)) 45%, transparent);
+  color: var(--tc, var(--green)); font-size: 19px;
+}
+html[data-shell="os"] .lt-who { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+html[data-shell="os"] .lt-name {
+  font-family: var(--mono); font-size: 13px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+html[data-shell="os"] .lt-meta { font-size: 11px; color: var(--ink-3); line-height: 1.45; }
+html[data-shell="os"] .lt-meta.dim { color: var(--ink-5); }
+/* `auto`, not a fixed gap: the two tiles stretch to a shared height and the
+   two calls to action have to land on the same line as each other. */
+html[data-shell="os"] .lt-go {
+  margin-top: auto; width: 100%; display: grid; place-items: center;
+}
+html[data-shell="os"] .login-tile.new { align-items: flex-start; }
+/* The new tile's is a span, so it takes the tile's own colour by hand — and
+   re-asserts it on the parent's hover, because `.btn:hover:not(:disabled)`
+   would otherwise grey it out under the founder's cursor. */
+html[data-shell="os"] .login-tile.new .lt-go,
+html[data-shell="os"] .login-tile.new:hover .lt-go {
+  color: color-mix(in srgb, var(--tc) 62%, #fff);
+  background: color-mix(in srgb, var(--tc) 13%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tc) 55%, transparent);
+  border-color: transparent;
+}
+html[data-shell="os"] .login-tile.new:hover .lt-go {
+  background: color-mix(in srgb, var(--tc) 24%, transparent);
+  color: #fff;
+}
+
+/* ── The setup assistant ───────────────────────────────────────────────────
+   The four beats, in a wizard plate. The prose beats are film and stay bare;
+   this only puts a frame and a title bar around the questions. */
+html[data-shell="os"] .beat {
+  position: relative;
+  padding: 46px 26px 26px;
+  --ch: 16px; clip-path: var(--cut-tlbr);
+  background: rgba(255,255,255,0.13);
+}
+html[data-shell="os"] .beat::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-tlbr-in);
+  background:
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.010) 0 1px, transparent 1px 3px),
+    linear-gradient(168deg, rgba(12,16,24,0.94), rgba(7,10,16,0.96));
+  backdrop-filter: blur(14px);
+}
+html[data-shell="os"] .beat::after {
+  content: 'SETUP ASSISTANT';
+  position: absolute; top: 0; left: 0; right: 0; height: 32px;
+  display: flex; align-items: center; padding-left: 18px;
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.24em;
+  color: var(--ink-5); border-bottom: 1px solid rgba(255,255,255,0.055);
+  pointer-events: none;
+}
+html[data-shell="os"] .beat-chrome { margin-bottom: 30px; }
+@media (max-width: 700px) {
+  html[data-shell="os"] .beat { padding: 42px 16px 18px; }
+}
+
+/* ═══ POWER ════════════════════════════════════════════════════════════════ */
+
+.os.booting .menubar { animation: frameStrike .7s cubic-bezier(.2,1,.3,1) both; }
+.os.booting .mb-right > * { animation: readoutIn .46s cubic-bezier(.16,1,.3,1) both; }
+.os.booting .mb-right > *:nth-child(1) { animation-delay: 200ms; }
+.os.booting .mb-right > *:nth-child(2) { animation-delay: 250ms; }
+.os.booting .mb-right > *:nth-child(3) { animation-delay: 300ms; }
+.os.booting .mb-right > *:nth-child(4) { animation-delay: 350ms; }
+.os.booting .mb-right > *:nth-child(5) { animation-delay: 400ms; }
+.os.booting .mb-right > *:nth-child(6) { animation-delay: 450ms; }
+.os.booting .mb-right > *:nth-child(7) { animation-delay: 500ms; }
+.os.booting .dock-tile {
+  animation: modReport .42s cubic-bezier(.16,1,.3,1) both;
+  animation-delay: calc(220ms + var(--i, 0) * 44ms);
+}
+.os.booting .win { animation: glassUp .62s cubic-bezier(.16,1,.3,1) both; animation-delay: 340ms; }
+.os.booting .win-wire { animation-delay: 470ms; }
+.os.booting .widget { animation: glassUp .5s .6s cubic-bezier(.16,1,.3,1) both; }
+.os.booting::before {
+  content: ''; position: fixed; inset: 0; z-index: 90; pointer-events: none;
+  background: linear-gradient(180deg,
+    transparent 0%, rgba(0,229,160,0.02) 42%, rgba(0,229,160,0.14) 49%,
+    rgba(255,255,255,0.10) 50%, rgba(0,229,160,0.14) 51%, rgba(0,229,160,0.02) 58%, transparent 100%);
+  animation: scanSweep 1.15s cubic-bezier(.4,0,.2,1) both;
+}
+
+/* The machine goes down before the retrospective comes up. */
+.os.powerdown .menubar, .os.powerdown .dock {
+  opacity: 0; transition: opacity .32s ease, transform .32s cubic-bezier(.4,0,.2,1);
+}
+.os.powerdown .menubar { transform: translateY(-100%); }
+.os.powerdown .dock { transform: translateY(100%); }
+.os.dock-left.powerdown .dock { transform: translateX(-100%); }
+.os.powerdown .wallpaper, .os.powerdown .widgets { opacity: 0; transition: opacity .4s ease; }
+.os.powerdown .desktop { background: #000; transition: background .4s ease; }
+
+/* ═══ MODES ════════════════════════════════════════════════════════════════ */
+
+/* Compact: one window, zoomed, and the Wire is the drawer it has always been
+   below 1120px. */
+.os.m-compact .widgets, .os.m-stacked .widgets { display: none; }
+
+/* Stacked: the front window fills the desktop and keeps its title bar for
+   identity and its readout. No drag, no grip.
+
+   This block comes BEFORE the drawer's on purpose. Both are (0,3,0) and both
+   use `!important`, so the later one wins — and with the order reversed the
+   Wire was told to fill the screen by a rule meant for the window behind it. */
+.os.m-stacked .win { left: 0 !important; top: 0 !important; width: 100% !important; height: 100% !important; }
+.os.m-stacked .win-plate, .os.m-stacked .win-shadow { --ch: 0.01px; }
+.os.m-stacked .win-shadow { filter: none; }
+.os.m-stacked .win-plate::after { display: none; }
+.os.m-stacked .win-grip, .os.m-stacked .win-edge { display: none; }
+
+/* ── The Wire, docked ───────────────────────────────────────────────────────
+   At desktop width it is a rail down the right edge, not a window. `deskSize()`
+   in `wm.js` subtracts its width from the desktop's usable box, so every window
+   — dragged, snapped, zoomed or restored from a save — stops at its left edge
+   rather than sliding over it. That is the whole mechanism: nothing here needs
+   a z-index fight, because nothing else is ever laid out on top of it.
+
+   It keeps `.win-wire` and `#feed-rail`, so `paintFeed`, `paintAuthor`, the
+   walkthrough and `tools/shot.mjs` never learn that it stopped being a window.
+   It does not keep the window's handles: a rail is not dragged, not resized,
+   not zoomed and not minimised. Its close key hides the rail, which is the same
+   thing the menu bar's chip does. */
+.os.wire-docked .win-wire {
+  left: auto !important; right: 0 !important;
+  top: 0 !important; bottom: 0 !important;
+  width: var(--os-wire-w) !important; height: auto !important;
+  z-index: 6 !important;                 /* under menus and sheets, over nothing */
+}
+.os.wire-docked .win-wire .win-grip,
+.os.wire-docked .win-wire .win-edge,
+.os.wire-docked .win-wire .wk-min,
+.os.wire-docked .win-wire .wk-zoom { display: none; }
+.os.wire-docked .win-wire .win-title { cursor: default; }
+/* The rail is part of the furniture, so it does not dim when it is not the
+   window in front — it is never the window in front. */
+.os.wire-docked .win-wire:not(.on) > .win-plate > .win-body::after { display: none; }
+.os.wire-docked .win-wire > .win-shadow { display: none; }
+/* Square where it meets the desktop; the outer two corners keep their cut. */
+.os.wire-docked .win-wire .win-plate { --ch: 0.01px; }
+.os.wire-docked .win-wire .win-plate::after { display: none; }
+/* The widgets live on the desktop and the desktop element is still full width —
+   only the box `deskSize()` hands out was shortened. So the Readouts widget,
+   which hangs off the right, went straight under the rail. */
+.os.wire-docked .widgets { right: calc(var(--os-wire-w) + var(--os-inset)); }
+
+/* ── The Wire, as a drawer ──────────────────────────────────────────────────
+   Below 1120px it is what it has always been at that width: a rail that slides
+   in from the right, above the band ChatGPT's chat input floats over. It is the
+   same element as the window — `paintFeed` keeps writing into the same
+   `#feed-list` and the replies keep their delegated action, so there is no
+   second copy to go stale. */
+.os.m-compact .win-wire, .os.m-stacked .win-wire {
+  position: absolute; left: 0 !important; right: 0;
+  top: 0 !important; bottom: var(--keepout-bottom);
+  width: min(392px, 92vw) !important;
+  height: auto !important;
+  margin-left: auto;
+  /* Important, because the window manager writes an inline `z-index` from the
+     stacking order and a drawer is not part of that order — it is over
+     everything. Without this the Wire slid in behind the window in front. */
+  z-index: 38 !important;
+  transform: translateX(101%);
+  transition: transform .3s cubic-bezier(.16,1,.3,1);
+  display: block !important;
+}
+.os.m-compact.wire-open .win-wire, .os.m-stacked.wire-open .win-wire { transform: none; }
+/* The drawer is laid out against the viewport, not against the desktop, so at
+   the narrow end `92vw` reached back underneath the left rail — and the rail
+   sits at z-index 44 to the drawer's 38, so it painted over the first 24px of
+   every line in the feed. Words, cut in half, in the one panel that is nothing
+   but words. Start it at the rail and take the rail's width out of its own. */
+.os.dock-left .win-wire {
+  left: var(--os-dock-w) !important;
+  width: min(392px, calc(100vw - var(--os-dock-w) - 8px)) !important;
+}
+/* Square, but never `clip-path: none`: the clip is what makes the plate a
+   stacking context, and without one the `z-index: -1` fill drops behind the
+   element's own background and the bezel colour floods the whole window.
+   Take the cut to nothing instead — the polygon stays, the corner goes. */
+.os.m-compact .win-wire .win-plate, .os.m-stacked .win-wire .win-plate,
+.os.m-compact .win-wire .win-shadow, .os.m-stacked .win-wire .win-shadow { --ch: 0.01px; }
+.os.m-compact .win-wire .win-grip, .os.m-stacked .win-wire .win-grip,
+.os.m-compact .win-wire .win-edge, .os.m-stacked .win-wire .win-edge { display: none; }
+/* Stacked mode gives the front window the whole desktop, so `toggleZoom`
+   refuses it — and a key that visibly does nothing is worse than a key that is
+   not there. Minimise stays: it is how you get to the desktop from here. */
+.os.m-stacked .win .wk-zoom { display: none; }
+
+/* A drawer has one gesture — shut it. Minimise and zoom would each be a key
+   that visibly does nothing, which is worse than a key that is not there. */
+.os.m-compact .win-wire .wk-min, .os.m-stacked .win-wire .wk-min,
+.os.m-compact .win-wire .wk-zoom, .os.m-stacked .win-wire .wk-zoom { display: none; }
+.os.m-stacked .win-body { padding-bottom: calc(48px + var(--keepout-bottom)); }
+.os.m-stacked .win-title { cursor: default; }
+.os.m-stacked .menubar { padding-left: 4px; }
+.os.m-stacked .mb-title:not(.mb-mark):not(.mb-app) { display: none; }
+
+/* The bar's own shedding is measured rather than guessed, so there are no
+   media queries for it. These two are about the things beside it. */
+@media (max-width: 900px) {
+  .os .mb-app { max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .os .menubar .stat { padding: 0 7px; }
+}
+@media (max-width: 700px) {
+  .os .win-readout { display: none; }
+}
+
+/* ═══ THE VIEWS, SIZED BY THEIR WINDOW ═════════════════════════════════════
+   `main.css` and `components.css` collapse the views' own layouts at *viewport*
+   breakpoints, which was right when there was one view filling one screen.
+   Inside a 700px window on a 1440px screen none of those rules fire and every
+   two-column layout squashes.
+
+   So they are restated here as container queries against the window body. The
+   thresholds are the viewport ones minus the chrome the view never had — the
+   console's 202px nav and 330px feed rail — so a window as wide as the old
+   `.main` breaks in exactly the same places. Nothing in the four sheets below
+   this one is edited, so the classic console cannot change. */
+
+@container (max-width: 660px) {
+  .os .split-main, .os .split-side, .os .split-left { grid-template-columns: minmax(0,1fr); }
+}
+@container (max-width: 560px) {
+  .os .grid-3, .os .grid-4 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .os .tier-nodes { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+  .os .tier-label { display: none; }
+  .os .alloc-row { grid-template-columns: 88px 1fr 40px; gap: 8px; }
+  .os .explain-3 { grid-template-columns: minmax(0,1fr); }
+}
+@container (max-width: 440px) {
+  .os .grid-2, .os .grid-3, .os .grid-4, .os .grid-auto, .os .grid-auto-lg { grid-template-columns: minmax(0,1fr); }
+  .os .rival-row { grid-template-columns: 1fr auto; gap: 8px 12px; }
+  .os .action-btn { padding: 12px 13px; }
+  .os .panel-body { padding: 13px; }
+  .os .panel-head { padding: 11px 13px; }
+  .os .view-title { font-size: 13px; letter-spacing: 0.16em; }
+  .os .act-hero { height: 100px; }
+  .os .approach-row { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+}
+/* A rack of cards must not strand one under a gap when a tidier shape exists.
+   Four agents in three columns is 3 + 1, with two thirds of a row empty beside
+   the last card; two columns is 2 + 2 and the cards are wide enough to carry
+   what is in them. Same reasoning as `.grid-tiles` in `components.css`, which
+   picks a shape for four stat tiles rather than letting `auto-fit` step through
+   three. Only inside a window, and only for exactly four — every other count
+   already lands somewhere sane. */
+.os .win .grid-auto-lg:has(> :nth-child(4):last-child),
+.os .win .grid-auto:has(> :nth-child(4):last-child) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@container (max-width: 700px) {
+  .os .win .grid-auto-lg:has(> :nth-child(4):last-child),
+  .os .win .grid-auto:has(> :nth-child(4):last-child) { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Five prompting approaches in four columns is 4 + 1, with three quarters of a
+   row empty beside the last card — and it is 4 + 1 at every width the game is
+   played at, because `auto-fit` at a 128px minimum lands on four from 570px to
+   670px and the strip is never wider than that. Three columns is 3 + 2, and the
+   cards are half as wide again, which the longest label needs. Below 440px the
+   rule underneath takes over and packs them tighter still. */
+@container (min-width: 441px) {
+  .os .win .approach-row:has(> :nth-child(5):last-child) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* The Wire is narrow by nature and its rows must never be asked to be a grid. */
+.os .win-wire .win-body { container-type: normal; }
+
+/* A window is not a page: the view's own head does not need a whole screen's
+   worth of breathing room above it. */
+.os .win-body > .view-head { margin-bottom: 14px; padding-bottom: 11px; }
+.os .win-body > .act-hero { margin-bottom: 13px; }
+
+/* ═══ REACH ════════════════════════════════════════════════════════════════ */
+
+html[data-shell="os"].reduced-motion .win,
+html[data-shell="os"].reduced-motion .os-banner,
+html[data-shell="os"].reduced-motion .menu,
+html[data-shell="os"].reduced-motion .wall-plate,
+html[data-shell="os"].reduced-motion .nc { transition: none !important; animation: none !important; }
+html[data-shell="os"].reduced-motion .dock-tile.wants,
+html[data-shell="os"].reduced-motion .mb-aria.spoke { animation: none !important; }
+
+.os .dock-tile:focus-visible, .os .menu-item:focus-visible, .os .mb-title:focus-visible,
+.os .wk:focus-visible, .os .mb-x:focus-visible, .os .mb-clock:focus-visible {
+  outline: 2px solid var(--green); outline-offset: 1px;
+}
+.os .win.on > .win-plate { --wk: var(--accent, #fff); }
+
+html.high-contrast[data-shell="os"] {
+  --os-bezel: rgba(255,255,255,0.26);
+  --os-bezel-dim: rgba(255,255,255,0.16);
+  --os-chrome: #06080d;
+}
+html.high-contrast[data-shell="os"] .wall-plate.on { opacity: 0.10; }
+html.high-contrast[data-shell="os"] .widget { opacity: 1; }
+
+/* ── The Uplink, with nothing to report ────────────────────────────────────
+   When there is no world layer the full panel used to hold four lines and an
+   apology. It shows the hand an assistant would arrive with instead — the same
+   pure function the title screen reads, so the two can never disagree. */
+.os .wc-offer { margin-top: 14px; padding-top: 13px; border-top: 1px solid rgba(255,255,255,0.07); }
+.os .wc-offer-k {
+  font-family: var(--mono); font-size: 7.5px; letter-spacing: 0.22em;
+  color: var(--ink-5); margin-bottom: 8px;
+}
+.os .wc-offer-k.later { margin-top: 14px; }
+.os .wc-offer .wc-laters { display: flex; flex-direction: column; gap: 6px; }
+.os .wc-offer .wc-laters span { font-size: 11px; color: var(--ink-4); line-height: 1.5; }
+.os .wc-offer .wc-laters b {
+  font-family: var(--mono); font-size: 10px; color: var(--ink-3); font-weight: 500;
+}
+
+/* ═══ THE RECORD ═══════════════════════════════════════════════════════════
+   A file browser over the company's own history. Three columns — the drawers,
+   one drawer's contents, and whatever is open — with a hairline between each,
+   which is a divider between regions and not an accent. Every row sits on a
+   rail with its day or its index on it, because that is what this game does
+   with a list. The only colour in the app is the window's own accent on the
+   selected row; nine kinds of file tinted nine ways is a dashboard, and this
+   is an archive.
+
+   The window body scrolls and pads for a view. The Record is not a view: it is
+   three panes that scroll independently, so it takes the padding back and
+   claims the whole body. */
+.os .win[data-app="record"] .win-body {
+  padding: 0; overflow: hidden; scroll-behavior: auto;
+}
+/* Taking the body's padding back also took its keep-out, and below 861px that
+   padding is what holds the last rows clear of ChatGPT's floating chat input.
+   It goes back on the three scrollers that actually scroll. */
+.os.m-stacked .win[data-app="record"] .rec-folders,
+.os.m-stacked .win[data-app="record"] .rec-rows,
+.os.m-stacked .win[data-app="record"] .rec-doc,
+.os.m-compact .win[data-app="record"] .rec-folders,
+.os.m-compact .win[data-app="record"] .rec-rows,
+.os.m-compact .win[data-app="record"] .rec-doc {
+  padding-bottom: calc(28px + var(--keepout-bottom, 34px));
+}
+.os .rec {
+  display: grid; height: 100%; min-height: 0;
+  /* The list has to breathe: a filename is the row's whole identity and this
+     game's filenames are long on purpose. It takes what it needs and the
+     reading pane takes the rest. */
+  grid-template-columns: 196px minmax(300px, 0.85fr) minmax(0, 1.3fr);
+}
+.os .rec > * { min-width: 0; min-height: 0; overflow: hidden auto; overscroll-behavior: contain; }
+.os .rec-list, .os .rec-read { border-left: 1px solid rgba(255,255,255,0.07); }
+
+/* Each pane's head is a fixed strip; only the rows below it scroll. */
+.os .rec-head {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: center; gap: 8px;
+  padding: 11px 12px 9px; background: rgba(9,12,18,0.97);
+}
+.os .rec-k {
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.22em;
+  text-transform: uppercase; color: var(--ink-4); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.os .rec-count, .os .rec-fc {
+  margin-left: auto; font-family: var(--mono); font-size: 8.5px;
+  letter-spacing: 0.1em; color: var(--ink-5); font-variant-numeric: tabular-nums;
+}
+.os .rec-rule { height: 1px; background: rgba(255,255,255,0.07); margin: 0 12px; }
+.os .rec-blurb {
+  padding: 10px 12px 2px; font-size: 11px; line-height: 1.5; color: var(--ink-4);
+}
+
+/* ── The rail of drawers ───────────────────────────────────────────────────*/
+.os .rec-find {
+  margin-left: auto; display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--mono); font-size: 8px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--ink-5);
+  padding: 3px 6px; background: none; cursor: pointer;
+  --ch: 3px; clip-path: var(--cut-br);
+  transition: color .14s, background .14s;
+}
+.os .rec-find kbd {
+  font-family: var(--mono); font-size: 7.5px; padding: 1px 3px;
+  background: rgba(255,255,255,0.10); color: var(--ink-4);
+}
+.os .rec-find:hover { color: var(--ink-2); background: rgba(255,255,255,0.07); }
+
+.os .rec-folders { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px 14px; }
+.os .rec-folder {
+  position: relative; display: grid; align-items: center;
+  grid-template-columns: 20px minmax(0, 1fr) auto; gap: 8px;
+  padding: 7px 9px; text-align: left; cursor: pointer;
+  --rk: transparent;
+  --ch: 5px; clip-path: var(--cut-br);
+  background: var(--rk);
+  transition: background .14s;
+}
+.os .rec-folder::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-br-in);
+  background: linear-gradient(160deg, rgba(16,21,30,0.99), rgba(10,13,20,0.99));
+}
+.os .rec-folder:hover:not(.locked) { --rk: rgba(255,255,255,0.12); }
+.os .rec-folder.on { --rk: color-mix(in srgb, var(--accent, #fff) 62%, rgba(255,255,255,0.16)); }
+.os .rec-folder.locked { opacity: 0.42; cursor: not-allowed; }
+.os .rec-fi {
+  font-family: var(--mono); font-size: 7.5px; letter-spacing: 0.08em;
+  color: var(--ink-5); font-variant-numeric: tabular-nums;
+}
+.os .rec-fn {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
+  color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.os .rec-folder.on .rec-fn { color: var(--ink); }
+.os .rec-folder.on .rec-fi, .os .rec-folder.on .rec-fc { color: var(--accent, var(--ink-3)); }
+.os .rec-rail-foot { padding: 10px 12px 16px; border-top: 1px solid rgba(255,255,255,0.055); }
+.os .rec-foot-k {
+  display: block; font-family: var(--mono); font-size: 7.5px;
+  letter-spacing: 0.18em; color: var(--ink-5);
+}
+.os .rec-foot-note { display: block; margin-top: 5px; font-size: 10.5px; color: var(--ink-5); line-height: 1.45; }
+
+/* ── The drawer's contents ─────────────────────────────────────────────────*/
+.os .rec-legend {
+  display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 8px;
+  padding: 8px 12px 4px;
+  font-family: var(--mono); font-size: 7px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--ink-5);
+}
+.os .rec-rows { display: flex; flex-direction: column; gap: 2px; padding: 0 8px 16px; }
+.os .rec-row {
+  position: relative; display: grid; align-items: baseline;
+  grid-template-columns: 38px minmax(0, 1fr) auto; gap: 8px;
+  padding: 8px 9px; text-align: left; cursor: pointer;
+  --rk: transparent;
+  --ch: 5px; clip-path: var(--cut-br);
+  background: var(--rk);
+  transition: background .14s;
+}
+.os .rec-row::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-br-in);
+  background: linear-gradient(160deg, rgba(16,21,30,0.99), rgba(10,13,20,0.99));
+}
+.os .rec-row:hover { --rk: rgba(255,255,255,0.12); }
+.os .rec-row.on { --rk: color-mix(in srgb, var(--accent, #fff) 62%, rgba(255,255,255,0.16)); }
+.os .rec-d {
+  font-family: var(--mono); font-size: 8px; letter-spacing: 0.06em;
+  color: var(--ink-5); font-variant-numeric: tabular-nums;
+}
+.os .rec-n {
+  font-family: var(--mono); font-size: 11px; color: var(--ink-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.os .rec-row.on .rec-n { color: var(--ink); }
+.os .rec-row.on .rec-d { color: var(--accent, var(--ink-3)); }
+.os .rec-m {
+  font-family: var(--mono); font-size: 7.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--ink-5); white-space: nowrap;
+}
+.os .rec-more {
+  padding: 10px 9px; font-family: var(--mono); font-size: 8px;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-5);
+}
+
+/* ── The reading pane ──────────────────────────────────────────────────────*/
+.os .rec-back {
+  flex: 0 0 auto; width: 18px; height: 18px; display: none;
+  place-items: center; cursor: pointer; background: rgba(255,255,255,0.08);
+  color: var(--ink-3); font-size: 12px; line-height: 1;
+  --ch: 3px; clip-path: var(--cut-br);
+}
+.os .rec-back:hover { background: rgba(255,255,255,0.16); color: var(--ink); }
+.os .rec-doc { padding: 4px 16px 28px; max-width: 660px; }
+.os .rec-doc-head { padding: 12px 0 10px; }
+.os .rec-doc-name {
+  display: block; font-family: var(--mono); font-size: 14px; letter-spacing: 0.02em;
+  color: var(--ink); line-height: 1.35;
+}
+.os .rec-doc-day {
+  display: block; margin-top: 5px; font-family: var(--mono); font-size: 8px;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-5);
+}
+.os .rec-meta {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px;
+  margin: 12px 0 16px; padding: 11px 12px;
+  --ch: 6px; clip-path: var(--cut-br);
+  background: rgba(255,255,255,0.09); position: relative;
+}
+.os .rec-meta::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-br-in);
+  background: linear-gradient(160deg, rgba(15,19,28,0.99), rgba(10,13,20,0.99));
+}
+.os .rec-mk {
+  font-family: var(--mono); font-size: 7.5px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--ink-5); white-space: nowrap;
+}
+.os .rec-mv { font-size: 11px; color: var(--ink-2); }
+/* `md()` emits inline markup and nothing else — no `<p>`, no `<br>` — so the
+   blank line between a research node's description and its flavour is a real
+   newline in the string. `.event-body` has always been `pre-wrap` for exactly
+   this reason; without it every file in the Record renders as one wall of text
+   with its list bullets run into the prose. */
+.os .rec-prose {
+  font-size: 12.5px; line-height: 1.62; color: var(--ink-2); white-space: pre-wrap;
+}
+.os .rec-prose p { margin: 0 0 11px; }
+.os .rec-prose b, .os .rec-prose strong { color: var(--ink); }
+.os .rec-prose em { color: var(--ink-3); }
+/* An agent's memory and the founder's own words come through `md()` as this
+   span. It stays inline: `pre-wrap` has already put each quoted line on its own
+   line, and a block here would turn the newline between two of them into a
+   blank one. Colour and slope are enough to mark a quotation. */
+.os .rec-prose .quote { color: var(--ink-3); font-style: italic; }
+
+/* ── Nothing there ─────────────────────────────────────────────────────────*/
+.os .rec-empty { padding: 26px 16px; text-align: left; }
+.os .rec-empty-mark { display: block; font-size: 15px; color: var(--ink-5); margin-bottom: 9px; }
+.os .rec-empty-k {
+  display: block; font-family: var(--mono); font-size: 7.5px;
+  letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-5); margin-bottom: 7px;
+}
+.os .rec-empty-line { font-size: 11.5px; line-height: 1.55; color: var(--ink-4); max-width: 34ch; }
+
+/* ── Fewer columns, on a narrower window ───────────────────────────────────
+   The window body is the container. Below 860px the reading pane takes the
+   list's place; below 560px there is one column and `data-pane` says which,
+   with the `‹` key as the way back up. The panes are never hidden with
+   `display: none` on a scroller that might be mid-scroll — they are simply not
+   in the grid. */
+@container (max-width: 859px) {
+  .os .rec { grid-template-columns: 176px minmax(0, 1fr); }
+  .os .rec[data-pane="read"] .rec-list { display: none; }
+  .os .rec[data-pane="folders"] .rec-read,
+  .os .rec[data-pane="list"] .rec-read { display: none; }
+  .os .rec[data-pane="read"] .rec-back { display: grid; }
+}
+@container (max-width: 559px) {
+  .os .rec { grid-template-columns: minmax(0, 1fr); }
+  .os .rec[data-pane="list"] .rec-rail,
+  .os .rec[data-pane="read"] .rec-rail { display: none; }
+  .os .rec[data-pane="folders"] .rec-list { display: none; }
+  .os .rec-back { display: grid; }
+  .os .rec-doc { padding-inline: 12px; }
+}
+.os .rec-solo { grid-template-columns: minmax(0, 1fr); }
+
+html[data-shell="os"].reduced-motion .rec-folder,
+html[data-shell="os"].reduced-motion .rec-row,
+html[data-shell="os"].reduced-motion .rec-find { transition: none; }
+
+/* ═══ FIND ═════════════════════════════════════════════════════════════════
+   One field over the whole machine. It is a plate, not a page: two corners
+   cut, an opaque fill, its own shadow, and no scrim — a full-screen layer that
+   answers the pointer is what `tools/shot.mjs` calls a page-eater, so the
+   layer is inert and only the plate takes a press.
+
+   It sits above the windows and above a menu, and below a modal: a card that
+   opens while it is up is the game, and the game wins. */
+.os .find-layer {
+  position: fixed; inset: 0; z-index: 325;
+  pointer-events: none;
+  display: flex; justify-content: center;
+  padding: calc(var(--os-menubar-h) + 46px) 16px calc(var(--keepout-bottom, 34px) + 16px);
+}
+.os .find-layer > * { pointer-events: auto; }
+.os .find-panel {
+  position: relative; width: min(620px, 100%); max-height: 100%;
+  display: flex; flex-direction: column; min-height: 0;
+  --ch: 14px; clip-path: var(--cut-tlbr);
+  background: var(--os-bezel);
+  filter: drop-shadow(0 26px 56px rgba(0,0,0,0.82))
+          drop-shadow(0 0 40px color-mix(in srgb, var(--green) 14%, transparent));
+}
+.os .find-panel::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-tlbr-in);
+  background:
+    radial-gradient(120% 60% at 0% 0%, rgba(0,229,160,0.05), transparent 62%),
+    linear-gradient(168deg, #0e131c 0%, #0a0e16 48%, #070a11 100%);
+}
+.os .find-field {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px 12px; border-bottom: 1px solid rgba(255,255,255,0.09);
+}
+.os .find-glyph { font-size: 14px; color: var(--green); opacity: 0.9; }
+.os .find-input {
+  flex: 1 1 auto; min-width: 0; background: none; border: 0; outline: none;
+  font-family: var(--mono); font-size: 14px; letter-spacing: 0.02em; color: var(--ink);
+}
+.os .find-input::placeholder { color: var(--ink-5); }
+.os .find-count {
+  flex: 0 0 auto; font-family: var(--mono); font-size: 7.5px;
+  letter-spacing: 0.2em; color: var(--ink-5); white-space: nowrap;
+}
+.os .find-list {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: 6px 8px 10px;
+}
+.os .find-head {
+  padding: 10px 8px 5px; font-family: var(--mono); font-size: 7px;
+  letter-spacing: 0.22em; text-transform: uppercase; color: var(--ink-5);
+}
+.os .find-row {
+  position: relative; width: 100%; display: grid; align-items: center;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto; gap: 9px;
+  padding: 7px 9px; text-align: left; cursor: pointer;
+  --fk: transparent;
+  --ch: 5px; clip-path: var(--cut-br);
+  background: var(--fk);
+}
+.os .find-row::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-br-in);
+  background: linear-gradient(160deg, rgba(17,22,32,0.99), rgba(11,14,21,0.99));
+}
+.os .find-row:hover { --fk: rgba(255,255,255,0.12); }
+.os .find-row.sel { --fk: color-mix(in srgb, var(--green) 66%, rgba(255,255,255,0.16)); }
+.os .find-row.off { opacity: 0.55; cursor: not-allowed; }
+.os .find-row.danger.sel { --fk: color-mix(in srgb, var(--red) 66%, rgba(255,255,255,0.16)); }
+.os .fr-glyph { font-size: 12px; color: var(--ink-4); text-align: center; }
+.os .find-row.sel .fr-glyph { color: var(--green); }
+.os .find-row.danger.sel .fr-glyph { color: var(--red); }
+.os .fr-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.os .fr-label {
+  font-size: 12.5px; color: var(--ink-2); line-height: 1.35;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.os .find-row.sel .fr-label { color: var(--ink); }
+.os .fr-sub {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.04em; color: var(--ink-5);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.os .fr-note {
+  font-family: var(--mono); font-size: 7.5px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--ink-5); white-space: nowrap;
+}
+.os .fr-note.blocked { color: var(--amber); }
+.os .fr-key {
+  font-family: var(--mono); font-size: 8px; padding: 2px 5px;
+  background: rgba(255,255,255,0.10); color: var(--ink-4);
+  --ch: 3px; clip-path: var(--cut-br);
+}
+.os .find-empty {
+  padding: 26px 12px; font-size: 11.5px; line-height: 1.55; color: var(--ink-5);
+}
+.os .find-foot {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 12px;
+  padding: 9px 16px 10px; border-top: 1px solid rgba(255,255,255,0.09);
+}
+.os .ff-why {
+  flex: 1 1 auto; min-width: 0; font-size: 10.5px; color: var(--ink-4);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.os .ff-keys {
+  flex: 0 0 auto; font-family: var(--mono); font-size: 7px;
+  letter-spacing: 0.18em; color: var(--ink-5); white-space: nowrap;
+}
+/* Enter on a row that cannot run. The plate says no once and stops — the
+   refusal is already written in the row's own note, and this is the machine
+   acknowledging the key rather than a second explanation. `refuse()` removes
+   the class, forces a reflow and re-adds it, so a second Enter plays again. */
+.os .find-panel.nope { animation: find-nope 170ms ease-out; }
+@keyframes find-nope {
+  0%, 100% { transform: translateX(0); }
+  30%      { transform: translateX(-4px); }
+  70%      { transform: translateX(4px); }
+}
+html[data-shell="os"].reduced-motion .find-panel.nope { animation: none; }

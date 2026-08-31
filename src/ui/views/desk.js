@@ -384,13 +384,19 @@ function archColor(a) {
 }
 
 function actionBtn(act, icon, name, desc, costs, enabled, key, color) {
-  return `<button class="action-btn" data-act="do" data-v="${act}" ${enabled ? '' : 'disabled'}
-    ${color ? `style="border-color:${color}30"` : ''}>
-    <span class="action-key">${key}</span>
-    <div class="action-name"><span ${color ? `style="color:${color}"` : ''}>${icon}</span>${name}</div>
-    <div class="action-desc">${esc(desc)}</div>
-    <div class="action-cost">${costs.map((c) => `<span>${c}</span>`).join('')}</div>
-  </button>`;
+  // The right-click target is the wrapper, not the button. A disabled
+  // `<button>` fires no `contextmenu` at all, so the menu was missing from
+  // exactly the actions whose menu says what they need — which is the one thing
+  // it was written for.
+  return `<span class="action-slot" data-ctx="action" data-v="${act}">
+    <button class="action-btn" data-act="do" data-v="${act}" ${enabled ? '' : 'disabled'}
+      ${color ? `style="border-color:${color}30"` : ''}>
+      <span class="action-key">${key}</span>
+      <div class="action-name"><span ${color ? `style="color:${color}"` : ''}>${icon}</span>${name}</div>
+      <div class="action-desc">${esc(desc)}</div>
+      <div class="action-cost">${costs.map((c) => `<span>${c}</span>`).join('')}</div>
+    </button>
+  </span>`;
 }
 
 function resRow(icon, name, value, color, tip) {

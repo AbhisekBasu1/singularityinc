@@ -57,6 +57,25 @@ not redeploying changes nothing, and it is a very quiet nothing.
 - the `codex://` deep link from the game's "Play with your assistant" dialog
   opens the desktop app on the page
 
+## The workstation's path
+
+`/computer/` is the same game in a desktop housing, on the same origin. Two
+things follow.
+
+**It needs its own rows in `_headers`.** A trial token is issued per *origin*,
+so it is the same token — but a header rule for `/` does not cover a path under
+it, and `computer/index.html` carries the `<meta>` tag as well for the same
+reason `index.html` does.
+
+**It carries `<base href="/">`, and that only works at an origin root.** Every
+asset path in this game is written in JavaScript and is document-relative —
+`assets/img/act3.jpg` in a modal, a character's portrait, an ending plate — so
+from `/computer/` each one would resolve a directory too deep and quietly 404.
+The base tag resolves them all against the origin instead; module imports are
+unaffected, because they resolve against the module's own URL. If you ever
+deploy this game under a sub-path rather than at a root, that tag is the first
+thing that breaks.
+
 ## The second origin
 
 `rival/` is Aperture Systems' press office and it has to be a **different

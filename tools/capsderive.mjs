@@ -10,11 +10,19 @@
 //
 //   node tools/capsderive.mjs            print the table
 //   node tools/capsderive.mjs --json     emit the CAPS literal for balance.js
+//   REPS=9 node tools/capsderive.mjs     more samples per branching choice
+//
+// Seeded. A choice with a `chance()` inside it is executed REPS times from
+// REPS different points of the stream and every execution is a sample, so the
+// p80 sees both branches of "68% of the time the bet pays off" rather than
+// whichever one a single run happened to land on.
 // ─────────────────────────────────────────────────────────────────────────────
 import { installDom } from './headless.mjs';
 installDom();
 
 const { newGame, setState } = await import('../src/engine/state.js');
+const { reseed } = await import('../src/engine/rng.js');
+const REPS = Math.max(1, Number(process.env.REPS || 5));
 const Game = await import('../src/game.js');
 const Loop = await import('../src/engine/loop.js');
 const { resolveChoice, dismissEvent } = await import('../src/systems/narrative.js');
@@ -24,9 +32,13 @@ const { actionPromptAI, actionWriteCode } = await import('../src/systems/founder
 const { startProject, availableProjects } = await import('../src/systems/projects.js');
 const { EVENTS } = await import('../src/data/events.js');
 
+// Seeded, and the bot's own card answers cycle rather than roll: the deck's
+// `chance()` branches draw from the game's stream, so an unseeded run derived
+// a different Act III compute grant every time it was printed.
 const s = Game.startNewGame({ founderName: 'Test', companyName: 'Testco', archetype: 'hacker',
-                              category: 'devtools', productName: 'Testco' });
+                              category: 'devtools', productName: 'Testco', seed: 4242 });
 
+let answered = 0;
 function play(days) {
   for (let d = 0; d < days; d++) {
     for (let i = 0; i < 3; i++) {
@@ -43,7 +55,7 @@ function play(days) {
     if (s.agents.length < maxAgents(s) && s.company.cash > hireCost(s) * 3) hireAgent(s, rollCandidate(s));
     if (s.narrative.activeEvent && !s.narrative.activeEvent.outcome) {
       const n = s.narrative.activeEvent.choices.length;
-      resolveChoice(s, Math.floor(Math.random() * n)); dismissEvent(s);
+      resolveChoice(s, answered++ % n); dismissEvent(s);
     }
     const projs = availableProjects(s).filter((x) => x.available && s.company.cash > x.cost * 4);
     if (projs.length) startProject(s, projs[0].id);
@@ -64,7 +76,7 @@ play(340); states[5] = JSON.parse(JSON.stringify(s));
 const LOG_TO_KEY = {
   cash: 'cash', code: 'code', insight: 'insight', reputation: 'rep', research: 'research',
   techDebt: 'debt', focus: 'focus', alignment: 'align', heat: 'heat', opinion: 'opinion',
-  influence: 'influence', users: 'users',
+  influence: 'influence', users: 'users', compute: 'compute',
 };
 
 // Split by direction, not by magnitude.
@@ -84,20 +96,32 @@ function record(act, key, v, adverse) {
   ((bag[act] ??= {})[key] ??= []).push(Math.abs(v));
 }
 
+// The rival labs' progress and granted compute are both written straight onto
+// state by the deck (`l.progress *= 1.12`, `computeGranted += 300`), so the fx
+// log never sees them. Diffed around each choice instead.
+const labTop = (st) => {
+  const r = st.world?.race;
+  if (!r) return 0;
+  return Math.max(0, ...Object.values(r.labs || {}).filter((l) => l.alive).map((l) => l.progress));
+};
+
 let ran = 0, threw = 0;
 for (const e of EVENTS) {
   const acts = e.act?.length ? e.act : [1, 2, 3, 4, 5];
   for (const act of acts) {
     const base = states[act];
     if (!base) continue;
-    for (let ci = 0; ci < (e.choices?.length || 0); ci++) {
+    for (let ci = 0; ci < (e.choices?.length || 0); ci++) for (let rep = 0; rep < REPS; rep++) {
       const scratch = JSON.parse(JSON.stringify(base));
       setState(scratch);
+      reseed(4242 + act * 1000 + ci * 10 + rep);
       scratch.narrative.activeEvent = {
         id: e.id, title: e.title, kind: e.kind, char: e.char, body: '',
         choices: e.choices.map((c, i) => ({ i, label: c.label, sub: c.sub, tone: c.tone })),
         outcome: null,
       };
+      const computeBefore = scratch.resources.computeGranted || 0;
+      const labBefore = labTop(scratch);
       try {
         const r = resolveChoice(scratch, ci);
         ran++;
@@ -108,6 +132,11 @@ for (const e of EVENTS) {
           const adverse = (key === 'heat' || key === 'debt') ? v > 0 : v < 0;
           record(act, key, v, adverse);
         }
+        const dCompute = (scratch.resources.computeGranted || 0) - computeBefore;
+        if (dCompute) record(act, 'compute', dCompute, dCompute < 0);
+        // A lab gaining ground is the adverse direction, like heat.
+        const dLab = labTop(scratch) - labBefore;
+        if (Math.abs(dLab) > 1e-9) record(act, 'race', dLab, dLab > 0);
       } catch { threw++; }
     }
   }
@@ -130,7 +159,7 @@ function tidy(n) {
 }
 
 const KEYS = ['cash', 'rep', 'insight', 'code', 'focus', 'users', 'align', 'heat',
-              'opinion', 'debt', 'research', 'influence', 'affinity'];
+              'opinion', 'debt', 'research', 'influence', 'affinity', 'compute', 'race'];
 
 const bagFor = (which) => (which === 'adverse' ? samples.adverse : samples.kind);
 
@@ -144,7 +173,7 @@ if (process.argv.includes('--json')) {
   }
   console.log(JSON.stringify(out, null, 2));
 } else {
-  console.log(`\n${ran} authored choices executed (${threw} threw)`);
+  console.log(`\n${ran} executions of authored choices, ${REPS} per choice (${threw} threw)`);
   const pad = (v, n) => String(v).padStart(n);
   for (const which of ['adverse', 'kind']) {
     const bag = bagFor(which);

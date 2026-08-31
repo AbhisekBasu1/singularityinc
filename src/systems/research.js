@@ -96,6 +96,11 @@ export function tickResearch(S, days, laneOutput, m = computeMods(S)) {
 
 export function completeResearch(S, node) {
   S.research.done[node.id] = true;
+  // The day it landed, so the record can be a dated one. `done` has only ever
+  // held `true`, which makes a finished tree a set with no history in it — and
+  // a save made before this simply has no days, which every reader must
+  // tolerate rather than invent.
+  (S.research.doneDay ??= {})[node.id] = Math.floor(S.time.day);
   S.research.active = null;
   S.research.progress = 0;
   S.stats.researchDone++;

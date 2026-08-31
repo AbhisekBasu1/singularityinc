@@ -526,3 +526,42 @@ html.reduced-motion .ah-signal::before, html.reduced-motion .ah-signal::after, h
   .threshold-beat .beat-next { margin-top: 12px; }
   .threshold-beat .beat-note { margin-top: 7px; font-size: 10.5px; }
 }
+
+/* ── The stage overflows ─────────────────────────────────────────────────────
+   Eight choice cards do not fit a 900px laptop. `stageCue()` in
+   src/ui/intro.js pins this to the bottom of #app — *outside* the scroller, or
+   it would scroll away with the content it is describing — and toggles `.on`
+   only when something is below, `.at-end` once you have reached it.
+
+   The veil is `pointer-events: none` and the glyph alone takes the click: a
+   108px band of dead pixels over the last row of cards is the same bug in a
+   nicer coat. Both beats and the title screen use it. */
+.stage-cue {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 112px;
+  z-index: 6; pointer-events: none;
+  display: flex; align-items: flex-end; justify-content: center; padding-bottom: 16px;
+  background: linear-gradient(to top, rgb(5 6 10 / .94) 0%, rgb(5 6 10 / .82) 34%, rgb(5 6 10 / 0) 100%);
+  opacity: 0; transition: opacity .5s cubic-bezier(.16,1,.3,1);
+}
+.stage-cue.on { opacity: 1; }
+.stage-cue.on.at-end { opacity: 0; }
+.stage-cue-btn {
+  pointer-events: auto; cursor: pointer; background: none; border: 0;
+  padding: 6px 22px; line-height: 1; font-size: 17px;
+  color: var(--ink-3); text-shadow: 0 0 14px rgb(0 229 160 / .18); opacity: .8;
+  transition: color .2s ease, text-shadow .2s ease, opacity .2s ease;
+}
+/* Three bobs, then it holds still. The dock's attention rule, for the same
+   reason: a cue that keeps waving is a cue people stop reading — and a control
+   that never settles is one no automated hand can ever click. The animation is
+   scoped to `.on`, so it re-arms by itself every time a new beat needs it. */
+.stage-cue.on .stage-cue-btn { animation: cueBob 1.9s cubic-bezier(.4,0,.6,1) 3 both; }
+.stage-cue-btn:hover { color: var(--green); text-shadow: 0 0 16px rgb(0 229 160 / .5); opacity: 1; }
+@keyframes cueBob {
+  0%, 100% { transform: translateY(0); opacity: .72; }
+  50%      { transform: translateY(5px); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stage-cue.on .stage-cue-btn { animation: none; opacity: .9; }
+  .stage-cue { transition: none; }
+}

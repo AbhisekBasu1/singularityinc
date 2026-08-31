@@ -24,8 +24,8 @@ look at the future cannot change the future, or fire an achievement, or write to
 the save.
 
 **No tool calls a reducer.** Not one. Everything an assistant does passes
-through a fixed vocabulary of effects in `src/world/effects.js` — fifteen named
-numbers — and is bounded by `src/world/validate.js` against ceilings in
+through a fixed vocabulary of effects in `src/world/effects.js` — seventeen
+named numbers — and is bounded by `src/world/validate.js` against ceilings in
 `src/data/balance.js`. If a key is not in that table it does not exist. There is
 no path to equity, skills, research unlocks, the agent roster, the clock, or the
 ending, and there is no tool that can end a run.

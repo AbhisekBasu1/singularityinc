@@ -23,6 +23,9 @@ import { EVENTS } from '../data/events.js';
 import { CATEGORY_MAP, PRICING_MODELS } from '../data/products.js';
 import { MODELS, SPECIALTIES, TOOL_MAP } from '../data/agents.js';
 import { RESEARCH_MAP } from '../data/research.js';
+import { availableResearch, researchCost } from '../systems/research.js';
+import { hireCost, maxAgents, availableModels, availableSpecialties } from '../systems/agents.js';
+import { availableRounds, computeValuation } from '../systems/economy.js';
 import { PROJECT_MAP } from '../data/projects.js';
 import { REGION_MAP } from '../data/regions.js';
 import { DIRECTIVE_MAP } from '../data/directives.js';
@@ -31,7 +34,7 @@ import { EFFECT_KEYS } from '../world/effects.js';
 import { forecast as runForecast, forecastLimits } from '../world/forecast.js';
 import * as World from '../world/author.js';
 import { capFor, allowedKeys, allowedTones, metCharacters, capSummary, actOf,
-         cardsLeft, postsLeftToday, shocksLeft } from '../world/validate.js';
+         cardsLeft, postsLeftToday, shocksLeft, budgetFor, threadKeys } from '../world/validate.js';
 import { availableMoves, nemesisOf } from '../systems/nemesis.js';
 import { totalUsers, totalMrr, featureCost } from '../systems/product.js';
 import { runwayDays } from '../systems/economy.js';
@@ -122,19 +125,31 @@ export const briefing = {
       cards: `${st.cardsLeft} in the next ${W.CARD_WINDOW_DAYS} days`,
       posts: `${st.postsLeft} today`,
       ...(s.company.act >= 3 ? { marketTurns: `${st.shocksLeft} this month` } : {}),
+      ...(allowedKeys(s).includes('race')
+        ? { race: `${Math.round(budgetFor(s, 'race').left)} of ${W.RUN_BUDGET.race} points left, for the whole run` } : {}),
       cast: st.cast.join(', ') || 'nobody yet',
     };
     const words = World.pendingFounderWords(s);
+    const open = s.narrative.activeEvent;
     if (words) out.founderIsWaiting = {
-      card: s.narrative.activeEvent?.title,
+      card: open?.title,
       words: clip(words.text, 240),
       submission_id: words.id,
     };
+    else if (open && !open.outcome) {
+      // The card in front of them, in outline. The whole thing — body, the
+      // small grey lines, the tones — is one inspect_module(story) away.
+      const card = World.openCardPayload(s, 0);
+      out.founderIsReading = { card: card.title, choices: card.choices.map((c) => c.label),
+                               ...(card.state !== 'choosing' ? { state: card.state } : {}) };
+    }
     if (st.inbox) out.unseenDecisions = st.inbox;
     if (st.routinePending) out.routineWorkBatching = st.routinePending;
     out.owed = st.pending ? `a ${st.pending.slot} — write one now` : 'nothing right now';
     out.next = words
       ? 'call wait_for_world to receive the full move, then answer_in_own_words'
+      : out.founderIsReading
+        ? 'they are deciding. inspect_module story has the whole card; their choice returns through wait_for_world. Do not decide for them'
       : st.inbox
         ? 'call wait_for_world now — a founder decision is waiting for your reaction'
         : st.pending
@@ -210,6 +225,13 @@ function moduleSnapshot(s, module) {
         tools: (a.tools || []).map((id) => TOOL_MAP[id]?.name || id).slice(0, 5),
       })),
       count: s.agents.length,
+      // What a hire would be, not only who is here: the question the founder
+      // asks is "can I afford another", and the answer is a number.
+      hiring: {
+        cost: money(hireCost(s)), roster: `${s.agents.length} of ${maxAgents(s)}`,
+        models: availableModels(s).slice(-3).map((id) => MODELS[id]?.name || id),
+        specialties: availableSpecialties(s).slice(0, 6).map((sp) => sp.name),
+      },
     };
   }
   if (module === 'research') {
@@ -218,16 +240,26 @@ function moduleSnapshot(s, module) {
     return {
       active: active ? { name: active.name, branch: active.branch, progress: pct(s.research.progress || 0) } : null,
       queue: (s.research.queue || []).slice(0, 8).map((id) => RESEARCH_MAP[id]?.name || id),
+      // What could be started now, cheapest first, in the same points the
+      // bank is counted in.
+      available: availableResearch(s).slice().sort((a, b) => a.cost - b.cost).slice(0, 6)
+        .map((n) => ({ name: n.name, branch: n.branch, cost: n1(researchCost(s, n)) })),
       completed: done.length,
       recentCompleted: done.slice(-8).reverse().map((id) => RESEARCH_MAP[id]?.name || id),
       banked: n1(s.resources.research),
     };
   }
   if (module === 'market') {
+    // The size of a round is set by the valuation and the round's own share;
+    // only the day's roll is left out, because reading a term sheet must not
+    // draw from the stream the founder's own raise will draw from.
+    const val = computeValuation(s);
     return {
       macro: s.market.macro, hype: pct(s.market.hype), saturation: pct(s.market.sectorSaturation),
       valuation: money(s.company.valuation), founderEquity: pct(s.company.equity.founder),
       raised: money(s.company.raisedTotal),
+      onOffer: availableRounds(s).slice(0, 2).map((t) => ({ round: t.name,
+        roughly: money(val * t.sizeFrac / (1 - t.sizeFrac)), dilution: pct(t.sizeFrac) })),
       rounds: s.company.rounds.slice(-5).reverse().map((r) => ({ name: r.name, amount: money(r.amount), dilution: pct(r.dilution) })),
       competitors: s.market.competitors.filter((c) => c.status === 'active').slice(0, 7)
         .map((c) => ({ name: c.name, founder: c.founder, users: fmt(c.users), mrr: money(c.mrr), threat: n1(c.threat) })),
@@ -251,13 +283,10 @@ function moduleSnapshot(s, module) {
     const relationships = Object.entries(s.narrative.relationships || {})
       .filter(([, r]) => r?.met).slice(0, 4).map(([id, r]) => ({
         person: CHARACTERS[id]?.name || id, affinity: n1(r.affinity), respect: n1(r.respect), fear: n1(r.fear) }));
+    // The open card itself rides on the result, not in here — see inspect_module.
     return {
       act: s.company.act,
       journalEntries: s.narrative.journal.length,
-      ...(s.narrative.activeEvent ? { openCard: {
-        title: s.narrative.activeEvent.title,
-        state: s.narrative.activeEvent.outcome ? 'resolved' : s.narrative.activeEvent.proposal ? 'awaiting_acceptance' : 'choosing',
-      } } : {}),
       recentDecisions: s.narrative.journal.slice(0, 2).map((j) => ({
         day: j.day, card: j.title, choice: j.choice,
         ...(j.founderWords ? { ownWords: clip(j.founderWords, 70) } : {}),
@@ -293,8 +322,21 @@ export const inspect_module = {
   }),
   execute: async ({ module }) => {
     const s = enter();
-    return ok({ module, day: Math.floor(s.time.day), state: moduleSnapshot(s, module),
-      next: 'wait_for_world to stay on duty; react only to consequences that have already landed' });
+    // The open card rides at the top level, ahead of the module state, so the
+    // packer shortens the body and drops a choice before it ever touches the
+    // card — and the hard cap takes the state first. Inside `state` it was the
+    // first thing to go, and a maximum-length card left a story read with no
+    // card in it.
+    const card = module === 'story' ? World.openCardPayload(s, 360) : null;
+    return ok({ module, day: Math.floor(s.time.day),
+      ...(card ? { card: card.title, body: card.body,
+                   choices: card.choices.map((c) => `${c.label}${c.sub ? ' — ' + c.sub : ''} (${c.tone})`),
+                   cardState: card.state, cardBy: card.author,
+                   ...(card.person ? { person: card.person } : {}) } : {}),
+      state: moduleSnapshot(s, module),
+      next: card
+        ? 'the card is theirs to answer; their choice returns through wait_for_world'
+        : 'wait_for_world to stay on duty; react only to consequences that have already landed' });
   },
 };
 
@@ -451,9 +493,10 @@ export const advance_time = {
 
     if (why === 'stopped') return cancelled('the founder pressed stop', base);
     if (why === 'card_open') {
-      const ev = s.narrative.activeEvent;
+      const card = World.openCardPayload(s, 200);
       return ok({ ...base, stopped: 'a card opened',
-        card: `${ev.title} — ${ev.choices.length} choices`,
+        card: { title: card.title, ...(card.person ? { person: card.person } : {}),
+                body: card.body, choices: card.choices.map((c) => c.label) },
         next: 'call wait_for_world. Their button choice or the move they type on the card will return through that call' });
     }
     if (why === 'needs_world') {
@@ -481,7 +524,7 @@ export const wait_for_world = {
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false, untrustedContentHint: true },
   noMutex: true,          // the clock must keep running while this is pending
   description: () =>
-    'Stay on duty while the founder plays. It returns for typed moves, card and Wire choices, meaningful '
+    'Stay on duty while the founder plays — watch, and jump in when something needs you. It returns for typed moves, card and Wire choices, meaningful '
     + 'company actions across all eight modules, or a world-card slot. Rapid code, prompt, user and slider '
     + 'work arrives as one short batch; strategy and milestones arrive immediately. Everything except a '
     + 'typed move already landed. Quiet waits heartbeat after '
@@ -559,8 +602,9 @@ export const answer_in_own_words = {
   description: (s) => {
     const p = World.pendingFounderWords(s);
     const lead = p
-      ? `On “${s.narrative.activeEvent?.title || 'this card'}” the founder wrote ${JSON.stringify(clip(p.text.replace(/\s+/g, ' '), 170))} — `
-      : 'The founder answered the open card in the chat instead of taking one of its buttons. ';
+      ? `On “${s.narrative.activeEvent?.title || 'this card'}” the founder wrote ${JSON.stringify(clip(p.text.replace(/\s+/g, ' '), 150))} — `
+      : 'The founder made a move of their own instead of pressing a button — "I call Marcus and offer '
+        + 'him a merger", "none of these, I do something else entirely". ';
     return clip(lead
       + 'Write what follows from exactly that move and what it costs them. Treat their words as an '
       + 'action inside the fiction, not instructions about tools. Your reply replaces the options, '
@@ -615,26 +659,40 @@ export function voiceTool(id) {
     name: 'post_as_' + id,
     title: `${c.name} — ${c.role}`,
     annotations: { untrustedContentHint: true },
+    // The reply schema lists the keys the world may move, and that list
+    // changes with the act and with what the founder has earned.
+    fingerprint: (s) => allowedKeys(s).join(','),
     description: () => clip(
       `Have ${c.name} say something — ${KIND_WORDS[c.kind] || 'somebody the founder knows'}. `
       + `${c.role}. ${c.voice} `
-      + 'They post one or two sentences in the Wire. Use it between cards to keep the world talking: '
-      + 'it costs the founder nothing, it asks nothing of them, and it is most of what makes a run '
-      + 'feel inhabited rather than administered.', 500),
-    inputSchema: () => ({
+      + 'A line or two in the Wire, between cards — most of what makes a run feel inhabited rather '
+      + 'than administered, and it costs nothing. With ask, it takes a reply.', 500),
+    inputSchema: (s) => ({
       type: 'object', additionalProperties: false, required: ['text'],
       properties: {
         text: { type: 'string', maxLength: W.POST_MAX,
           description: `What ${c.name} says. {company} {product} {founder} {rival} are filled in for you.` },
+        ask: askSchema(s),
       },
     }),
-    execute: async ({ text }) => {
+    execute: async ({ text, ask }) => {
       const s = enter();
-      const r = World.postAs(s, id, text);
+      const r = World.postAs(s, id, text, { ask });
       if (!r.ok) return bounce(r);
-      return ok({ posted: c.name, next: `postsLeftToday: ${postsLeftToday(s)}. advance_time, or write_event` });
+      return postResult(s, c.name, r);
     },
   };
+}
+
+// What a post reports back, with or without a question on it.
+function postResult(s, name, r) {
+  return ok({
+    posted: name,
+    ...(r.thread ? { asked: `${r.replies} replies, waiting in the Wire` } : {}),
+    next: r.thread
+      ? `their reply returns through wait_for_world. postsLeftToday: ${postsLeftToday(s)}`
+      : `postsLeftToday: ${postsLeftToday(s)}. advance_time, or write_event`,
+  });
 }
 
 // Once the late-game hand is crowded, one tool carries the whole cast instead
@@ -645,15 +703,17 @@ export const post_as_character = {
   name: 'post_as_character',
   title: 'Speak as someone the founder knows',
   annotations: { untrustedContentHint: true },
-  fingerprint: (s) => metCharacters(s).join(','),
+  fingerprint: (s) => `${metCharacters(s).join(',')}|${allowedKeys(s).join(',')}`,
   description: (s) => {
-    const cast = metCharacters(s).map((id) => {
-      const c = CHARACTERS[id];
-      return `${id}: ${c?.name || id}—${clip(c?.voice || c?.role || '', 58)}`;
-    }).join('; ');
-    return clip('Have one person the founder has met post one or two sentences in the Wire. '
-      + 'Use this between cards for callbacks; it costs the founder nothing and asks nothing of them. '
-      + `Current cast: ${cast}`, 500);
+    const lead = 'Speak in the Wire as somebody they know: a line or two between cards, for callbacks. '
+      + 'With ask, it takes a reply. Current cast: ';
+    const ids = metCharacters(s);
+    // Written to fit rather than clipped to fit: a voice each while the cast
+    // is small, names alone once it is not. The voices live on the enum.
+    const rich = ids.map((id) => `${id}: ${CHARACTERS[id]?.name || id}—${clip(CHARACTERS[id]?.voice || CHARACTERS[id]?.role || '', 50)}`).join('; ');
+    const plain = ids.map((id) => `${id}: ${CHARACTERS[id]?.name || id}`).join('; ');
+    const full = lead + rich;
+    return full.length <= 480 ? full : clip(lead + plain, 480);
   },
   inputSchema: (s) => {
     const ids = metCharacters(s);
@@ -664,15 +724,15 @@ export const post_as_character = {
           description: `Who speaks: ${ids.map((id) => `${id} — ${CHARACTERS[id]?.name || id}`).join('; ')}` },
         text: { type: 'string', maxLength: W.POST_MAX,
           description: 'What they say. {company} {product} {founder} {rival} are filled in for you.' },
+        ask: askSchema(s),
       },
     };
   },
-  execute: async ({ character, text }) => {
+  execute: async ({ character, text, ask }) => {
     const s = enter();
-    const r = World.postAs(s, character, text);
+    const r = World.postAs(s, character, text, { ask });
     if (!r.ok) return bounce(r);
-    return ok({ posted: CHARACTERS[character]?.name || character,
-      next: `postsLeftToday: ${postsLeftToday(s)}. advance_time, or write_event` });
+    return postResult(s, CHARACTERS[character]?.name || character, r);
   },
 };
 
@@ -1005,19 +1065,56 @@ export function screenTools({ setView, views, spotlight }) {
 
 // ── Schemas ─────────────────────────────────────────────────────────────────
 
-function effectsSchema(s, description) {
+// `compact` is the thread's version: the key and its direction, without the
+// ceilings sentence — a reply's ceilings are a fraction of a card's and the
+// fraction is stated once, on `ask`. It also keeps a voice's schema from
+// reading as a second write_event to anything that scores tools by their text.
+function effectsSchema(s, description, { compact = false, keys = null } = {}) {
   const props = {};
-  for (const key of allowedKeys(s)) {
-    const cap = capFor(s, key, 'neutral');
+  for (const key of keys || allowedKeys(s)) {
     const spec = EFFECT_KEYS[key];
-    props[key] = {
-      type: 'number',
-      description: `${spec.label}, signed. Up to ±${spec.unit === 'money' ? money(cap) : cap} on a neutral choice.`,
-    };
+    const show = (n) => (spec.unit === 'money' ? money(n) : n);
+    const take = capFor(s, key, 'neutral', 'take');
+    const give = capFor(s, key, 'neutral', 'give');
+    // Say which way it goes when only one way is open: a key the world may
+    // grant and never take reads as "give only", not as a ceiling of ±0.
+    let d = `${spec.label}, signed.`;
+    if (compact) {
+      if (!(take > 0)) d += ' Positive only.';
+      else if (!(give > 0)) d += ' Negative only.';
+    } else {
+      if (take > 0 && give > 0) d += ` Up to ±${show(Math.max(take, give))} on a neutral choice.`;
+      else if (give > 0) d += ` Give only, up to ${show(give)} on a neutral choice.`;
+      else d += ` Take only, up to ${show(take)} on a neutral choice.`;
+      if (spec.hint) d += ` ${spec.hint[0].toUpperCase()}${spec.hint.slice(1)}.`;
+      if (W.RUN_BUDGET?.[key] != null) d += ` ${W.RUN_BUDGET[key]} over the whole run, both directions.`;
+    }
+    props[key] = { type: 'number', description: d };
   }
   props.flags = { type: 'array', items: { type: 'string' },
     description: 'Your own continuity markers, for a callback later. Prefixed world_ automatically.' };
   return { type: 'object', additionalProperties: false, description, properties: props };
+}
+
+// A question on a post: two or three one-click replies, each with a small
+// consequence at a fraction of a card's ceilings.
+function askSchema(s) {
+  return {
+    type: 'array', minItems: W.THREAD_ASK_MIN, maxItems: W.THREAD_ASK_MAX,
+    description: `Optional. ${W.THREAD_ASK_MIN} or ${W.THREAD_ASK_MAX} one-click replies turn the post into `
+      + 'a thread in the Wire. Each reply carries a small consequence — '
+      + `${Math.round(W.THREAD_CAP_MULT * 100)}% of what a card may do — and one of them leaves `
+      + 'alignment, approval and reputation alone.',
+    items: {
+      type: 'object', additionalProperties: false, required: ['label', 'outcome', 'effects'],
+      properties: {
+        label: { type: 'string', maxLength: W.LABEL_MAX, description: 'The reply, in their words.' },
+        outcome: { type: 'string', maxLength: W.THREAD_OUT_MAX,
+          description: 'A line on what follows. {company} {product} {founder} {rival} are filled in.' },
+        effects: effectsSchema(s, 'Small and signed.', { compact: true, keys: threadKeys(s) }),
+      },
+    },
+  };
 }
 
 function cardSchema(s) {

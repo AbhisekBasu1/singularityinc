@@ -44,9 +44,10 @@ export function allowedTones(S) {
 // Effect keys the founder's own play has taken away.
 export function allowedKeys(S) {
   const earned = S?.doctrines?.earned || {};
-  const act = actOf(S);
   return EFFECT_KEY_LIST.filter((k) => {
     if (k === 'debt' && earned.zero_entropy) return false;   // the codebase stopped fighting you
+    // No race yet, or one already decided: nothing for the key to move.
+    if (k === 'race' && (!S?.world?.race || S.world.race.crossed)) return false;
     if (capFor(S, k, 'good') <= 0) return false;             // an act where the key does not exist yet
     return true;
   });
@@ -152,8 +153,8 @@ export function cashFloor(S) {
 }
 
 // How much of one key the world has already taken inside the rolling window.
-export function takenIn(S, key) {
-  const since = S.time.day - W.DRAIN_WINDOW_DAYS;
+export function takenIn(S, key, window = W.DRAIN_WINDOW_DAYS) {
+  const since = S.time.day - window;
   return (S?.world?.author?.recent?.taken || [])
     .filter(([d, k]) => k === key && d > since)
     .reduce((a, [, , v]) => a + Math.abs(v), 0);
@@ -182,6 +183,14 @@ export function stockOf(S, key) {
 // itself. It must not also widen the window, or the world simply marks
 // everything cruel and the rolling budget stops meaning anything.
 export function budgetFor(S, key) {
+  // A run-long budget: the whole run is the window, both directions count,
+  // and nothing comes back. The race is decided by under twenty-five points,
+  // so a monthly allowance on it would be the world deciding the race.
+  const run = W.RUN_BUDGET?.[key];
+  if (run != null) {
+    const used = takenIn(S, key, Infinity);
+    return { left: Math.max(0, run - used), allowance: run, used, backOn: null, run: true };
+  }
   const cap = capFor(S, key, 'neutral', 'take');
   let allowance = cap * W.WINDOW_MULT;
   if (W.STOCK_KEYS.includes(key)) {
@@ -207,12 +216,13 @@ export function cashLimit(S, tone = 'neutral') {
   return cap <= f.limit ? { limit: cap, which: 'cap' } : f;
 }
 
-function cashProblem(path, cash, S, tone = 'neutral') {
+function cashProblem(path, cash, S, tone = 'neutral', scale = 1) {
   const f = cashLimit(S, tone);
-  if (-cash <= f.limit) return null;
+  const limit = Math.floor(f.limit * scale);
+  if (-cash <= limit) return null;
   if (f.which === 'cap') {
-    return problem(path, 'cap', `the world may take at most ${f.limit} in cash here`,
-                   { limit: f.limit, got: cash });
+    return problem(path, 'cap', `the world may take at most ${limit} in cash here`,
+                   { limit, got: cash });
   }
   const fix = f.which === 'runway'
     ? `${f.runway == null ? 'the runway floor binds here' : `the founder has ${f.runway} days of runway`}`
@@ -221,7 +231,7 @@ function cashProblem(path, cash, S, tone = 'neutral') {
       ? `the world has already taken ${money(f.taken)} in ${W.DRAIN_WINDOW_DAYS} days. Wait, or make the cost something other than money`
       : `no one card may take more than ${Math.round(W.CASH_SHARE_MAX * 100)}% of the cash on hand`;
   return problem(path, f.which === 'share' ? 'cash_share' : f.which === 'runway' ? 'runway_floor' : 'cash_drain',
-                 fix, { limit: -f.limit, got: cash });
+                 fix, { limit: -limit, got: cash });
 }
 
 // ── Shared checks ───────────────────────────────────────────────────────────
@@ -274,6 +284,86 @@ function flagProblems(path, v, problems) {
   });
 }
 
+// A narrowed ceiling, kept in the key's own units. Zero stays zero: a key
+// that is not in play does not come into play by being scaled.
+function scaleCap(cap, key, scale) {
+  if (scale === 1 || !(cap > 0)) return cap;
+  // Floored, never rounded up: a ceiling of two that became one would be a
+  // reply moving half of what a card may, when the promise is a third.
+  return EFFECT_KEYS[key]?.unit === 'ratio'
+    ? Math.floor(cap * scale * 1000) / 1000
+    : Math.floor(cap * scale);
+}
+
+// One choice's worth of effects, judged against the ceilings, the budgets and
+// the cash floor. Cards, proposals and threads all come through here, so the
+// shape of a refusal never depends on which door the effects arrived by.
+// `scale` narrows every ceiling — a thread is small stakes. Returns how many
+// keys actually moved.
+function effectProblems(S, at, fx, tone, problems, { char = null, scale = 1, keys = null } = {}) {
+  const allowed = keys || new Set(allowedKeys(S));
+  let moved = 0;
+  for (const [k, v] of Object.entries(fx)) {
+    if (k === 'flags') { flagProblems(`${at}.flags`, v, problems); continue; }
+    if (k === 'affinity' && !char) {
+      // Affinity is how somebody feels about the founder afterwards. With
+      // nobody on the card there is no somebody, and it would validate,
+      // count as a real movement, and then quietly do nothing.
+      problems.push(problem(`${at}.affinity`, 'no_character',
+        'nobody is on this card — drop affinity, or put a face on it with `char`'));
+      continue;
+    }
+    if (!allowed.has(k)) {
+      problems.push(problem(`${at}.${k}`, 'unknown_key',
+        `the world can move: ${[...allowed].join(', ')}`, { got: k }));
+      continue;
+    }
+    if (!Number.isFinite(v)) {
+      problems.push(problem(`${at}.${k}`, 'type', 'a signed number', { got: typeof v }));
+      continue;
+    }
+    if (v !== 0) moved++;
+    const dir = isAdverse(k, v) ? 'take' : 'give';
+    // Cash is judged once, below, against whichever of its four bounds is
+    // tightest — so it is not judged twice here.
+    if (k === 'cash' && dir === 'take') continue;
+    const full = capFor(S, k, tone, dir);
+    const cap = scaleCap(full, k, scale);
+    if (Math.abs(v) > cap) {
+      const other = capFor(S, k, tone, dir === 'take' ? 'give' : 'take');
+      problems.push(problem(`${at}.${k}`, 'cap',
+        cap > 0
+          ? `${dir === 'take' ? 'the world may take' : 'the world may give'} at most ${cap} here`
+            + `${tone !== 'cruel' && tone !== 'costly' && scale === 1 ? ' — or mark the choice costly and try again' : ''}`
+          : full > 0
+            ? `${EFFECT_KEYS[k].label} is too coarse a thing for a reply — put it on a card`
+          : other > 0
+            ? `the world may ${dir === 'take' ? 'give' : 'take'} ${EFFECT_KEYS[k].label} here, never ${dir} it`
+            : `not in play in Act ${actOf(S)}`,
+        { limit: cap, got: v }));
+    } else if (k !== 'cash' && (isAdverse(k, v) || W.RUN_BUDGET?.[k] != null)) {
+      // The rolling budget: the ceiling stops one card being an outlier, this
+      // stops a hundred ordinary ones adding up to the same thing.
+      const b = budgetFor(S, k);
+      if (Math.abs(v) > b.left) {
+        problems.push(problem(`${at}.${k}`, 'budget',
+          b.run
+            ? (b.left > 0
+                ? `only ${Math.round(b.left)} of ${b.allowance} left for the whole run — it does not come back`
+                : `the world has spent its ${b.allowance} points of ${EFFECT_KEYS[k].label} for this run. The race is theirs to run from here`)
+            : b.left > 0
+              ? `only ${Math.round(b.left)} left in the last ${W.DRAIN_WINDOW_DAYS} days — take less, or cost them something else`
+              : `the world has spent this one${b.backOn ? `; it comes back on day ${b.backOn}` : ''}. Cost them something else`,
+          { limit: Math.round(b.left), got: v, ...(b.backOn ? { when: `day ${b.backOn}` } : {}) }));
+      }
+    }
+  }
+  // A choice with a cash cost the founder cannot survive is not a choice.
+  const cashP = cashProblem(`${at}.cash`, Number(fx.cash) || 0, S, tone, scale);
+  if (cashP) problems.push(cashP);
+  return moved;
+}
+
 function styleWarnings(card) {
   const out = [];
   const all = [card.body, ...(card.choices || []).map((c) => `${c.label} ${c.sub || ''} ${c.outcome || ''}`)].join(' ');
@@ -288,7 +378,6 @@ function styleWarnings(card) {
 
 export function validateCard(S, card) {
   const problems = [];
-  const act = actOf(S);
 
   // Structural: nothing else can be judged until the shape is right.
   if (!card || typeof card !== 'object') {
@@ -363,58 +452,7 @@ export function validateCard(S, card) {
       problems.push(problem(`${at}.effects`, 'required', 'every choice moves something — give it effects'));
       return;
     }
-    let moved = 0;
-    for (const [k, v] of Object.entries(fx)) {
-      if (k === 'flags') {
-        flagProblems(`${at}.effects.flags`, v, problems);
-        continue;
-      }
-      if (k === 'affinity' && !card.char) {
-        // Affinity is how somebody feels about the founder afterwards. With
-        // nobody on the card there is no somebody, and it would validate,
-        // count as a real movement, and then quietly do nothing.
-        problems.push(problem(`${at}.effects.affinity`, 'no_character',
-          'put a face on the card with `char`, or drop affinity'));
-        continue;
-      }
-      if (!keys.has(k)) {
-        problems.push(problem(`${at}.effects.${k}`, 'unknown_key',
-          `the world can move: ${[...keys].join(', ')}`, { got: k }));
-        continue;
-      }
-      if (!Number.isFinite(v)) {
-        problems.push(problem(`${at}.effects.${k}`, 'type', 'a signed number', { got: typeof v }));
-        continue;
-      }
-      if (v !== 0) moved++;
-      const dir = isAdverse(k, v) ? 'take' : 'give';
-      // Cash is judged once, by `cashProblem`, against whichever of its four
-      // bounds is tightest — so it is not judged twice here.
-      if (k === 'cash' && dir === 'take') continue;
-      const cap = capFor(S, k, c.tone, dir);
-      if (Math.abs(v) > cap) {
-        problems.push(problem(`${at}.effects.${k}`, 'cap',
-          cap > 0
-            ? `${dir === 'take' ? 'the world may take' : 'the world may give'} at most ${cap} here`
-              + `${c.tone !== 'cruel' && c.tone !== 'costly' ? ' — or mark the choice costly and try again' : ''}`
-            : `not in play in Act ${act}`,
-          { limit: cap, got: v }));
-      } else if (k !== 'cash' && isAdverse(k, v)) {
-        // The rolling budget: the ceiling stops one card being an outlier, this
-        // stops a hundred ordinary ones adding up to the same thing.
-        const b = budgetFor(S, k);
-        if (Math.abs(v) > b.left) {
-          problems.push(problem(`${at}.effects.${k}`, 'budget',
-            b.left > 0
-              ? `only ${Math.round(b.left)} left in the last ${W.DRAIN_WINDOW_DAYS} days — take less, or cost them something else`
-              : `the world has spent this one${b.backOn ? `; it comes back on day ${b.backOn}` : ''}. Cost them something else`,
-            { limit: Math.round(b.left), got: v, ...(b.backOn ? { when: `day ${b.backOn}` } : {}) }));
-        }
-      }
-    }
-    // A choice with a cash cost the founder cannot survive is not a choice.
-    const cashP = cashProblem(`${at}.effects.cash`, Number(fx.cash) || 0, S, c.tone);
-    if (cashP) problems.push(cashP);
+    const moved = effectProblems(S, `${at}.effects`, fx, c.tone, problems, { char: card.char, keys });
     if (!moved && !String(c.outcome || '').trim()) {
       problems.push(problem(at, 'empty', 'a choice that changes nothing and says nothing is not a choice'));
     }
@@ -456,7 +494,7 @@ export function validateCard(S, card) {
 
 // ── The smaller acts ────────────────────────────────────────────────────────
 
-export function validatePost(S, { char, text } = {}) {
+export function validatePost(S, { char, text, ask } = {}) {
   const problems = [];
   const cast = metCharacters(S);
   if (!cast.includes(char)) {
@@ -470,8 +508,114 @@ export function validatePost(S, { char, text } = {}) {
     problems.push(problem('', 'rate', 'let a day pass with advance_time',
       { limit: `${W.MAX_POSTS_PER_DAY} a day`, when: `day ${Math.ceil(S.time.day + 1)}` }));
   }
+  const replies = ask != null ? threadProblems(S, char, ask, problems) : null;
   return problems.length ? { ok: false, problems }
-                         : { ok: true, post: { char, text: String(text).trim() } };
+                         : { ok: true, post: { char, text: String(text).trim(),
+                                               ...(replies ? { ask: replies } : {}) } };
+}
+
+// What a reply in the Wire may move: the vocabulary minus the keys that are
+// infrastructure or the ending. Granted compute is permanent and the race is
+// decided by a handful of points; neither belongs behind a one-click reply.
+export function threadKeys(S) {
+  return allowedKeys(S).filter((k) => !W.THREAD_EXCLUDE.includes(k));
+}
+
+// The rules, once more, at the moment an effect actually lands. A card, a
+// proposal or a reply is judged when it is written and lands when the founder
+// presses something — and between the two they may have earned an immunity,
+// another card may have spent the same budget, or the money may have gone.
+// Nothing written earlier gets to bypass what is true now: a key that has
+// left the world's hand is dropped, and a cost is held to what is left of its
+// budget or the cash floor. Returns the bounded effects and what was held.
+export function boundEffects(S, effects = {}) {
+  const keys = new Set(allowedKeys(S));
+  const out = {};
+  const held = [];
+  for (const [k, v] of Object.entries(effects || {})) {
+    if (k === 'flags') { if (Array.isArray(v) && v.length) out.flags = v; continue; }
+    if (!Number.isFinite(v) || v === 0) continue;
+    if (!keys.has(k)) { held.push(`${k}: no longer the world's to move`); continue; }
+    let n = v;
+    if (k === 'cash' && v < 0) {
+      const limit = cashFloor(S).limit;
+      if (-v > limit) { n = -limit; held.push(`cash: held to the floor (${money(limit)})`); }
+    } else if (isAdverse(k, v) || W.RUN_BUDGET?.[k] != null) {
+      const left = budgetFor(S, k).left;
+      if (Math.abs(v) > left) {
+        const mag = EFFECT_KEYS[k].unit === 'ratio' ? Math.floor(left * 1000) / 1000 : Math.floor(left);
+        n = Math.sign(v) * mag;
+        held.push(`${k}: held to what is left of the budget (${mag})`);
+      }
+    }
+    if (n !== 0) out[k] = n;
+  }
+  return { effects: out, held };
+}
+
+// World-written threads still waiting on the founder. The Wire is a surface
+// they play, not a queue they owe the world.
+export function openWorldThreads(S) {
+  return (S?.feed || []).filter((f) => f.thread && !f.resolved && Array.isArray(f.runtime?.opts)).length;
+}
+
+// A post that asks something: two or three one-click replies, each with a
+// small consequence. Judged like a card's choices at a fraction of the
+// ceilings, because the Wire is where the small stakes live — and with the
+// same door rule, because a question with no harmless answer is a card in a
+// smaller font.
+function threadProblems(S, char, ask, problems) {
+  if (!Array.isArray(ask) || ask.length < W.THREAD_ASK_MIN || ask.length > W.THREAD_ASK_MAX) {
+    problems.push(problem('ask', 'count',
+      `give the founder ${W.THREAD_ASK_MIN} or ${W.THREAD_ASK_MAX} replies`,
+      { limit: `${W.THREAD_ASK_MIN}–${W.THREAD_ASK_MAX}`, got: Array.isArray(ask) ? ask.length : typeof ask }));
+    return null;
+  }
+  const open = openWorldThreads(S);
+  if (open >= W.MAX_OPEN_WORLD_THREADS) {
+    problems.push(problem('ask', 'rate',
+      'the founder has not answered the last one — post without ask, or wait',
+      { limit: `${W.MAX_OPEN_WORLD_THREADS} open at once`, got: open }));
+  }
+  // Small stakes only: nothing permanent and nothing that reaches the ending.
+  const keys = new Set(threadKeys(S));
+  const labels = new Set();
+  const out = [];
+  ask.forEach((o, i) => {
+    const at = `ask[${i}]`;
+    if (!o || typeof o !== 'object') {
+      problems.push(problem(at, 'required', 'each reply is an object with label, outcome and effects'));
+      return;
+    }
+    checkProse(`${at}.label`, o.label, W.LABEL_MAX, problems);
+    checkProse(`${at}.outcome`, o.outcome, W.THREAD_OUT_MAX, problems);
+    const key = String(o.label || '').trim().toLowerCase();
+    if (labels.has(key)) problems.push(problem(`${at}.label`, 'duplicate', 'two replies cannot say the same thing'));
+    labels.add(key);
+    if (o.effects == null || typeof o.effects !== 'object' || Array.isArray(o.effects)) {
+      problems.push(problem(`${at}.effects`, 'required',
+        'an object of named fields, e.g. { "rep": 3, "focus": -1 } — empty is fine, missing is not',
+        { got: o.effects === undefined ? 'missing' : typeof o.effects }));
+      return;
+    }
+    const fx = o.effects;
+    effectProblems(S, `${at}.effects`, fx, 'neutral', problems, { char, keys, scale: W.THREAD_CAP_MULT });
+    out.push({
+      label: String(o.label || '').trim(),
+      out: String(o.outcome || '').trim(),
+      effects: Object.fromEntries(Object.entries(fx).filter(
+        ([k, v]) => k === 'flags' ? Array.isArray(v) && v.length : Number.isFinite(v) && v !== 0)),
+    });
+  });
+  for (const key of W.PROTECTED) {
+    if (!keys.has(key) || !out.length) continue;
+    if (out.every((o) => isAdverse(key, Number(o.effects?.[key]) || 0))) {
+      problems.push(problem(`ask[].effects.${key}`, 'no_way_out',
+        `leave ${EFFECT_KEYS[key].label} alone on at least one reply — the founder must always have a door`,
+        { limit: 'one reply must not be adverse', got: 'all of them are' }));
+    }
+  }
+  return out;
 }
 
 export function validateShock(S, { kind, days } = {}) {
@@ -515,6 +659,18 @@ export function validatePressure(S, { heat, line } = {}) {
   const cap = capFor(S, 'heat', 'risky');
   if (!Number.isFinite(h) || h === 0) problems.push(problem('heat', 'required', 'a signed number of heat'));
   else if (Math.abs(h) > cap) problems.push(problem('heat', 'cap', `clamp to ±${cap}`, { limit: cap, got: h }));
+  else if (h > 0) {
+    // Turning it up is adverse, and adverse things are on the rolling budget
+    // whether they arrive on a card or through this tool.
+    const b = budgetFor(S, 'heat');
+    if (h > b.left) {
+      problems.push(problem('heat', 'budget',
+        b.left > 0
+          ? `only ${Math.round(b.left)} left in the last ${W.DRAIN_WINDOW_DAYS} days — turn it up less, or wait`
+          : `the world has turned the heat as far as it may this month${b.backOn ? `; it comes back on day ${b.backOn}` : ''}`,
+        { limit: Math.round(b.left), got: h, ...(b.backOn ? { when: `day ${b.backOn}` } : {}) }));
+    }
+  }
   checkProse('line', line, W.LINE_MAX, problems);
   if (S._offline) problems.push(problem('', 'offline', 'the founder is away — wait for catch-up'));
   return problems.length ? { ok: false, problems }
@@ -553,25 +709,9 @@ export function validateProposal(S, { outcome, effects, tone = 'neutral' } = {})
       'an object of named fields, e.g. { "cash": -2000, "rep": 8 }', { got: typeof effects }));
   }
   const fx = effects && typeof effects === 'object' && !Array.isArray(effects) ? effects : {};
-  for (const [k, v] of Object.entries(fx)) {
-    if (k === 'flags') { flagProblems('effects.flags', v, problems); continue; }
-    if (k === 'affinity' && !active?.char) {
-      problems.push(problem('effects.affinity', 'no_character',
-        'nobody is on that card — drop affinity'));
-      continue;
-    }
-    if (!keys.has(k)) { problems.push(problem(`effects.${k}`, 'unknown_key', `the world can move: ${[...keys].join(', ')}`, { got: k })); continue; }
-    if (!Number.isFinite(v)) { problems.push(problem(`effects.${k}`, 'type', 'a signed number', { got: typeof v })); continue; }
-    if (k === 'cash' && isAdverse('cash', v)) continue;      // judged once, below
-    const dir = isAdverse(k, v) ? 'take' : 'give';
-    const cap = capFor(S, k, tone, dir);
-    if (Math.abs(v) > cap) {
-      problems.push(problem(`effects.${k}`, 'cap',
-        `${dir === 'take' ? 'take' : 'give'} at most ${cap} here`, { limit: cap, got: v }));
-    }
-  }
-  const cashP2 = cashProblem('effects.cash', Number(fx.cash) || 0, S, tone);
-  if (cashP2) problems.push(cashP2);
+  // The same judge a card's choice gets — ceilings, the rolling budget and
+  // the cash floor. An answer typed by the founder is still the world's cost.
+  effectProblems(S, 'effects', fx, tone, problems, { char: active?.char || null, keys });
   if (!active) {
     problems.push(problem('', 'no_card', 'there is no card open — the founder has nothing to answer'));
   }

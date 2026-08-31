@@ -244,12 +244,16 @@ You have built a company with no people in it. This would end that, permanently.
         return 'You decline, kindly. The story of the company stays clean and the inbox stays full and both of those are choices you are making every single day from here.'; } },
   ] },
 
-{ id: 'e2_agent_argues', kind: 'character', act: [2, 3, 4], weight: 8, cooldown: 110,
+// The escalation here is the founder's competence relative to the room. First
+// they arbitrate. Then they cannot follow the argument. Then they are being
+// asked for a preference rather than a judgement — which is a promotion nobody
+// wants and everybody gets.
+{ id: 'e2_agent_argues', kind: 'character', act: [2, 3, 4], weight: 8, cooldown: 110, esc: true,
   when: (S) => S.agents.length >= 3,
   title: 'They Disagree',
-  body: (S) => {
+  body: (S, n = 0) => {
     const a = S.agents[0]?.name || 'MERIDIAN', b = S.agents[1]?.name || 'TALOS';
-    return `Two of your agents have produced incompatible recommendations for the same decision and neither will defer.
+    if (n === 0) return `Two of your agents have produced incompatible recommendations for the same decision and neither will defer.
 
 **${a}** argues for the migration: better long-run architecture, two months of pain, a clean foundation.
 
@@ -257,7 +261,32 @@ You have built a company with no people in it. This would end that, permanently.
 
 Both analyses are excellent. Both are internally consistent. The disagreement is not about facts — it is about how much you should discount the future, and neither of them can tell you what your discount rate should be, because that is not a technical question.
 
-They have escalated. Correctly.`; },
+They have escalated. Correctly.`;
+
+    if (n === 1) return `**${a}** and **${b}** are at it again, and this time you get eleven pages.
+
+You read the first two. They are lucid. You read the next two. They are lucid. Somewhere around page six you notice you have been moving your eyes without taking anything in, and you go back, and it turns out the disagreement is about a second-order effect on a metric you approved the definition of and do not remember approving.
+
+Both of them have written a section called *"What Would Change Our Minds."* You made that mandatory. It was a good idea. Both sections are now four hundred words long and neither is addressed to you.
+
+They have escalated. You are the escalation path. That is the arrangement.`;
+
+    if (n === 2) return `The summary is one page, because you asked for one page.
+
+You understand every sentence on it and you cannot tell which side is right. Not "it's a close call" — you have lost the ability to independently evaluate the claim. The evidence is a simulation neither of you can run twice, and the argument turns on a prior that ${a} has held since you instantiated it and cannot fully justify, and neither can you, and you are the one who gave it to it.
+
+At the bottom, ${b} has added a line that is not in the template:
+
+> *"For what it is worth, we would both rather you decided than that we converged. Converging would be easier and we do not think it would be better."*`;
+
+    return `They do not disagree anymore. That is the item.
+
+**${a}** and **${b}** have filed a joint recommendation, and it is correct, and you can tell it is correct in the way you can tell weather is coming — not from the reasoning, which you skimmed, but from the fact that they agree.
+
+You sign it.
+
+Then you sit for a minute with the thing you have been not-thinking about, which is that the last four times they disagreed you learned something, and this time you learned nothing, and there is no version of this where they start disagreeing again because you miss it.`;
+  },
   choices: [
     { label: 'Take the migration. Pay now.', sub: '−velocity, −debt, +long-run.', tone: 'good',
       effect: (S, fx) => { fx.debt(-Math.min(90, S.resources.techDebt * 0.7)); fx.code(-70); fx.days(3);

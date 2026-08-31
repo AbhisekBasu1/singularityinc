@@ -20,6 +20,7 @@ import path from 'node:path';
 const OUT = process.env.SHOT_OUT || '/tmp/shots';
 const PORT = Number(process.env.PORT || 5198);
 const BASE = `http://localhost:${PORT}`;
+const ROUTE = (process.env.ROUTE || '/').replace(/\/?$/, '/');
 const WIDTH = Number(process.env.WIDTH || 1440);
 const HEIGHT = Number(process.env.HEIGHT || 900);
 
@@ -208,9 +209,9 @@ const shoot = async (name) => {
 };
 
 try {
-  await page.goto(`${BASE}/?notut=1`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}${ROUTE}?notut=1`, { waitUntil: 'networkidle' });
   await page.evaluate(() => { try { localStorage.clear(); } catch {} });
-  await page.goto(`${BASE}/?notut=1`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}${ROUTE}?notut=1`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(400);
 
   console.log('\n── the opening ──');
@@ -316,16 +317,31 @@ try {
   await page.fill('.own-words-textarea', founderMove);
   ok('typing enables Send to world', !(await page.$eval('.own-words-send', (el) => el.disabled)));
   await page.click('.own-words-send');
-  const heard = await page.evaluate(() => window.__founderWait);
+  // Something may have been queued before the wait opened — an objective
+  // completing, a milestone — and it is delivered first, as it should be. The
+  // assistant re-calls, as every result tells it to, and the typed move is
+  // what comes next: the founder's words wait on the card until it does.
+  let heard = await page.evaluate(() => window.__founderWait);
+  for (let i = 0; i < 6 && heard?.status !== 'founder_said'; i++) {
+    heard = await page.evaluate(() => window.__mcp.call('wait_for_world'));
+  }
   ok('the waiting world receives the move', heard.status === 'founder_said', JSON.stringify(heard).slice(0, 180));
   ok('word for word', heard.founder_words === founderMove, heard.founder_words);
   ok('the card becomes a live waiting state', await page.$('.own-words-pending'));
 
-  const proposed = await page.evaluate((submissionId) => window.__mcp.call('answer_in_own_words', {
-    submission_id: submissionId,
-    outcome: 'You reply at 2am with a numbered list of your own. The author edits their post to link it.',
-    tone: 'risky', effects: { rep: 5, focus: -6 },
-  }), heard.submission_id);
+  // The typed move reshapes answer_in_own_words — its schema now names the
+  // submission — and a call that lands while the registry is swapping it is
+  // told, by design, to call again. Do what the result says, once or twice.
+  let proposed = null;
+  for (let i = 0; i < 4; i++) {
+    proposed = await page.evaluate((submissionId) => window.__mcp.call('answer_in_own_words', {
+      submission_id: submissionId,
+      outcome: 'You reply at 2am with a numbered list of your own. The author edits their post to link it.',
+      tone: 'risky', effects: { rep: 5, focus: -6 },
+    }), heard.submission_id);
+    if (!(proposed?.status === 'refused' && proposed?.rule === 'stale' && /replaced/.test(proposed?.next || ''))) break;
+    await page.waitForTimeout(150);
+  }
   ok('it needs a human hand', proposed.status === 'needs_human', JSON.stringify(proposed).slice(0, 180));
   await page.waitForTimeout(600);
   const prop = await page.evaluate(() => ({
@@ -458,7 +474,13 @@ try {
   // floor passes; if that lands inside the window below, the clock stops for
   // a card and the check misreads it as a frozen clock. Restart the floor.
   const waitStart = await page.evaluate(() => { window.S.narrative.lastEventReal = Date.now(); return window.S.time.day; });
+  // Everything the founder did above — the Accept, the button on the second
+  // card — was queued for the world, and a wait opened now would be answered
+  // with it at once, correctly. This step is about a wait with nothing to
+  // say; an assistant that had been on duty would have read all of it.
   const pending = await page.evaluate(() => {
+    window.S.world.author.inbox.length = 0;
+    window.S.world.author.routinePending = null;
     window.__waitDone = null;
     window.__mcp.call('wait_for_world', {}).then((r) => { window.__waitDone = r; });
     return true;
@@ -473,16 +495,33 @@ try {
   }));
   ok('the clock kept running while it waited', during.day > waitStart,
      `${waitStart.toFixed(1)} → ${during.day.toFixed(1)}`);
-  ok('it is still pending, not resolved', during.done === null, JSON.stringify(during.done));
-  ok('the console says ON DUTY', during.status === 'ON DUTY', String(during.status));
+  // Meaningful play wakes the wait — an objective completing on its own at 4×
+  // counts — so the wait is either still open or back with the founder's own
+  // play in hand. What it may never be is cancelled, muted, or an error.
+  const FOUNDER = ['company_changed', 'founder_acted', 'founder_activity', 'founder_chose', 'founder_accepted'];
+  ok('it is pending, or returned for the founder\'s own play',
+     during.done === null || FOUNDER.includes(during.done?.status), JSON.stringify(during.done));
+  ok('and the console says so', during.done === null ? during.status === 'ON DUTY' : during.status === 'PLAYING',
+     String(during.status));
   ok('and the founder can still act', during.clickable);
   // The founder does something, which is the point. Time was running at 4x, so
   // stop the clock first or the written deck keeps putting cards up faster than
   // this can answer them — and then answer whatever is on screen, the way a
-  // person would. The wait is still open throughout.
+  // person would. A card answered while the world is on duty comes back
+  // through the wait; with no card to answer, the wait stays open.
   await page.evaluate(() => { window.S.settings.paused = true; });
+  const hadCard = await page.evaluate(() => !!window.S.narrative.activeEvent);
+  if (during.done !== null) {
+    await page.evaluate(() => {
+      window.__waitDone = null;
+      window.__mcp.call('wait_for_world', {}).then((r) => { window.__waitDone = r; });
+    });
+  }
   await clearCard();
-  ok('the wait survived all of that', await page.evaluate(() => window.__waitDone === null));
+  await page.waitForTimeout(120);
+  const afterCard = await page.evaluate(() => window.__waitDone);
+  ok(hadCard ? 'the answered card came back through the wait' : 'with nothing to answer, the wait stayed open',
+     hadCard ? afterCard?.status === 'founder_chose' : afterCard === null, JSON.stringify(afterCard));
   const code0 = await page.evaluate(() => window.S.resources.code);
   await page.click('[data-act="do"][data-v="code"]');
   await page.waitForTimeout(400);
@@ -678,9 +717,9 @@ try {
       }
     });
     const t0 = Date.now();
-    await p2.goto(`${BASE}/?notut=1${q}`, { waitUntil: 'networkidle' });
+    await p2.goto(`${BASE}${ROUTE}?notut=1${q}`, { waitUntil: 'networkidle' });
     await p2.evaluate(() => { try { localStorage.clear(); } catch {} });
-    await p2.goto(`${BASE}/?notut=1${q}`, { waitUntil: 'networkidle' });
+    await p2.goto(`${BASE}${ROUTE}?notut=1${q}`, { waitUntil: 'networkidle' });
     for (let i = 0; i < 10; i++) {
       const b = await p2.$('[data-act="start-game"], [data-act="beat-next"], [data-act="choose-arch"], [data-act="choose-cat"], [data-act="new-game"]');
       if (!b) break;

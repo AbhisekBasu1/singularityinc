@@ -145,6 +145,19 @@ export const SFX = {
   project: () => { tone({ freq: NOTE.C3, type: 'sine', peak: 0.14, a: 0.03, d: 0.8 });
                    noise({ peak: 0.08, d: 0.5, freq: 300, type: 'lowpass' }); },
   tick:    () => { tone({ freq: 900, type: 'sine', peak: 0.03, a: 0.001, d: 0.02 }); },
+
+  // ── The workstation ──────────────────────────────────────────────────────
+  // Three cues for a machine with windows in it. A latch when one opens, the
+  // same latch released when one goes away, and a notification quieter than
+  // the one an event card gets — the chrome must never sound as important as
+  // the game.
+  window:  () => { tone({ freq: 620, type: 'triangle', peak: 0.07, a: 0.001, d: 0.04 });
+                   tone({ freq: NOTE.E5, type: 'sine', peak: 0.05, a: 0.004, d: 0.09, t: 0.04 });
+                   noise({ peak: 0.025, d: 0.025, freq: 3400, type: 'highpass' }); },
+  minimize:() => { noise({ peak: 0.035, d: 0.07, freq: 2600, type: 'highpass' });
+                   tone({ freq: 430, type: 'triangle', peak: 0.045, a: 0.001, d: 0.07, glide: 0.6 }); },
+  notify:  () => { tone({ freq: NOTE.G5, type: 'sine', peak: 0.06, a: 0.004, d: 0.08 });
+                   tone({ freq: NOTE.D5, type: 'sine', peak: 0.055, a: 0.004, d: 0.11, t: 0.045 }); },
 };
 
 // ── Ambient bed ────────────────────────────────────────────────────────────

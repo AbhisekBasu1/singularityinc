@@ -15,7 +15,9 @@ export async function makeBot(root = '../src/') {
   const { startProject, availableProjects } = await import(root + 'systems/projects.js');
   const { availableRounds, raiseOffer, acceptRound } = await import(root + 'systems/economy.js');
 
-  function step(s, { answerCards = true } = {}) {
+  // `choose(n)` picks the deck card's button; without one the bot rolls its
+  // own dice, which is fine for a sample and useless for a pair.
+  function step(s, { answerCards = true, choose = null } = {}) {
     // A first run parks the clock for the walkthrough and a session releases it
     // two seconds later. There is no session here.
     if (s.tutorialHold) s.tutorialHold = false;
@@ -34,7 +36,7 @@ export async function makeBot(root = '../src/') {
     if (s.agents.length < maxAgents(s) && s.company.cash > hireCost(s) * 3) hireAgent(s, rollCandidate(s));
     if (answerCards && s.narrative.activeEvent && !s.narrative.activeEvent.outcome) {
       const n = s.narrative.activeEvent.choices.length;
-      if (n) resolveChoice(s, Math.floor(Math.random() * n));
+      if (n) resolveChoice(s, choose ? choose(n) : Math.floor(Math.random() * n));
       dismissEvent(s);
     }
     const rounds = availableRounds(s);

@@ -195,6 +195,26 @@ export function tickRace(S, days, m = computeMods(S)) {
 }
 
 export function raceLeader(S) { return raceStandings(S)[0]; }
+
+// The one hand outside this file that may move a rival lab: a world card,
+// through the bounded `race` effect. Positive is the leading living rival
+// gaining ground; negative is a setback for them. It never touches the
+// founder's own progress, never a race already decided, and never carries a
+// lab over the line — `WORLD_LAB_CEILING` is as far as the world reaches, and
+// the last point is the lab's own.
+export function nudgeRivalFrontier(S, n) {
+  const r = S.world?.race;
+  if (!r || r.crossed || !Number.isFinite(n) || n === 0) return null;
+  const leader = LABS.filter((l) => r.labs[l.id]?.alive)
+    .sort((a, b) => r.labs[b.id].progress - r.labs[a.id].progress)[0];
+  if (!leader) return null;
+  const st = r.labs[leader.id];
+  const before = st.progress;
+  st.progress = n > 0
+    ? Math.max(before, Math.min(before + n, RACE.WORLD_LAB_CEILING))
+    : Math.max(0, before + n);
+  return { lab: leader, before, progress: st.progress };
+}
 export function playerRank(S) {
   const rows = raceStandings(S);
   return rows.findIndex((x) => x.you) + 1;

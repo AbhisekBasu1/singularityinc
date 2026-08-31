@@ -24,9 +24,34 @@ let setViewFn = null;       // injected to avoid a cycle with shell.js
 let getViewFn = null;
 let onEndFn = null;
 let escHandler = null;
+let aliasFn = null;         // the housing's name for a chrome anchor
+let osMode = false;         // the workstation is up: steps may override themselves
 
-export function registerShell({ setView, getView, onEnd }) {
+export function registerShell({ setView, getView, onEnd, alias, os, showing }) {
   setViewFn = setView; getViewFn = getView; onEndFn = onEnd;
+  aliasFn = alias || null;
+  osMode = !!os;
+  showingFn = showing || null;
+}
+let showingFn = null;
+
+// "Is what this step teaches on the glass?" The console answers by comparing
+// the current view; the workstation by whether that window is open and in
+// front. Asking the housing rather than assuming one is what lets a step point
+// at the Wire, which is a rail in one and a window in the other.
+function onGlass(id) {
+  if (!id) return true;
+  if (showingFn) { try { return !!showingFn(id); } catch { return false; } }
+  return getViewFn?.() === id;
+}
+
+// A step spotlights a CSS selector, and two housings put the same thing in two
+// places — the console's `#nav` is the workstation's `#dock`. The authored
+// selector stays the one thing every tool and test knows; the housing is asked
+// what it calls it, at the moment it is looked up.
+export function anchorSel(a) {
+  if (!a) return a;
+  try { return (aliasFn ? aliasFn(a) : a) || a; } catch { return a; }
 }
 
 export function isActive() { return !!chapter; }
@@ -139,7 +164,7 @@ export function spotlightAnchorHelp() {
 
 export function spotlight({ anchor, title, body, place = 'bottom', view }) {
   if (chapter) return { ok: false, reason: 'a walkthrough is already open' };
-  const target = anchor && document.querySelector(anchor);
+  const target = anchor && document.querySelector(anchorSel(anchor));
   if (!target) {
     return { ok: false, reason: 'that panel is not on the founder\u2019s screen — show_module first' };
   }
@@ -197,12 +222,19 @@ function mount() {
 }
 
 // ── Steps ──────────────────────────────────────────────────────────────────
-function step() { return chapter?.steps[index]; }
+// A step, with the workstation's overrides folded in when it is the housing.
+// `os` on a step is the only place the authored walkthrough knows two shells
+// exist, and it carries nothing but words and a selector.
+function step() {
+  const st = chapter?.steps[index];
+  if (!st) return st;
+  return osMode && st.os ? { ...st, ...st.os } : st;
+}
 
 function showStep() {
   const st = step();
   if (!st) return end();
-  if (st.view && getViewFn?.() !== st.view) setViewFn?.(st.view);
+  ensureStepView(st, true);
   paintCard();
   lastAnchorMiss = 0;
   place();
@@ -210,11 +242,46 @@ function showStep() {
   sfx('click');
 }
 
+// A walkthrough can survive a hot reload, a delayed modal close, or another
+// repaint that restores the previous module. Do not leave a centred, fully
+// blocking card whose live target is on a different tab: restore the tab the
+// current step teaches, then let the normal anchor retry find its target.
+//
+// `tick()` calls this on every animation frame, which makes it a loaded gun: a
+// step whose view never satisfies `onGlass` re-runs a whole housing switch at
+// 60Hz. That is not hypothetical — the docked Wire could not satisfy it, and
+// step 14 of First Light ran `setView('wire')` (a full `applyAll` plus three
+// repaints) every frame until Firefox gave up. The predicate is fixed, but the
+// throttle is what stops the next one being a lock-up instead of a slow step:
+// a safety net does not need to run at frame rate, and one that cannot succeed
+// must stop trying rather than spin.
+const ENSURE_THROTTLE = 400;   // ms between unforced re-attempts
+const ENSURE_GIVE_UP = 6;      // attempts before this step stops asking
+let ensureKey = '';
+let ensureAt = 0;
+let ensureTries = 0;
+
+function ensureStepView(st, force = false) {
+  if (!st?.view || onGlass(st.view)) return true;
+  const key = `${index}:${st.view}`;
+  const now = performance.now();
+  if (key !== ensureKey) { ensureKey = key; ensureAt = 0; ensureTries = 0; }
+  if (force) { ensureTries = 0; }
+  else {
+    if (ensureTries >= ENSURE_GIVE_UP) return false;
+    if (now - ensureAt < ENSURE_THROTTLE) return false;
+  }
+  ensureAt = now;
+  ensureTries++;
+  setViewFn?.(st.view);
+  return onGlass(st.view);
+}
+
 // A lesson below the fold is no lesson. Give the view a moment to repaint
 // after a module switch, then bring the target onto the glass.
 function scrollAnchorIntoView(st, tries = 0) {
   if (!st?.anchor) return;
-  const el = document.querySelector(st.anchor);
+  const el = document.querySelector(anchorSel(st.anchor));
   if (!el) { if (tries < 8) setTimeout(() => scrollAnchorIntoView(st, tries + 1), 90); return; }
   if (isFullyVisible(el)) return;
   // A partly clipped target only needs a small nudge; a target that is wholly
@@ -244,7 +311,7 @@ function satisfied(st, ev) {
   const a = st.advance;
   if (!a) return false;
   if (a.act) return ev?.type === 'act' && ev.act === a.act && (!a.v || ev.v === a.v);
-  if (a.view) return getViewFn?.() === a.view;
+  if (a.view) return onGlass(a.view);
   if (a.pred) { try { return !!a.pred(S); } catch { return false; } }
   return false;
 }
@@ -278,7 +345,7 @@ function place() {
   const st = step();
   if (!st?.anchor) { lastAnchorMiss = 0; layout(null); return; }
 
-  const el = document.querySelector(st.anchor);
+  const el = document.querySelector(anchorSel(st.anchor));
   if (el && isVisible(el)) { lastAnchorMiss = 0; layout(el.getBoundingClientRect()); return; }
 
   // Not ready. It is probably mid-scroll or mid-repaint, so hold the last
@@ -291,8 +358,9 @@ function place() {
 
 function tick() {
   if (!chapter || !root) return;
-  place();
   const st = step();
+  ensureStepView(st);
+  place();
   // Non-click advance conditions are polled.
   if (st?.advance && !st.advance.act && satisfied(st)) { advance(); }
   raf = requestAnimationFrame(tick);
@@ -303,12 +371,21 @@ function isVisible(el) {
   return r.width > 4 && r.height > 4 && r.bottom > 0 && r.top < window.innerHeight;
 }
 
+// The console scrolls a module inside `.main`; the workstation scrolls that
+// same module inside its window body. Both are the operative viewport for a
+// tutorial target. Falling back to the page is only correct for chrome such as
+// the menu bar and dock, which have no scrolling ancestor of their own.
+function scrollHost(el) {
+  return el.closest?.('.main, .win-body') || null;
+}
+
 // Intersecting the viewport is enough to draw the spotlight, but not enough to
 // teach from: the whole anchor needs to clear both the window and the scrolling
-// game surface. This catches panels whose last rows sit below `.main`.
+// game surface. This catches panels whose last rows sit below `.main` or a
+// workstation window.
 function isFullyVisible(el, inset = 12) {
   const r = el.getBoundingClientRect();
-  const scroller = el.closest?.('.main');
+  const scroller = scrollHost(el);
   const clip = scroller?.getBoundingClientRect?.();
   const top = Math.max(0, clip?.top ?? 0) + inset;
   const bottom = Math.min(window.innerHeight, clip?.bottom ?? window.innerHeight) - inset;
@@ -317,7 +394,7 @@ function isFullyVisible(el, inset = 12) {
 
 function nudgeFullyIntoView(el, inset = 12) {
   const r = el.getBoundingClientRect();
-  const scroller = el.closest?.('.main');
+  const scroller = scrollHost(el);
   const clip = scroller?.getBoundingClientRect?.();
   const top = Math.max(0, clip?.top ?? 0) + inset;
   const bottom = Math.min(window.innerHeight, clip?.bottom ?? window.innerHeight) - inset;

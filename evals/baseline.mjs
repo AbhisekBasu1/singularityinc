@@ -31,14 +31,23 @@ const { capFor, capSummary } = await import('../src/world/validate.js');
 const { RESEARCH, RESEARCH_MAP } = await import('../src/data/research.js');
 const { WORLD_AUTHOR: W } = await import('../src/data/balance.js');
 
+// Seeded, so the table below is the same table every time it is printed.
 const s = bot.Game.startNewGame({ founderName: 'Ada', companyName: 'Meridian', archetype: 'hacker',
-                                  category: 'devtools', productName: 'Meridian' });
+                                  category: 'devtools', productName: 'Meridian', seed: 4242 });
 bot.Loop.stop();
 s.tutorialHold = false;   // a session releases this; nothing here does
 await MCP.boot();
-bot.play(s, 320);
+// Pinned all the way down: the bot's own card answers come from a stream of
+// this file's, not from Math.random.
+let x = 4242;
+const choose = (n) => { x = (x * 1664525 + 1013904223) >>> 0; return Math.floor((x / 4294967296) * n); };
+bot.play(s, 320, { choose });
 s.company.act = Math.max(3, s.company.act);
-for (const id of ['vance', 'priya', 'sam']) {
+// The whole cast, as `select.mjs` does it. With exactly five voices the hand
+// is full at sixteen and the teaching tools are the ones that give way — so a
+// run that happened to meet two people fewer would have no `explain_term` to
+// probe. Meeting everyone collapses the voices into one tool and settles it.
+for (const id of ['vance', 'priya', 'crane', 'sam', 'yuki', 'dorne', 'kai', 'weaver', 'nullptr']) {
   s.narrative.relationships[id] = { met: true, affinity: 2, respect: 1, fear: 0, arc: 2 };
 }
 await MCP.surface.reconcile(s, 'baseline');

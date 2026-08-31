@@ -13,7 +13,7 @@ import { nextActHint } from './progression.js';
 import { activeProduct, rel } from '../engine/state.js';
 import { RESEARCH_MAP } from '../data/research.js';
 import { fmt, money, pct, clamp } from '../engine/format.js';
-import { pick } from '../engine/rng.js';
+
 
 // Voice shifts with the relationship and the act.
 function register(S) {
@@ -50,6 +50,23 @@ const CLOSERS = {
   vast: ['None of this is urgent in the way you feel it is.', 'The window is wider than it looks. Not infinite.'],
   intimate: ['Go to sleep after this one.', 'You do not have to fix all of it today.'],
 };
+
+// `askAria` is called from a *render* path — the console builds a dialog from it
+// and the workstation repaints her whole window from it about seven times a
+// second — so these two lines cannot be drawn with `pick()`. They were, and it
+// cost two things: the sentence at the top of her window changed on every
+// frame, which is the flicker you can see, and reading her window quietly
+// advanced the shared seeded RNG fourteen times a second, which is the one you
+// cannot. A render must never take from that stream: it is what `parity.mjs`
+// compares, and it decides every event draw and market roll after it.
+//
+// Indexed by the day instead. Stable for as long as you are reading it,
+// different tomorrow, and it costs nothing.
+function voiceLine(list, S, salt) {
+  if (!list?.length) return '';
+  const day = Math.max(0, Math.floor(S?.time?.day || 0));
+  return list[(day * 31 + salt) % list.length];
+}
 
 // Each finding: { severity, title, text }. Higher severity floats to the top.
 export function askAria(S) {
@@ -175,8 +192,8 @@ export function askAria(S) {
   const reg = register(S);
   return {
     register: reg,
-    opener: pick(OPENERS[reg]),
-    closer: pick(CLOSERS[reg]),
+    opener: voiceLine(OPENERS[reg], S, 0),
+    closer: voiceLine(CLOSERS[reg], S, 5),
     findings: f.slice(0, 5),
     headline: f.length ? f[0].title : 'Nothing material',
   };

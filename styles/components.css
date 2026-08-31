@@ -71,7 +71,15 @@
 .btn-ghost:hover:not(:disabled) { background: var(--panel); }
 .btn-icon { padding: 7px; width: 32px; height: 32px; }
 
-/* Action buttons (the clicker layer) */
+/* Action buttons (the clicker layer).
+
+   The button is wrapped in a slot because a disabled `<button>` fires no
+   `contextmenu`, and the workstation's right-click on a *blocked* action is the
+   one that says what it needs. The slot is the grid item and the button fills
+   it, so the layout is exactly what it was. */
+.action-slot { display: flex; min-width: 0; }
+.action-slot > .action-btn { flex: 1 1 auto; }
+
 .action-btn {
   display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
   padding: 13px 15px; border-radius: var(--radius);

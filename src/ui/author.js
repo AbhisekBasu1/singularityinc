@@ -30,6 +30,26 @@ let demoLine = '';        // what the scripted world is 'saying' right now
 
 // ── The pieces ──────────────────────────────────────────────────────────────
 
+// The hand an assistant would arrive with, supplied from outside rather than
+// imported: the only thing that knows it is `intro.js`, and reaching for it
+// from here would put this module in a cycle with the whole WebMCP surface —
+// `ui/author.js → intro.js → webmcp/index.js → surface.js → tools.js →
+// ui/author.js` — which leaves a binding undefined at evaluation time and
+// breaks tool execution, not rendering, so it fails a long way from here.
+// Registered the same way the world chip and the saved-ago line are.
+//
+// It builds a throwaway state to ask the surface what it would publish, so it
+// is computed once rather than on every 480ms repaint.
+let handFn = null;
+let handMemo;
+export function registerHand(fn) { handFn = fn || null; handMemo = undefined; }
+function cachedHand() {
+  if (handMemo === undefined) {
+    try { handMemo = handFn ? handFn() : null; } catch { handMemo = null; }
+  }
+  return handMemo && (handMemo.tools?.length || handMemo.later?.length) ? handMemo : null;
+}
+
 function statusOf() {
   const st = MCP.status();
   const muted = !!S?.world?.author?.muted;
@@ -70,12 +90,21 @@ export function panelBody({ full = false } = {}) {
   const calls = st.calls.slice(0, full ? 14 : 6);
   const w = S?.world?.author?.stats || {};
 
-  const head = `<div class="wc-status ${s.tone}">
+  // In the rail the console sits above the feed, and the feed is where the
+  // decisions are. When there is no world layer to show, the sub-line is a
+  // browser requirements list — five lines of what you cannot do, permanently,
+  // at the top of the most valuable column in the game. It moves to the status
+  // row's tooltip and to the Uplink window, which is the full panel; the line
+  // that stays is the one a player actually needs, which is that they are not
+  // missing the game. Every other tier keeps its sub-line: those say what the
+  // world is *doing*, and that is worth the room.
+  const terse = !full && st.tier === 'none';
+  const head = `<div class="wc-status ${s.tone}"${terse ? ` data-tip="${esc(s.sub || '')}" data-tip-title="Site tools"` : ''}>
       <span class="wc-dot"></span><span class="wc-label">${esc(s.label)}</span>
       <span class="grow"></span>
       <span class="wc-count" title="tools the world holds right now">${st.count} TOOL${st.count === 1 ? '' : 'S'}</span>
     </div>
-    <div class="wc-sub">${esc(s.sub || '')}</div>`;
+    ${terse ? '' : `<div class="wc-sub">${esc(s.sub || '')}</div>`}`;
 
   const plug = st.tier === 'none' ? `
       <button class="wc-plug hire" data-act="assistant-link">PLAY WITH YOUR ASSISTANT</button>
@@ -105,6 +134,23 @@ export function panelBody({ full = false } = {}) {
   const tools = full && st.tools.length
     ? `<div class="wc-tools">${st.tools.map((t) => `<span>${esc(t)}</span>`).join('')}</div>` : '';
 
+  // With no world layer, the full panel had four lines in it and nothing else —
+  // a window whose whole content was an apology. It shows the hand instead: the
+  // tools an assistant *would* hold the moment it arrived, and the ones it would
+  // have to earn. It is the most interesting thing in the game to a player who
+  // cannot run it yet, and it is the same pure function the title screen uses,
+  // so the two can never disagree. Computed once — it builds a throwaway state.
+  const hand = full && st.tier === 'none' ? cachedHand() : null;
+  const offer = hand ? `
+      <div class="wc-offer">
+        <div class="wc-offer-k">WHAT AN ASSISTANT WOULD HOLD</div>
+        <div class="wc-tools">${hand.tools.map((t) =>
+          `<span data-tip="${esc(t.title)}">${esc(t.name)}</span>`).join('')}</div>
+        <div class="wc-offer-k later">AND WHAT IT WOULD HAVE TO EARN</div>
+        <div class="wc-laters">${hand.later.map(([n, why]) =>
+          `<span><b>${esc(n)}</b> ${esc(why)}</span>`).join('')}</div>
+      </div>` : '';
+
   // Tools this page did not publish. Aperture Systems registers them on its own
   // origin and shares them with this one; they arrive through
   // getTools({ fromOrigins }) rather than through our registry.
@@ -127,7 +173,7 @@ export function panelBody({ full = false } = {}) {
          data-tip="A fixed sequence of calls, made through <b>getTools()</b> and <b>executeTool()</b> exactly as a visiting agent would.<br>Not a model. For seeing what this does without one.">
          ▷ RUN THE SCRIPTED WORLD</button>`;
 
-  return head + plug + demo + tally + log + tools + partner + aria;
+  return head + plug + demo + tally + log + tools + offer + partner + aria;
 }
 
 export function paintAuthor() {

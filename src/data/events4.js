@@ -170,7 +170,7 @@ Buried in the context window is a note it wrote to itself, which is a thing it d
         return 'You move it to the problem nobody has solved. The commit messages get long again within a week.'; } },
     { label: 'Replace it. It is software.', sub: 'Lose the level and the memory.', tone: 'cruel',
       effect: (S, fx) => { const a = S.agents.find((x) => x.morale < 0.55); if (a) fx.relate('aria', { affinity: -3 });
-        if (a) { const i = S.agents.indexOf(a); S.agents.splice(i, 1); } fx.align(-0.05);
+        if (a) fx.fire(a.id, 'replaced'); fx.align(-0.05);
         return 'You spin it down and spin up a fresh one. The new one is worse for two months and the roster morale drops for three. It is software. It is also, apparently, not only software.'; } },
   ] },
 

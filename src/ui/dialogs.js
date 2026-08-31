@@ -151,11 +151,17 @@ export function showRaise(roundId) {
 
 // ── Ask ARIA ───────────────────────────────────────────────────────────────
 export function showAria() {
+  sfx('prompt');
+  Modal.dialog({ title: 'ARIA', wide: true, body: ariaBody(),
+      actions: [{ label: 'Thanks', cls: 'btn-primary' }] });
+}
+
+// Her read of the run, as markup. The console shows it in a dialog; the
+// workstation gives her a window and repaints this into it.
+export function ariaBody() {
   const r = askAria(S);
   const char = CHARACTERS.aria;
-  sfx('prompt');
-  Modal.dialog({ title: 'ARIA', wide: true,
-      body: `<div class="row g14 mb16" style="align-items:flex-start">
+  return `<div class="row g14 mb16" style="align-items:flex-start">
           ${char?.img ? `<div class="event-portrait" style="width:52px;height:52px;flex:0 0 52px;border-color:${char.color}44">
             <img src="${char.img}" alt="" onerror="this.parentElement.style.display='none'"/></div>` : ''}
           <div class="small" style="color:var(--ink-2);line-height:1.6;font-style:italic">${esc(r.opener)}</div>
@@ -170,8 +176,7 @@ export function showAria() {
               <div class="tiny dim" style="line-height:1.6">${md(f.text)}</div>
             </div>`).join('') || '<div class="empty">Nothing material. That is rarer than it sounds.</div>'}
         </div>
-        <div class="small dim mt16" style="font-style:italic;line-height:1.6">${esc(r.closer)}</div>`,
-      actions: [{ label: 'Thanks', cls: 'btn-primary' }] });
+        <div class="small dim mt16" style="font-style:italic;line-height:1.6">${esc(r.closer)}</div>`;
 }
 
 function sevColor(s) {

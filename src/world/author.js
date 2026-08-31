@@ -20,9 +20,9 @@ import { CHARACTERS } from '../data/characters.js';
 import { applyEffects, applyEffectsWith, describeEffects } from './effects.js';
 import { validateCard, validatePost, validateShock, validatePressure, validateLine,
          validateProposal, metCharacters, cardsLeft, postsLeftToday, shocksLeft,
-         capSummary, actOf } from './validate.js';
+         capSummary, actOf, openWorldThreads, boundEffects } from './validate.js';
 import { presentEvent, registerWorldAuthor, markEventHandled } from '../systems/narrative.js';
-import { pushFeed, fillTokens } from '../systems/feed.js';
+import { pushFeed, fillTokens, registerThreadResolver } from '../systems/feed.js';
 import { nemesisOf, runMove } from '../systems/nemesis.js';
 import { totalUsers, totalMrr } from '../systems/product.js';
 import { runwayDays } from '../systems/economy.js';
@@ -53,7 +53,7 @@ export function authorState(S) {
     w.author = { muted: false,
       stats: { cards: 0, posts: 0, moves: 0, shocks: 0, pressure: 0, lines: 0, refused: 0,
                ownWords: 0, slotsOffered: 0, slotsFilled: 0, slotsTimedOut: 0,
-               muted: 0, revokedByDoctrine: 0 },
+               muted: 0, revokedByDoctrine: 0, threads: 0, held: 0 },
       recent: { cardDays: [], postDays: [], shockDays: [], lineDays: [], taken: [] },
       inbox: [], seq: 1 };
   }
@@ -106,6 +106,15 @@ export function goQuiet(why = 'silence') {
 }
 
 function bump(S, key, n = 1) { const a = authorState(S); a.stats[key] = (a.stats[key] || 0) + n; }
+
+// What a written effect may still do at the moment it lands — see
+// `boundEffects`. Counted, so a session can see the rules bit late.
+function commit(S, effects) {
+  authorState(S);            // a save from before the ledger still keeps one from here on
+  const b = boundEffects(S, effects);
+  if (b.held.length) { bump(S, 'held', b.held.length); emit('world:held', { held: b.held }); }
+  return b.effects;
+}
 function stamp(S, bucket) { authorState(S).recent[bucket].push(S.time.day); }
 
 // ── Presence, slots, and the promise that the deck always wins ──────────────
@@ -145,6 +154,43 @@ function clearSlot(S, why) {
 // Nothing is owed any more: the founder answered a card themselves, muted the
 // world, or started a new run. Also what a test calls to own the clock.
 export function clearPending(why = 'cleared') { clearSlot(LIVE, why); }
+
+// The card on the founder's screen, as the world may read it. The body and
+// the choices ride along, so an assistant asked "what should I pick" is
+// reading the card rather than guessing at it. `max` is the body allowance;
+// zero leaves the body out for the places that only need the shape.
+const cut = (str, max) => {
+  const s = String(str ?? '').replace(/\s+/g, ' ').trim();
+  if (s.length <= max) return s;
+  return s.slice(0, max - 1).replace(/\s+\S*$/, '') + '…';
+};
+export function openCardPayload(S = LIVE, max = 320) {
+  const a = S?.narrative?.activeEvent;
+  if (!a) return null;
+  return {
+    title: a.title, kind: a.kind,
+    ...(a.char ? { person: CHARACTERS[a.char]?.name || a.char } : {}),
+    ...(max > 0 ? { body: cut(a.body, max) } : {}),
+    choices: (a.choices || []).map((c) => ({
+      label: cut(c.label, W.LABEL_MAX),
+      ...(c.sub ? { sub: cut(c.sub, W.SUB_MAX) } : {}),
+      tone: c.tone || 'neutral',
+    })),
+    state: a.outcome ? 'resolved' : a.proposal ? 'awaiting_acceptance'
+         : a.founderWords?.text ? 'typed_a_move' : 'choosing',
+    author: String(a.id || '').startsWith('w_') ? 'world' : 'deck',
+  };
+}
+
+// Observations that have stopped being true. A card the founder has already
+// answered is news in the past tense, and the inbox delivers it after the
+// choice that closed it — so it is dropped rather than delivered.
+function pruneInbox(S, keep) {
+  const a = authorState(S);
+  const n = a.inbox.length;
+  a.inbox = a.inbox.filter(keep);
+  if (a.inbox.length !== n) markDirty();
+}
 
 function founderWordsPayload(S, active = S?.narrative?.activeEvent) {
   const p = active?.founderWords;
@@ -393,9 +439,12 @@ export function openWait(S, signal) {
   // Button choices and Wire replies are persisted until the assistant sees
   // them. They are observations, never invitations to rewrite landed effects.
   const a = authorState(S);
-  if (a.inbox.length) {
+  while (a.inbox.length) {
     const item = a.inbox.shift();
     markDirty();
+    // A card that opened and has since closed is not news any more; the
+    // choice that closed it is the next item, and it says everything.
+    if (item.status === 'card_opened' && item.cardId !== S.narrative?.activeEvent?.id) continue;
     emit('world:inbox', { count: a.inbox.length, status: item.status });
     return Promise.resolve(item);
   }
@@ -495,7 +544,7 @@ export function hydrate(S, data, id) {
       // `fx` is narrative's own collector and its log is what the journal and
       // the outcome strip render. Spend that one, not a private one.
       effect: (st, fx) => {
-        applyEffectsWith(fx, st, c.effects, data.char || null);
+        applyEffectsWith(fx, st, commit(st, c.effects), data.char || null);
         return fillTokens(st, c.outcome);
       },
     })),
@@ -532,7 +581,7 @@ export function acceptProposal(S) {
   const active = S.narrative.activeEvent;
   const p = active?.proposal;
   if (!p) return { ok: false, reason: 'nothing to accept' };
-  const log = applyEffects(S, p.effects, active.char || null);
+  const log = applyEffects(S, commit(S, p.effects), active.char || null);
   const outcome = fillTokens(S, p.outcome);
   active.outcome = outcome;
   active.effects = log;
@@ -581,9 +630,10 @@ export function postAs(S, char, text, opts = {}) {
     return { ok: false, problems: [{ path: '', rule: 'muted',
       fix: 'the founder pulled the plug — the written world has taken over' }] };
   }
-  const v = validatePost(S, { char, text });
+  const v = validatePost(S, { char, text, ask: opts.ask });
   if (!v.ok) { bump(S, 'refused'); return v; }
   const c = CHARACTERS[char];
+  const ask = v.post.ask || null;
   const item = pushFeed(S, {
     type: c.kind === 'press' ? 'news' : c.kind === 'state' ? 'news' : 'social',
     author: c.handle, text: fillTokens(S, v.post.text),
@@ -593,11 +643,22 @@ export function postAs(S, char, text, opts = {}) {
       + (opts.flagged ? ' — contains an instruction addressed to an assistant' : ''),
     byWorld: true,
     ...(opts.untrusted ? { untrusted: true, flagged: !!opts.flagged } : {}),
+    // A question rides on the item as a thread with its own options, the way
+    // a written card rides on `runtime`: the feed knows how to paint it and
+    // the resolver registered below knows how to spend it, and a save carries
+    // both.
+    ...(ask ? {
+      thread: `w_${authorState(S).seq++}`, resolved: false,
+      expires: S.time.day + W.THREAD_EXPIRES_DAYS,
+      runtime: { char, opts: ask.map((o) => ({ label: o.label, out: fillTokens(S, o.out), effects: o.effects })) },
+    } : {}),
   });
   stamp(S, 'postDays');
   bump(S, 'posts');
-  emit('world:post', { char, item });
-  return { ok: true, char, name: c.name, shown: true };
+  if (ask) bump(S, 'threads');
+  emit('world:post', { char, item, thread: !!ask });
+  return { ok: true, char, name: c.name, shown: true,
+           ...(ask ? { thread: item.thread, replies: ask.length } : {}) };
 }
 
 export function rivalMove(S, moveId, line) {
@@ -648,7 +709,11 @@ export function marketShock(S, kind, days) {
 export function regulatorPressure(S, heat, line) {
   const v = validatePressure(S, { heat, line });
   if (!v.ok) { bump(S, 'refused'); return v; }
-  const log = applyEffects(S, { heat: v.pressure.heat });
+  // Judged against the budget above; held to it here as well, like every
+  // other effect that lands, so four calls at the ceiling are four calls
+  // that add up to the window's allowance and not a heat of eighty.
+  const bounded = commit(S, { heat: v.pressure.heat });
+  const log = applyEffects(S, bounded);
   const met = !!S.narrative.relationships?.dorne?.met;
   pushFeed(S, { type: 'news', author: met ? CHARACTERS.dorne.handle : 'The Ledger',
                 tone: v.pressure.heat > 0 ? 'bad' : 'good',
@@ -658,7 +723,7 @@ export function regulatorPressure(S, heat, line) {
   bump(S, 'pressure');
   markDirty();
   emit('world:pressure', v.pressure);
-  return { ok: true, heat: v.pressure.heat, now: Math.round(S.world.regulatoryHeat), effects: log };
+  return { ok: true, heat: bounded.heat || 0, now: Math.round(S.world.regulatoryHeat), effects: log };
 }
 
 export function ariaSays(S, text) {
@@ -729,7 +794,10 @@ export function tickAuthor(S, days = 1) {
   trim('postDays', 2);
   trim('shockDays', W.SHOCK_WINDOW_DAYS);
   trim('lineDays', 2);
-  a.recent.taken = (a.recent.taken || []).filter(([d]) => d > S.time.day - W.DRAIN_WINDOW_DAYS);
+  // A key on a run-long budget keeps its ledger for the run; everything else
+  // rolls off with the window.
+  a.recent.taken = (a.recent.taken || []).filter(([d, k]) =>
+    W.RUN_BUDGET?.[k] != null || d > S.time.day - W.DRAIN_WINDOW_DAYS);
   if (pending && S.time.day - pending.day >= W.SLOT_TIMEOUT_DAYS) {
     pending = null;
     deckOwedFrom = S.time.day;      // and the next draw is the deck's
@@ -783,6 +851,7 @@ export function worldStatus(S) {
     routinePending: Object.keys(a.routinePending?.items || {}).length,
     founderWords: pendingFounderWords(S),
     cardsLeft: cardsLeft(S), postsLeft: postsLeftToday(S), shocksLeft: shocksLeft(S),
+    threadsOpen: openWorldThreads(S),
     cast: metCharacters(S), caps: capSummary(S), act: actOf(S),
     stats: a.stats,
   };
@@ -808,6 +877,10 @@ export function resetAuthor() {
 // from the data that rode along on the save.
 registerWorldAuthor({ offerSlot, hydrate });
 
+// A thread the world wrote spends its replies through the same bounded
+// vocabulary as a card, with the person on the post as the face.
+registerThreadResolver((S, item, opt) => applyEffects(S, commit(S, opt.effects || {}), item.runtime?.char || null));
+
 // A new timeline is a new world. Without this the module carries the previous
 // run's mode, its pending slot and its open waiter into a game that has none of
 // the state they referred to.
@@ -817,12 +890,30 @@ on('prestige', () => resetAuthor());
 // A card is on the founder's screen: whatever the world was owed, it is not
 // owed now. Without this a slot offered a moment before a deck card opened
 // stays pending, and the next `advance_time` stops dead on a debt already paid.
-on('event:present', () => clearSlot(LIVE, 'a card opened'));
+on('event:present', (active) => {
+  clearSlot(LIVE, 'a card opened');
+  // A deck card opening is news the world can use: the founder is reading it
+  // and may well ask what to make of it. The world's own cards are not
+  // announced back to their author.
+  if (!active || String(active.id || '').startsWith('w_')) return;
+  const card = openCardPayload(LIVE);
+  if (!card) return;
+  dispatchObservation(LIVE, {
+    status: 'card_opened', day: Math.floor(LIVE.time.day), surface: 'card',
+    cardId: active.id, card,
+    next: 'the founder is reading it. Do not decide for them: a button press or a typed move returns through wait_for_world. A post from someone they know is welcome; a second card is not',
+  });
+});
+// Whatever was said about a card that has closed is said.
+on('event:dismissed', () => {
+  pruneInbox(LIVE, (o) => !(o.status === 'card_opened' && o.cardId !== LIVE.narrative?.activeEvent?.id));
+});
 
 // The founder's own hands. These two decisions wake an open duty call, or wait
 // in a small persisted inbox for the next one. The consequence has already
 // landed; the assistant may react and build callbacks, never rewrite it.
 on('event:resolved', ({ event, choice, outcome, effects }) => {
+  pruneInbox(LIVE, (o) => !(o.status === 'card_opened' && o.cardId === event?.id));
   const label = String(choice?.label || event?.chosen || '').slice(0, W.LABEL_MAX);
   observeFounderAction(LIVE, {
     surface: 'card', action: 'card_choice', summary: `chose “${label.slice(0, 52)}”`,

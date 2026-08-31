@@ -13,11 +13,27 @@ export function installDom({ rich = true } = {}) {
     _d: {}, getItem(k) { return this._d[k] ?? null; },
     setItem(k, v) { this._d[k] = String(v); }, removeItem(k) { delete this._d[k]; },
   };
+  // A real `style` answers setProperty/getPropertyValue; the workstation sets
+  // custom properties on the shell (`--keepout-bottom`, an app's accent) and a
+  // bare object throws where a browser would not.
+  const mkStyle = () => {
+    const o = {};
+    Object.defineProperties(o, {
+      setProperty: { value(k, v) { this[k] = v; }, enumerable: false },
+      getPropertyValue: { value(k) { return this[k] ?? ''; }, enumerable: false },
+      removeProperty: { value(k) { delete this[k]; }, enumerable: false },
+    });
+    return o;
+  };
   const mkEl = () => ({
-    style: {}, dataset: {},
+    style: mkStyle(), dataset: {},
     classList: { add: noop, remove: noop, toggle: noop, contains: () => false },
     appendChild: noop, remove: noop, addEventListener: noop, removeEventListener: noop,
     querySelector: () => null, querySelectorAll: () => [], closest: () => null,
+    setAttribute: noop, removeAttribute: noop, hasAttribute: () => false, getAttribute: () => null,
+    matches: () => false, contains: () => false, insertAdjacentHTML: noop,
+    setPointerCapture: noop, releasePointerCapture: noop, offsetWidth: 0, offsetHeight: 0,
+    firstElementChild: null, parentElement: null, children: [], childNodes: [],
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 20, right: 100, bottom: 20 }),
     set innerHTML(v) { this._h = v; }, get innerHTML() { return this._h || ''; },
     scrollTop: 0, scrollHeight: 0, clientHeight: 0, focus: noop, click: noop, blur: noop,

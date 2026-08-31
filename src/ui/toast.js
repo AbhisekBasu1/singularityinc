@@ -10,8 +10,16 @@ let queue = [];
 let showing = 0;
 const MAX = 3;
 
+// Anything that wants a record of what was said — the workstation's
+// Notification Center keeps the last forty. Listeners see every call, including
+// the ones that coalesce into a `×n` rather than opening a second toast, and a
+// throw in one never costs the player their notification.
+const watchers = new Set();
+export function onToast(fn) { watchers.add(fn); return () => watchers.delete(fn); }
+
 const recent = new Map();   // title → { el, count, t }
 export function toast({ icon = '◈', title, sub, kind = '', ms = 3600 }) {
+  for (const fn of watchers) { try { fn({ icon, title, sub, kind, ms, at: Date.now() }); } catch {} }
   // Coalesce repeats: the fourth "It made that up" should be a counter, not a stack.
   const queued = queue.find((q) => q.title === title);
   if (queued) { queued.count = (queued.count || 1) + 1; return; }

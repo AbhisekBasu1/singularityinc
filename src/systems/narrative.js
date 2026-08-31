@@ -38,6 +38,13 @@ export function makeFx(S) {
     heat: (n) => { S.world.regulatoryHeat = clamp(S.world.regulatoryHeat + n, 0, 100); fx._log.push(['heat', n]); },
     opinion: (n) => { S.world.publicOpinion = clamp(S.world.publicOpinion + n, 0, 1); fx._log.push(['opinion', n]); },
     influence: (n) => { S.resources.influence = Math.max(0, S.resources.influence + n); fx._log.push(['influence', n]); },
+    // Letting an agent go, through the one path that writes a tombstone. A card
+    // that spliced the roster directly left `agents/archive` with nothing in it
+    // and every line of DEPARTURES unreachable.
+    fire: (id, reason) => { const a = fireAgent(S, id, reason); if (a) fx._log.push(['agentLeft', a.name]); return a; },
+    // Granted capacity. The loop rebuilds `computeCap` from modifiers every
+    // frame, so a grant has to land here rather than on the cap itself.
+    compute: (n) => { S.resources.computeGranted = Math.max(0, (S.resources.computeGranted || 0) + n); fx._log.push(['compute', n]); },
     control: (n) => { S.world.controlPoints = (S.world.controlPoints || 0) + n; fx._log.push(['control', n]); },
     users: (n) => {
       const p = S.products.find((x) => x.id === S.activeProductId) || S.products.find((x) => x.launched);
@@ -107,14 +114,36 @@ export function makeFx(S) {
   return fx;
 }
 
-export function eligibleEvents(S) {
+// ── Fatigue, and the escalation it buys ─────────────────────────────────────
+// `times(S, id)` is how many times this card has already resolved — 0 the first
+// time it is on screen. A card body that reads it can say something different
+// on the second showing, and a card that does is not a repeat: it is a thread.
+// That is why `esc: true` earns a higher ceiling than a card that would simply
+// print itself again.
+//
+// Card authors: `times(S)` is passed to `body`, `title` and `sub` as the second
+// argument, so an escalating card never needs to import this module.
+export function times(S, id) { return (S?.narrative?.count?.[id]) | 0; }
+function drawCount(S, id) { return (S?.narrative?.count?.[id]) | 0; }
+function drawCap(e) {
+  if (e.max) return e.max;
+  return e.esc ? EB.DRAW_CAP_ESCALATING : EB.DRAW_CAP;
+}
+
+// `relax` is 0 (normal), 1 (ignore fatigue) or 2 (ignore fatigue and cooldown).
+// Only `once` and `when` are absolute: a card that has had its moment, or whose
+// preconditions are false, is never legal at any level.
+export function eligibleEvents(S, relax = 0) {
   const out = [];
   for (const e of EVENTS) {
     if (e.chained) continue;          // only reachable via fx.chain()
     if (e.once && S.narrative.seen[e.id]) continue;
     if (e.act && !e.act.includes(S.company.act)) continue;
-    const cd = S.narrative.cooldowns[e.id];
-    if (cd && S.time.day < cd) continue;
+    if (relax < 2) {
+      const cd = S.narrative.cooldowns[e.id];
+      if (cd && S.time.day < cd) continue;
+    }
+    if (relax < 1 && drawCount(S, e.id) >= drawCap(e)) continue;
     try { if (e.when && !e.when(S)) continue; } catch (err) { continue; }
     out.push(e);
   }
@@ -131,6 +160,7 @@ export function markEventHandled(S, active = S?.narrative?.activeEvent) {
   const e = EVENT_MAP[active.id];
   if (!e) return false;
   S.narrative.seen[e.id] = true;
+  (S.narrative.count ??= {})[e.id] = (S.narrative.count[e.id] || 0) + 1;
   S.narrative.cooldowns[e.id] = S.time.day + (e.cooldown || EB.BASE_INTERVAL_DAYS * 6);
   return true;
 }
@@ -143,16 +173,26 @@ export function repairEventHistory(S) {
   if (!S?.narrative) return { changed: false, dismissed: false };
   let changed = false;
   const journalIds = new Set();
+  // A save written before fatigue existed has no count map. The journal is the
+  // record of what actually fired, so rebuild from it rather than starting a
+  // long run back at zero — otherwise loading a day-900 save re-opens every
+  // card the founder has already exhausted.
+  const rebuilt = {};
   for (const entry of S.narrative.journal || []) {
     const e = EVENT_MAP[entry?.id];
     if (!e) continue;
     journalIds.add(e.id);
     if (!S.narrative.seen[e.id]) { S.narrative.seen[e.id] = true; changed = true; }
+    rebuilt[e.id] = (rebuilt[e.id] || 0) + 1;
     const until = Number(entry.day) + (e.cooldown || EB.BASE_INTERVAL_DAYS * 6);
     if (Number.isFinite(until) && (S.narrative.cooldowns[e.id] || -Infinity) < until) {
       S.narrative.cooldowns[e.id] = until;
       changed = true;
     }
+  }
+  const counts = (S.narrative.count ??= {});
+  for (const [id, n] of Object.entries(rebuilt)) {
+    if ((counts[id] || 0) < n) { counts[id] = n; changed = true; }
   }
   const active = S.narrative.activeEvent;
   let dismissed = false;
@@ -167,7 +207,22 @@ export function repairEventHistory(S) {
 }
 
 export function drawEvent(S, force) {
-  const pool = eligibleEvents(S);
+  // Fatigue is a preference, not a wall. Act V exhausts its own act-gated cards
+  // faster than the earlier acts do — it is the shortest pool and the one a run
+  // arrives at with the most already seen — and a hard cap there bought 49-to-72
+  // day silences in the endgame where the deck had drawn none before. So: strict
+  // pool first, and only if that is empty does the cap lift. Dead air in the act
+  // the player worked eleven hundred days to reach is worse than a fourth
+  // showing of a card about compute contracts.
+  // Act V is the shortest pool and the one a run reaches with the most already
+  // spent, so it is the act that runs dry: measured, 45-to-61 day silences in
+  // the endgame a player worked eleven hundred days to reach. Fatigue and
+  // cooldown are both preferences about *which* card is best next; neither is a
+  // reason to show nothing at all. Strict first, then lift the fatigue cap, then
+  // lift cooldowns as well. `once` and `when` are never lifted.
+  let pool = eligibleEvents(S);
+  if (!pool.length) pool = eligibleEvents(S, 1);
+  if (!pool.length) pool = eligibleEvents(S, 2);
   if (!pool.length) return null;
   // Priority events fire immediately regardless of weight
   const prio = pool.filter((e) => (e.priority || 0) > 0).sort((a, b) => (b.priority || 0) - (a.priority || 0));
@@ -176,6 +231,10 @@ export function drawEvent(S, force) {
   const m = computeMods(S);
   const weights = pool.map((e) => {
     let w = e.weight || 1;
+    // Fatigue. Each previous firing of this exact card halves its odds, so a
+    // deck of 167 spends its draws on its own breadth rather than orbiting the
+    // dozen cards with the highest authored weight.
+    w *= Math.pow(EB.FATIGUE, drawCount(S, e.id));
     if (m.luck && (e.kind === 'opportunity' || e.kind === 'milestone')) w *= 1 + m.luck;
     if (m.luck && e.kind === 'crisis') w *= Math.max(0.3, 1 - m.luck * 0.5);
     return w;
@@ -186,12 +245,13 @@ export function drawEvent(S, force) {
 export function presentEvent(S, e) {
   if (!e) return null;
   S.narrative.lastEventReal = Date.now();
+  const n = drawCount(S, e.id);
   S.narrative.activeEvent = {
     id: e.id,
-    title: e.title,
+    title: safeCall(e.title, S, '', n),
     kind: e.kind,
     char: e.char,
-    body: safeCall(e.body, S, ''),
+    body: safeCall(e.body, S, '', n),
     // `oi` is the choice's index in the authored card. The legal list is
     // re-derived at resolve time, and an assistant's tool call can move the
     // world while the card is open; without the identity, button 2 could
@@ -199,7 +259,7 @@ export function presentEvent(S, e) {
     choices: (e.choices || []).map((c, oi) => ({ c, oi }))
       .filter(({ c }) => !c.req || safeCall(c.req, S, false))
       .map(({ c, oi }, i) => ({
-        i, oi, label: safeCall(c.label, S, ''), sub: safeCall(c.sub, S, ''), tone: c.tone || 'neutral',
+        i, oi, label: safeCall(c.label, S, '', n), sub: safeCall(c.sub, S, '', n), tone: c.tone || 'neutral',
       })),
     outcome: null,
   };
@@ -222,22 +282,26 @@ export function resolveChoice(S, index) {
   if (!choice) return null;
 
   const fx = makeFx(S);
+  // Read before `markEventHandled` bumps it: an effect asking "how many times
+  // has this happened" means the showings *before* this one, which is the same
+  // number the body was rendered with.
+  const n = drawCount(S, e.id);
   let outcome = '';
-  try { outcome = choice.effect ? (choice.effect(S, fx) || '') : ''; }
+  try { outcome = choice.effect ? (choice.effect(S, fx, n) || '') : ''; }
   catch (err) { console.error('[event effect]', e.id, err); }
 
   const written = !!active.runtime;
   markEventHandled(S, active);
   S.narrative.choicesMade++;
   S.stats.eventsResolved++;
-  const choiceLabel = typeof choice.label === 'function' ? choice.label(S) : choice.label;
+  const choiceLabel = typeof choice.label === 'function' ? choice.label(S, n) : choice.label;
   S.narrative.journal.unshift({
-    day: Math.floor(S.time.day), id: e.id, title: e.title,
+    day: Math.floor(S.time.day), id: e.id, title: active.title || safeCall(e.title, S, '', n),
     choice: choiceLabel,
     outcome, char: e.char, kind: e.kind, tone: choice.tone || 'neutral',
     effects: fx._log.slice(), ...(written ? { author: 'world' } : {}),
   });
-  if (S.narrative.journal.length > 200) S.narrative.journal.pop();
+  trimJournal(S);
 
   active.outcome = outcome;
   active.effects = fx._log.slice();
@@ -245,6 +309,20 @@ export function resolveChoice(S, index) {
   markDirty();
   emit('event:resolved', { event: active, choice: { ...choice, label: choiceLabel }, outcome, effects: fx._log });
   return { outcome, effects: fx._log };
+}
+
+// Shed the ordinary before the memorable. A run's Log should still open on the
+// day somebody first used the thing, however long the run got.
+function trimJournal(S) {
+  const j = S.narrative.journal;
+  if (j.length <= EB.JOURNAL_CAP) return;
+  for (let i = j.length - 1; i >= 0 && j.length > EB.JOURNAL_CAP; i--) {
+    const e = j[i];
+    if (e && (e.kind === 'milestone' || e.char)) continue;
+    j.splice(i, 1);
+  }
+  // A Log that is *all* spine still has to shed something, oldest first.
+  while (j.length > EB.JOURNAL_CAP) j.pop();
 }
 
 export function dismissEvent(S) {
@@ -304,9 +382,13 @@ export function tickNarrative(S) {
   }
 }
 
-function safeCall(fn, S, fallback) {
+// `n` is the escalation argument — how many times this card has already fired.
+// It is second so that the hundred and sixty cards that only ever wanted state
+// keep working untouched, and so a card rendered by a harness that passes only
+// `S` reads `n` as 0 and prints its first face.
+function safeCall(fn, S, fallback, n = 0) {
   if (typeof fn !== 'function') return fn ?? fallback;
-  try { return fn(S); } catch (e) { return fallback; }
+  try { return fn(S, n); } catch (e) { return fallback; }
 }
 
 export function relationshipSummary(S) {

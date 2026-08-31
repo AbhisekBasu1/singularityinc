@@ -6,10 +6,23 @@ than remembered; if you change a gate, change it here too.
 
 ## The premise
 
-One founder, one laptop, and an unlimited supply of machines that will do
-anything you can describe. You never hire people — you instantiate them. The
-whole run is about what happens when the only scarce input left is your own
-judgement.
+One founder, one laptop, and machines that will build anything you can describe
+— for as long as the money lasts. You never hire people; you instantiate them,
+three at a time to begin with, and every one of them draws a wage on every day
+it runs. The run is about what happens when labour stops being the constraint
+and everything else still is.
+
+The founder's *inventory* is not unlimited and the copy must never say it is.
+The roster caps at `AGENTS.MAX_ROSTER_BASE` plus modifiers, the first hire is
+$900 and each one after costs 1.29× the last, a single prompt is 5 focus and
+$5.50 out of a hundred-focus day, and compute has a ceiling the loop rebuilds
+every frame. The cold open has always had this right — "Six years ago this
+would have taken a team of eleven" is a ratio, not an abolition.
+
+The *age* is another matter, and the title screen asks about it rather than
+asserting it: "an age of unlimited leverage" is the question the run answers,
+and the answer is bounded by everything above. That is the distinction to hold
+— characterise the era, never the roster.
 
 ## The five acts
 

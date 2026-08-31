@@ -120,6 +120,40 @@ assistant, which would be cheaper and consistent.
 
 **Effort.** An hour, mostly copy.
 
+## 6. The world's hand, widened — DONE 2026-08-30
+
+Five gaps found by asking what the world could not do that a player would ask
+of it, all built the same day:
+
+- **It can read the card.** `wait_for_world` wakes with `card_opened` when the
+  written deck opens a card — body, choices, tones — and `inspect_module(story)`
+  holds the whole card while it is open; `briefing` shows the buttons and
+  `advance_time` returns the card it stopped for. The world's own cards are not
+  announced back to their author, and an opening the founder has already
+  answered is dropped from the inbox rather than delivered late.
+- **A hand on the race.** The `race` key moves the leading rival lab a few
+  points either way, from Act III, on `RUN_BUDGET` — ten points for the whole
+  run, both directions, never over the line (`WORLD_LAB_CEILING`). Ceilings
+  derived by diffing lab progress around every deck choice; `capsfuzz` spends
+  it first and gates that the world does not turn the race tally.
+- **`compute`.** Give-only, the way the deck grants it (`computeGranted`);
+  Act V carries Act IV's grant forward.
+- **A post may `ask`.** Two or three one-click replies make it a Wire thread,
+  judged like a card's choices at `THREAD_CAP_MULT` of the ceilings, with the
+  door rule, two open at once.
+- **The reads say what could be.** `inspect_module` research lists what could
+  start and its cost, agents what a hire costs, market the round on offer —
+  without a draw from the RNG.
+
+Also landed with it: an own-words answer is on the same rolling budget as a
+card (it was not), every effect refusal comes from one judge, and — from the
+Codex review of the change — effects are bounded again at the moment they
+land (`boundEffects`), so a reply written before Zero Entropy cannot add debt
+after it and two hands cannot both spend the last point of a budget;
+`capsderive` is seeded and samples branching choices; a reply may not touch
+compute or the race; compute has a run budget; the open card rides at the top
+of `inspect_module(story)` so the packer cannot drop it.
+
 ## Not features, but before any of these
 
 - **The ten platform checks in `docs/DAY0.md`.** Every row is blank. The

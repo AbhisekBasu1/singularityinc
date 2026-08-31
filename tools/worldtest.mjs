@@ -16,6 +16,7 @@ const { applyEffects, describeEffects, EFFECT_KEY_LIST, isAdverse } = await impo
 const { WORLD_AUTHOR: W } = await import('../src/data/balance.js');
 const { CHARACTERS } = await import('../src/data/characters.js');
 const { resolveChoice, dismissEvent } = await import('../src/systems/narrative.js');
+const { threadOptions, resolveThread } = await import('../src/systems/feed.js');
 const bot = await makeBot();
 
 const s = bot.Game.startNewGame({ founderName: 'Test', companyName: 'Testco', archetype: 'hacker',
@@ -428,6 +429,267 @@ await section('a line from another origin keeps its badge in a character\'s voic
   ok('muted, a post is refused at the boundary', !gone.ok && gone.problems?.[0]?.rule === 'muted',
      JSON.stringify(gone).slice(0, 120));
   s.world.author.muted = false;
+});
+
+await section('compute is the world\'s to give, never to take', async () => {
+  fresh();
+  s.company.act = 3;
+  ok('in play from Act III', V.allowedKeys(s).includes('compute'), V.allowedKeys(s).join(','));
+  const give = V.capFor(s, 'compute', 'neutral', 'give');
+  ok('with a real ceiling on giving', give > 0, String(give));
+  eq('and none on taking', V.capFor(s, 'compute', 'neutral', 'take'), 0);
+  const c = card();
+  c.choices[0].effects = { compute: -10 };
+  const p = bad(c);
+  eq('a card that takes it is refused', p?.rule, 'cap');
+  ok('by name, not as "not in play"', /never take/.test(p?.fix || ''), p?.fix);
+  const gen = card();
+  gen.choices[0].effects = { compute: Math.min(give, 100) };
+  const v = V.validateCard(s, gen);
+  ok('a grant passes', v.ok, JSON.stringify(v.problems || []).slice(0, 200));
+  const before = s.resources.computeGranted || 0;
+  applyEffects(s, { compute: 50 });
+  eq('and lands on the granted capacity the loop keeps', Math.round((s.resources.computeGranted || 0) - before), 50);
+  ok('and reads as English', /compute/.test(describeEffects({ compute: 50 })));
+  s.company.act = 1;
+  eq('not in play in Act I', V.allowedKeys(s).includes('compute'), false);
+});
+
+await section('the race is a key only while there is one to run', async () => {
+  fresh();
+  s.company.act = 4;
+  const hadRace = s.world.race;
+  delete s.world.race;
+  eq('no race, no key', V.allowedKeys(s).includes('race'), false);
+  const { initRace, raceStandings } = await import('../src/systems/agirace.js');
+  initRace(s);
+  ok('a race makes it one', V.allowedKeys(s).includes('race'), V.allowedKeys(s).join(','));
+  const cap = V.capFor(s, 'race', 'neutral', 'take');
+  ok('with a small ceiling', cap > 0 && cap <= 4, String(cap));
+  ok('gaining ground is the adverse direction, like heat', isAdverse('race', 1) && !isAdverse('race', -1));
+  const lead = () => raceStandings(s).filter((x) => !x.you)[0];
+  const before = lead().progress;
+  applyEffects(s, { race: cap });
+  ok('it moves the leading rival lab, by exactly that', Math.abs(lead().progress - before - cap) < 1e-9,
+     `${before} → ${lead().progress}`);
+  const you = s.world.race.you;
+  applyEffects(s, { race: -1 });
+  eq('and never the founder\'s own progress', s.world.race.you, you);
+  const b = V.budgetFor(s, 'race');
+  ok('the budget is for the whole run', b.run === true && b.allowance === W.RUN_BUDGET.race, JSON.stringify(b));
+  eq('charged in both directions', Math.round(b.used), cap + 1);
+  s.time.day += 400; World.tickAuthor(s, 1);
+  eq('and four hundred days later it has not come back', Math.round(V.budgetFor(s, 'race').used), cap + 1);
+  s.world.author.recent.taken = [[s.time.day, 'race', W.RUN_BUDGET.race]];
+  const c = card();
+  c.choices[0].effects = { race: 1 };
+  const p = bad(c);
+  eq('a card past it is refused on the budget', p?.rule, 'budget');
+  ok('and says so for the run', /whole run|this run/.test(p?.fix || ''), p?.fix);
+  s.world.author.recent.taken = [];
+  const top = lead();
+  s.world.race.labs[top.id].progress = 98.5;
+  applyEffects(s, { race: cap });
+  ok('the world cannot carry a lab over the line', s.world.race.labs[top.id].progress <= 99,
+     String(s.world.race.labs[top.id].progress));
+  s.world.race.labs[top.id].progress = 99.4;
+  applyEffects(s, { race: cap });
+  ok('nor pull one back by pushing it', s.world.race.labs[top.id].progress >= 99.4);
+  s.world.race.crossed = { id: top.id };
+  eq('a decided race is no longer a key', V.allowedKeys(s).includes('race'), false);
+  if (hadRace) s.world.race = hadRace; else delete s.world.race;
+  s.company.act = 1;
+});
+
+await section('a post may ask, at a fraction of the ceilings', async () => {
+  fresh();
+  s.narrative.relationships.vance = { met: true, affinity: 0, respect: 0, fear: 0, arc: 1 };
+  s.feed = s.feed.filter((f) => !f.runtime);
+  // Enough reputation that the ceiling, not the stock budget, is the rule
+  // that bites — the budget has its own section above.
+  s.resources.reputation = 400;
+  s.world.author.recent.taken = [];
+  const ask = [
+    { label: 'Answer him in public', outcome: 'It gets 400 likes.', effects: { rep: 3, focus: -1 } },
+    { label: 'Say nothing', outcome: 'It scrolls off by Thursday.', effects: { focus: 1 } },
+  ];
+  const r = V.validatePost(s, { char: 'vance', text: 'is {company} still one person? asking for a friend.', ask });
+  ok('a fair question passes', r.ok, JSON.stringify(r.problems || []).slice(0, 200));
+  eq('with its replies normalised', r.post.ask?.length, 2);
+  eq('one reply is not a question', V.validatePost(s, { char: 'vance', text: 'x', ask: [ask[0]] }).problems?.[0]?.rule, 'count');
+  const cap = V.capFor(s, 'rep', 'neutral', 'take');
+  const big = [{ ...ask[0], effects: { rep: -cap } }, ask[1]];
+  const p = V.validatePost(s, { char: 'vance', text: 'x', ask: big }).problems?.[0];
+  eq('a reply at a card\'s ceiling is over a thread\'s', p?.rule, 'cap');
+  ok('and the limit named is the scaled one', p?.limit < cap, JSON.stringify(p));
+  const cruel = [{ ...ask[0], effects: { rep: -1 } }, { ...ask[1], effects: { rep: -1 } }];
+  eq('every reply hurting the same thing is refused',
+     V.validatePost(s, { char: 'vance', text: 'x', ask: cruel }).problems?.[0]?.rule, 'no_way_out');
+  const posted = World.postAs(s, 'vance', 'is {company} still one person?', { ask });
+  ok('it posts', posted.ok, JSON.stringify(posted.problems || []).slice(0, 160));
+  const item = s.feed.find((f) => f.thread === posted.thread);
+  ok('as an open thread in the Wire', !!item && item.resolved === false && Array.isArray(item.runtime?.opts));
+  eq('with two replies to press', threadOptions(s, item).length, 2);
+  eq('and it is counted', V.openWorldThreads(s), 1);
+  ok('a second open question is fine', World.postAs(s, 'vance', 'still waiting.', { ask }).ok);
+  const third = World.postAs(s, 'vance', 'hello?', { ask }).problems?.[0];
+  ok('a third is not', third?.rule === 'rate' && /open/.test(String(third?.limit)), JSON.stringify(third));
+  const rep0 = s.resources.reputation;
+  const done = resolveThread(s, item.id, 0);
+  ok('answering it spends the reply', !!done && item.resolved === true);
+  eq('through the bounded vocabulary', Math.round(s.resources.reputation - rep0), 3);
+  ok('and keeps the reply\'s line', item.outcome === 'It gets 400 likes.' && item.chosen === 'Answer him in public',
+     `${item.chosen} / ${item.outcome}`);
+  eq('which frees a slot', V.openWorldThreads(s), 1);
+  s.feed = s.feed.filter((f) => !f.runtime);
+});
+
+await section('what is true when it lands is what lands', async () => {
+  fresh();
+  s.company.act = 3;
+  s.narrative.relationships.vance = { met: true, affinity: 0, respect: 0, fear: 0, arc: 1 };
+  s.feed = s.feed.filter((f) => !f.runtime);
+  s.resources.reputation = 400;
+  s.resources.techDebt = 100;
+  s.world.author.recent.taken = [];
+  s.world.author.stats.held = 0;
+  // An immunity earned after the reply was written.
+  const posted = World.postAs(s, 'vance', 'still shipping on the old stack?', { ask: [
+    { label: 'Yes, and it shows', outcome: 'You are.', effects: { debt: 5 } },
+    { label: 'Not for long', outcome: 'You are not.', effects: { focus: 1 } } ] });
+  ok('a reply that adds debt is legal today', posted.ok, JSON.stringify(posted.problems || []).slice(0, 160));
+  s.doctrines.earned.zero_entropy = Math.floor(s.time.day);
+  const debt0 = s.resources.techDebt;
+  const item = s.feed.find((f) => f.thread === posted.thread);
+  resolveThread(s, item.id, 0);
+  eq('Zero Entropy earned in between, the debt does not land', Math.round(s.resources.techDebt - debt0), 0);
+  ok('and the run counts what was held', s.world.author.stats.held >= 1, String(s.world.author.stats.held));
+  delete s.doctrines.earned.zero_entropy;
+  // The last point of a run-long budget, claimed twice.
+  const { initRace, raceStandings } = await import('../src/systems/agirace.js');
+  s.company.act = 4;
+  const hadRace = s.world.race;
+  delete s.world.race; initRace(s);
+  s.world.author.recent.taken = [[s.time.day, 'race', W.RUN_BUDGET.race - 1]];
+  const first = World.writeCard(s, card({ title: 'The leak', choices: [
+    { label: 'Let it go', tone: 'neutral', sub: 'They gain a step', outcome: 'They gain.', effects: { race: 1 } },
+    { label: 'Push back', tone: 'neutral', sub: 'A week', outcome: 'You push.', effects: { focus: 1 } } ] }));
+  ok('a card is legal with one point left', first.ok, JSON.stringify(first.problems || []).slice(0, 160));
+  applyEffects(s, { race: 1 });                     // another hand spends it first
+  const lead = () => raceStandings(s).filter((x) => !x.you)[0].progress;
+  const before = lead();
+  resolveChoice(s, 0); dismissEvent(s);
+  eq('the budget spent under it, the card moves nothing', Math.round((lead() - before) * 100), 0);
+  ok('and the ledger never passes the budget', V.takenIn(s, 'race', Infinity) <= W.RUN_BUDGET.race,
+     String(V.takenIn(s, 'race', Infinity)));
+  // Money that was there when the card was written and is not when it lands.
+  s.world.author.recent.taken = [];
+  s.company.cash = 5e6;
+  const cost = -Math.round(V.cashLimit(s, 'costly').limit * 0.8);
+  const bill = World.writeCard(s, card({ title: 'The bill', choices: [
+    { label: 'Pay it', tone: 'costly', sub: 'All of it', outcome: 'Paid.', effects: { cash: cost } },
+    { label: 'Dispute it', tone: 'neutral', sub: 'A month', outcome: 'Disputed.', effects: { focus: -2 } } ] }));
+  ok('a bill the company can pay is legal', bill.ok, JSON.stringify(bill.problems || []).slice(0, 160));
+  s.company.cash = 30000;                            // the founder spent it
+  const floor = V.cashFloor(s).limit;
+  const cash0 = s.company.cash;
+  resolveChoice(s, 0); dismissEvent(s);
+  ok('when it lands it is held to the floor', cash0 - s.company.cash <= floor + 1, `took ${cash0 - s.company.cash}, floor ${floor}`);
+  ok('and the company is still standing', s.company.cash >= 0);
+  if (hadRace) s.world.race = hadRace; else delete s.world.race;
+  s.company.act = 1;
+  s.feed = s.feed.filter((f) => !f.runtime);
+});
+
+await section('a reply may not move what a card may', async () => {
+  fresh();
+  s.company.act = 4;
+  const hadRace = s.world.race;
+  const { initRace } = await import('../src/systems/agirace.js');
+  delete s.world.race; initRace(s);
+  s.narrative.relationships.vance = { met: true, affinity: 0, respect: 0, fear: 0, arc: 1 };
+  s.feed = s.feed.filter((f) => !f.runtime);
+  ok('a card may move the race', V.allowedKeys(s).includes('race'));
+  ok('a reply may not', !V.threadKeys(s).includes('race') && !V.threadKeys(s).includes('compute'), V.threadKeys(s).join(','));
+  const ask = (effects) => V.validatePost(s, { char: 'vance', text: 'x', ask: [
+    { label: 'A', outcome: 'a.', effects }, { label: 'B', outcome: 'b.', effects: {} } ] }).problems?.[0];
+  eq('and is refused by name', ask({ race: 1 })?.rule, 'unknown_key');
+  eq('so is compute', ask({ compute: 10 })?.rule, 'unknown_key');
+  const p = V.validatePost(s, { char: 'vance', text: 'x', ask: [
+    { label: 'A', outcome: 'a.' }, { label: 'B', outcome: 'b.', effects: {} } ] }).problems?.[0];
+  eq('a reply without effects is refused, not assumed empty', p?.rule, 'required');
+  const cap = V.capFor(s, 'affinity', 'neutral', 'take');
+  const scaled = V.validatePost(s, { char: 'vance', text: 'x', ask: [
+    { label: 'A', outcome: 'a.', effects: { affinity: -cap } }, { label: 'B', outcome: 'b.', effects: {} } ] }).problems?.[0];
+  ok('a coarse key is floored out of a reply rather than rounded up', scaled?.rule === 'cap' && /card/.test(scaled?.fix || ''),
+     JSON.stringify(scaled));
+  if (hadRace) s.world.race = hadRace; else delete s.world.race;
+  s.company.act = 1;
+});
+
+await section('the regulators answer to the rolling budget too', async () => {
+  fresh();
+  s.company.act = 3;
+  s.world.author.recent.taken = [];
+  s.world.regulatoryHeat = 0;
+  const cap = V.capFor(s, 'heat', 'risky');
+  const allowance = V.budgetFor(s, 'heat').allowance;
+  let applied = 0, calls = 0, refusedOn = null;
+  for (let i = 0; i < 6 && !refusedOn; i++) {
+    const r = World.regulatorPressure(s, cap, 'The committee opens an inquiry into 4 incidents.');
+    calls++;
+    if (r.ok) applied += r.heat; else refusedOn = r.problems?.[0];
+  }
+  eq('a call past the budget is refused on the budget', refusedOn?.rule, 'budget');
+  ok('what was turned up never passes the window allowance', applied <= allowance + 1e-9, `${applied} of ${allowance}`);
+  ok('and it took more than one call to get there', calls > 1, String(calls));
+  ok('turning it down is not on the budget', World.regulatorPressure(s, -1, 'The matter is closed.').ok);
+  s.company.act = 1;
+});
+
+await section('a save from before the ledger still keeps one', async () => {
+  fresh();
+  s.company.act = 1;
+  s.resources.reputation = 400;
+  const r = World.writeCard(s, card({ title: 'Old timeline', choices: [
+    { label: 'Pay for it', tone: 'neutral', sub: 'In reputation', outcome: 'Paid.', effects: { rep: -3 } },
+    { label: 'Wait it out', tone: 'neutral', sub: 'A week', outcome: 'Waited.', effects: { focus: 1 } } ] }));
+  ok('the card opens', r.ok, JSON.stringify(r.problems || []).slice(0, 160));
+  delete s.world.author;                       // a save from before the world layer
+  resolveChoice(s, 0); dismissEvent(s);
+  ok('the ledger is made on landing and charged', (s.world.author?.recent?.taken || []).some(([, k]) => k === 'rep'),
+     JSON.stringify(s.world.author?.recent?.taken));
+});
+
+await section('a fraction of a point still counts', async () => {
+  fresh();
+  s.company.act = 4;
+  const hadRace = s.world.race;
+  const { initRace, raceStandings } = await import('../src/systems/agirace.js');
+  delete s.world.race; initRace(s);
+  s.world.author.recent.taken = [];
+  const top = raceStandings(s).filter((x) => !x.you)[0];
+  s.world.race.labs[top.id].progress = 98.999;
+  const log = applyEffects(s, { race: 1 });
+  const moved = s.world.race.labs[top.id].progress - 98.999;
+  ok('the lab moved to the ceiling and no further', Math.abs(moved - 0.001) < 1e-9, String(moved));
+  ok('the journal has the exact movement', log.some(([k, v]) => k === 'race' && Math.abs(v - 0.001) < 1e-9), JSON.stringify(log));
+  ok('and so does the ledger', Math.abs(V.takenIn(s, 'race', Infinity) - 0.001) < 1e-9, String(V.takenIn(s, 'race', Infinity)));
+  if (hadRace) s.world.race = hadRace; else delete s.world.race;
+  s.company.act = 1;
+});
+
+await section('an own-words answer is on the same rolling budget as a card', async () => {
+  fresh();
+  s.company.cash = 5e6;
+  s.resources.reputation = 400;
+  s.narrative.activeEvent = { id: 'x', title: 'y', choices: [], char: null };
+  const b0 = V.budgetFor(s, 'rep');
+  applyEffects(s, { rep: -Math.round(b0.left) });
+  const p = V.validateProposal(s, { outcome: 'He takes the call.', effects: { rep: -3 } }).problems?.[0];
+  eq('spent by cards, it is spent for answers too', p?.rule, 'budget');
+  s.narrative.activeEvent = null;
+  s.world.author.recent.taken = [];
 });
 
 report('world');

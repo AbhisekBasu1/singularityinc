@@ -54,6 +54,9 @@ export function newGame(opts = {}) {
       feedDensity: 'normal',
       autoShip: false,
       lateStart: null,          // 'act3' when the machine played the opening; legacy pays less
+      // The workstation's own switches. Absent in a console-only save, and
+      // `save.js` fills them, so neither housing needs a migration.
+      os: { dock: 'auto', wallpaper: 'act', widgets: true, banners: true, sounds: true },
     },
     time: {
       day: 0,             // fractional days since founding
@@ -130,7 +133,8 @@ export function newGame(opts = {}) {
     agentIdSeq: 1,
     tasks: [],             // in-flight agent tasks
     taskIdSeq: 1,
-    research: { done: {}, active: null, progress: 0, queue: [], unlocked: {} },
+    agentsLeft: [],
+    research: { done: {}, doneDay: {}, active: null, progress: 0, queue: [], unlocked: {} },
     market: {
       hype: 0.5,              // 0..1 sector hype cycle
       hypePhase: 0,

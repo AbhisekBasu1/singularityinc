@@ -81,7 +81,7 @@ The page holds no key and names no vendor.
   `inspect_module` gives the context behind a beat without taking control away.
 - **You can take it away.** Three doctrines earned by playing a certain way
   permanently remove something from the world's hand, and the plug removes all
-  of it. The count in the popover goes down because you earned something.
+  of it. A tool leaves the popover because you earned something, and it does not come back.
 
 ---
 
@@ -96,7 +96,7 @@ protagonist plays, and revocable in one click.
 
 ## How it is built
 
-- `src/world/` — a fifteen-key effects vocabulary, a validator, and a runtime
+- `src/world/` — a seventeen-key effects vocabulary, a validator, and a runtime
   that claims slots the written deck was about to fill. **No tool touches a
   reducer.**
 - `src/webmcp/` — detection, a registry handling every documented trap (duplicate
@@ -105,8 +105,8 @@ protagonist plays, and revocable in one click.
   measures the *serialised* payload, structured results that never reject, and a
   surface that is a pure function of game state.
 - **The ceilings are derived from the game itself.** `tools/capsderive.mjs`
-  executes all 383 authored choices, once per act each can appear in — 715
-  executions — and takes the 80th percentile of what the
+  executes all 383 authored choices, once per act each can appear in and five
+  times each from a seeded stream — 3,575 executions — and takes the 80th percentile of what the
   written deck takes and what it gives — separately, because they are not the
   same number.
 - **`evals/capsfuzz.mjs` plays the worst assistant the rules allow** against a

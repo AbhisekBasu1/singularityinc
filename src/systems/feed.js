@@ -104,6 +104,14 @@ export function maybeThread(S) {
   });
 }
 
+// The world's threads carry their options on the item itself (`runtime`),
+// because they are written at play time rather than authored in `threads.js`.
+// This file knows nothing about what the world may do to the company; whoever
+// writes such a thread registers the hand that spends its options, the way
+// `narrative.js` takes a hydrate function rather than importing the world.
+let worldThreadResolver = null;    // (S, item, opt) => [key, value][]
+export function registerThreadResolver(fn) { worldThreadResolver = fn || null; }
+
 export const THREAD_FX = {
   rep: (S, v) => { S.resources.reputation = Math.max(0, S.resources.reputation + v); },
   cash: (S, v) => { S.company.cash += v; },
@@ -122,13 +130,16 @@ export const THREAD_FX = {
 export function resolveThread(S, feedId, optIndex) {
   const item = S.feed.find((f) => f.id === Number(feedId));
   if (!item || item.resolved) return null;
-  const t = THREAD_MAP[item.thread];
-  if (!t) return null;
-  const opt = t.opts[optIndex];
+  const opt = threadOptions(S, item)[optIndex];
   if (!opt) return null;
-  const applied = [];
-  for (const [k, v] of Object.entries(opt.fx || {})) {
-    if (THREAD_FX[k]) { THREAD_FX[k](S, v); applied.push([k, v]); }
+  let applied = [];
+  if (item.runtime?.opts) {
+    if (!worldThreadResolver) return null;
+    applied = worldThreadResolver(S, item, opt) || [];
+  } else {
+    for (const [k, v] of Object.entries(opt.fx || {})) {
+      if (THREAD_FX[k]) { THREAD_FX[k](S, v); applied.push([k, v]); }
+    }
   }
   item.resolved = true;
   item.outcome = opt.out;
@@ -154,7 +165,8 @@ export function openThreadCount(S) {
 }
 
 export function threadOptions(S, item) {
-  const t = THREAD_MAP[item.thread];
+  if (Array.isArray(item?.runtime?.opts)) return item.runtime.opts;
+  const t = THREAD_MAP[item?.thread];
   return t ? t.opts : [];
 }
 

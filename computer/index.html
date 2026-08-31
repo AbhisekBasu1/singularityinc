@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en" data-shell="os">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>SINGULARITY, INC. — Workstation</title>
+<meta name="description" content="A founder simulation where your own assistant plays the world against you." />
+
+<!-- Every asset path in this game is document-relative and written in
+     JavaScript — `assets/img/act3.jpg` in a modal, a character's portrait, an
+     ending plate. Served from /computer/ those would resolve one directory too
+     deep and quietly 404. This resolves them all against the origin root, which
+     is where the site deploys. Module imports are unaffected: they resolve
+     against the module's own URL, not the document's. See docs/DEPLOY.md. -->
+<base href="/" />
+
+<!-- The Chrome origin trial for WebMCP. Tokens are issued per origin, not per
+     path, so this is the same token index.html carries. See docs/DEPLOY.md. -->
+<meta http-equiv="origin-trial" content="REPLACE_WITH_THE_TOKEN_FOR_THIS_ORIGIN" />
+
+<meta property="og:type" content="website" />
+<meta property="og:title" content="SINGULARITY, INC." />
+<meta property="og:description" content="A founder simulation where your own assistant plays the world against you — on a desktop that is the founder's own machine." />
+<meta property="og:image" content="assets/img/act4.jpg" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="SINGULARITY, INC." />
+<meta name="twitter:description" content="A founder simulation where your own assistant plays the world against you." />
+<meta name="twitter:image" content="assets/img/act4.jpg" />
+<meta name="theme-color" content="#05070b" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>◈</text></svg>" />
+<link rel="stylesheet" href="styles/main.css" />
+<link rel="stylesheet" href="styles/components.css" />
+<link rel="stylesheet" href="styles/intro.css" />
+<link rel="stylesheet" href="styles/console.css" />
+<link rel="stylesheet" href="styles/hud.css" />
+<link rel="stylesheet" href="styles/os.css" />
+</head>
+<body>
+  <div id="bg-layer"><canvas id="bg-canvas"></canvas></div>
+  <div id="app"></div>
+  <div id="screen-frame"></div>
+  <div id="modal-root"></div>
+  <div id="toast-root" aria-live="polite"></div>
+  <div id="fx-root"></div>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

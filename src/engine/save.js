@@ -52,6 +52,29 @@ export function hasSave() {
   try { return !!localStorage.getItem(KEY); } catch { return false; }
 }
 
+// Who is in the saved run, without loading it. The workstation's login screen
+// puts a real account tile on the first screen — a name, a company, an act and
+// a day — and doing that by `load()` would migrate a save, reseed the RNG and
+// emit `load` to every listener before the player had pressed anything.
+export function peek() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return null;
+    const d = JSON.parse(raw);
+    if (!d || typeof d !== 'object') return null;
+    return {
+      founderName: d.founder?.name || 'Founder',
+      companyName: d.company?.name || 'Untitled',
+      archetype: d.founder?.archetype || 'hacker',
+      category: d.products?.[0]?.category || null,
+      act: Math.max(1, Math.min(5, d.company?.act || 1)),
+      day: Math.floor(d.time?.day || 0),
+      savedAt: d.meta?.lastSaved || null,
+      difficulty: d.settings?.difficulty || 'standard',
+    };
+  } catch { return null; }
+}
+
 export function load() {
   try {
     const raw = localStorage.getItem(KEY);

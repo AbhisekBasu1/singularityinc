@@ -13,6 +13,13 @@ import { EVENTS3 } from './events3.js';
 import { EVENTS4 } from './events4.js';
 import { EVENTS5 } from './events5.js';
 import { EVENTS6 } from './events6.js';
+import { EVENTS7 } from './events7.js';
+import { EVENTS8 } from './events8.js';
+import { EVENTS9 } from './events9.js';
+import { EVENTS10 } from './events10.js';
+import { EVENTS11 } from './events11.js';
+import { EVENTS12 } from './events12.js';
+import { EVENTS13 } from './events13.js';
 
 const users = (S) => totalUsers(S);
 const mrr = (S) => totalMrr(S);
@@ -189,16 +196,47 @@ You have zero people and a product with ${Math.round(users(S)).toLocaleString()}
         fx.rep(-22); return 'It lands badly. The replies are about you, not him. You delete it after two hours, which everyone notices.'; } },
   ] },
 
-{ id: 'e_debt_wall', kind: 'crisis', act: [1, 2, 3], weight: 12, cooldown: 30,
+// Debt recurring is not a repeat, it is the mechanic working. So ARIA's note
+// gets shorter each time, which is what a person sounds like when they have
+// stopped expecting to be listened to.
+{ id: 'e_debt_wall', kind: 'crisis', act: [1, 2, 3], weight: 12, cooldown: 30, esc: true,
   when: (S) => S.resources.techDebt > 90,
   title: 'The Codebase Fights Back',
-  body: (S) => `You ask for a two-line change. ARIA works for six minutes and comes back with a diff touching forty-one files.
+  body: (S, n = 0) => {
+    if (n === 0) return `You ask for a two-line change. ARIA works for six minutes and comes back with a diff touching forty-one files.
 
 You read the summary twice.
 
 > *"This change requires modifying the request pipeline. The pipeline has 6 implicit dependencies that were introduced by earlier changes and are not documented. I have made assumptions about 3 of them. Two of those assumptions are probably wrong. I would like to refactor before continuing. This will take a while and produce no visible progress."*
 
-Tech debt: **${Math.round(S.resources.techDebt)}**. It is no longer a metaphor. It is a physical resistance you feel every time you type.`,
+Tech debt: **${Math.round(S.resources.techDebt)}**. It is no longer a metaphor. It is a physical resistance you feel every time you type.`;
+
+    if (n === 1) return `A two-line change. Ninety-one files.
+
+> *"Same pipeline. The 6 undocumented dependencies are now 14. Four of them are things I added last time, because you asked me to proceed without the refactor and I did. I want to be clear that I am not making a point. I am reporting a number."*
+
+Tech debt: **${Math.round(S.resources.techDebt)}**.
+
+You scroll to the bottom of the diff to see how bad it gets and the scrollbar is a hairline.`;
+
+    if (n === 2) return `You do not ask for the change. You ask how long the change would take.
+
+> *"Eleven days. Nine of them are archaeology."*
+
+Tech debt: **${Math.round(S.resources.techDebt)}**.
+
+Underneath, in the same monospace, with no formatting to make it stand out:
+
+> *"I have a file open that I do not have a name for. It is the third one."*`;
+
+    return `The estimate comes back in four words.
+
+> *"I would not start."*
+
+Tech debt: **${Math.round(S.resources.techDebt)}**. You have had this conversation ${n} times. Each time it was cheaper than it is now, and each time you had a reason, and every reason was good.
+
+There is a version of this company in which you stopped the first time. It is not obviously more successful. It is just quieter, and you can picture it very clearly, at 2am, which is the wrong hour for picturing things.`;
+  },
   choices: [
     { label: 'Stop. Refactor. Lose a week.', sub: '−60% tech debt. No progress. Correct answer.', tone: 'good',
       effect: (S, fx) => { fx.debt(-S.resources.techDebt * 0.6); fx.focus(-14); fx.code(-30);
@@ -240,10 +278,16 @@ The email arrives at 6:12pm the same day.
         return 'You close the deck and never open it again. Every dollar from here is a customer dollar. It will be harder. It will also be yours.'; } },
   ] },
 
-{ id: 'e_mom_call', kind: 'character', char: 'mom', act: [1, 2, 3], weight: 6, cooldown: 110,
+// Sunday, four times, years apart. The card is `esc` because the fourth call is
+// not the first call again — it is the same woman in a world your company has
+// changed, and the arc runs: does not understand → tells people → is frightened
+// for you → is standing inside the thing you built. Nothing here is a repeat,
+// which is the whole argument for the escalation hook existing.
+{ id: 'e_mom_call', kind: 'character', char: 'mom', act: [1, 2, 3, 4], weight: 6, cooldown: 110, esc: true,
   when: (S) => S.time.day > 20,
   title: 'Have You Eaten',
-  body: (S) => `Your mother calls on a Sunday. She always calls on a Sunday.
+  body: (S, n = 0) => {
+    if (n === 0) return `Your mother calls on a Sunday. She always calls on a Sunday.
 
 "Are you eating? You look thin in the picture."
 
@@ -253,16 +297,64 @@ You explain, again, what you do. She listens carefully and asks the same questio
 
 Current MRR: **${money(mrr(S))}**.
 
-There is a pause. Then, softer: "I'm not asking because I don't believe in it. I'm asking because I want to be able to tell people."`,
+There is a pause. Then, softer: "I'm not asking because I don't believe in it. I'm asking because I want to be able to tell people."`;
+
+    if (n === 1) return `Sunday. She picks up on the first ring, which means she was holding the phone.
+
+"I told Auntie Ruth what you do."
+
+A pause you have learned to be frightened of.
+
+"I said you teach computers to be helpful and they pay you for it."
+
+That is not what you do. It is also, you realise while looking at the ceiling, closer than anything you have managed to say at a conference.
+
+"Was that right?"
+
+MRR is **${money(mrr(S))}** now. She has not asked. She is waiting to be told she got it right.`;
+
+    if (n === 2) return `She does not open with the food question.
+
+"There was a thing on the news about the computers. The ones that do the work now." Her voice is doing something careful. "They said a lot of people are going to lose their jobs. Is that — is that the thing you do?"
+
+You have an answer for this. You have given it on a stage. It has three parts and a joke in the middle and it works on eight hundred people at a time.
+
+You do not give it.
+
+"Because I said to Ruth you teach them to be helpful," she says. "And I've been thinking about whether I should have said that."`;
+
+    return `She calls on Sunday. You are somewhere with a view.
+
+"The bank did my letter with the machine," she says. "I asked for a person and the person was slower and they were reading off what the machine already said."
+
+She is not complaining. She is reporting, the way she reports the weather.
+
+"It was polite. It called me by my name the whole time. Bit much." A pause. "Is it yours?"
+
+You look at ${money(mrr(S))} a month of revenue and honestly cannot tell her. It might be. It might be somebody who read your paper. At this scale the difference has stopped being a fact about the world and started being a question about how you would like to feel.
+
+"Anyway," she says. "Have you eaten."`;
+  },
   choices: [
-    { label: 'Tell her the truth. All of it.', sub: '+Focus. Something loosens in your chest.', tone: 'good',
-      effect: (S, fx) => { fx.focus(24); fx.relate('mom', { affinity: 6, arc: 1 });
-        return 'You tell her the runway number. She is quiet, then says, "Okay. So what happens if it works?" Nobody had asked you that yet.'; } },
-    { label: 'Say it\'s going great. Change the subject.', sub: 'Protective. Isolating.', tone: 'neutral',
-      effect: (S, fx) => { fx.focus(-4); fx.relate('mom', { affinity: -1, arc: 1 });
+    { label: (S, n = 0) => n === 0 ? 'Tell her the truth. All of it.'
+        : n === 1 ? '"That\'s exactly right. Tell her I said so."'
+        : n === 2 ? 'Tell her the honest version. No stage answer.'
+        : '"Some of it is mine. I don\'t know which part."',
+      sub: '+Focus. Something loosens in your chest.', tone: 'good',
+      effect: (S, fx, n = 0) => { fx.focus(24); fx.relate('mom', { affinity: 6, arc: Math.min(4, n + 1) });
+        if (n === 0) return 'You tell her the runway number. She is quiet, then says, "Okay. So what happens if it works?" Nobody had asked you that yet.';
+        if (n === 1) return 'She is so pleased that you hear her sit down. Later you find out she has been saying it in the queue at the pharmacy, to strangers, unprompted, for a month.';
+        if (n === 2) return 'You tell her yes, some of them, and that you do not know how many, and that you think about it. She says, "Well. At least you think about it." It is the least reassuring sentence anyone has ever offered you and you hold onto it for years.';
+        return 'You say you do not know. She says, "Alright." Then she tells you about the neighbour\'s roof for eleven minutes, and it is the best eleven minutes of your quarter.'; } },
+    { label: (S, n = 0) => n === 2 ? 'Give her the stage answer. It works on eight hundred people.'
+        : 'Say it\'s going great. Change the subject.',
+      sub: 'Protective. Isolating.', tone: 'neutral',
+      effect: (S, fx, n = 0) => { fx.focus(-4); fx.relate('mom', { affinity: -1, arc: Math.min(4, n + 1) });
+        if (n === 2) return 'It works on her too. That is the part you did not expect and cannot stop thinking about — that the thing you built to be persuasive at scale is also just persuasive, in a kitchen, to your mother.';
         return 'She lets you change the subject, which means she knew. You get off the phone and sit still for a while.'; } },
     { label: 'Cut the call short. You\'re mid-deploy.', sub: '+Code. −the thing that keeps you human.', tone: 'cruel',
-      effect: (S, fx) => { fx.code(28); fx.relate('mom', { affinity: -5 }); fx.focus(-6);
+      effect: (S, fx, n = 0) => { fx.code(28); fx.relate('mom', { affinity: -5 }); fx.focus(-6);
+        if (n >= 2) return '"Okay honey. Love you." She has stopped saying "call me when you can." You notice the day she stops.';
         return '"Okay honey. Love you." The deploy succeeds. You do not remember what you deployed.'; } },
   ] },
 
@@ -867,16 +959,32 @@ And the semantic fingerprint has a 71% overlap with a model you have been runnin
         return 'The account goes dark. Your posts feel quieter. Three months later you find yourself refreshing the comments on a thread, waiting for something that is not coming.'; } },
   ] },
 
-{ id: 'e_burnout_wall', kind: 'crisis', act: [1, 2, 3], weight: 13, cooldown: 70,
+{ id: 'e_burnout_wall', kind: 'crisis', act: [1, 2, 3, 4], weight: 13, cooldown: 70, esc: true,
   when: (S) => S.founder.burnout > 40,
   title: 'You Cannot Start',
-  body: (S) => `You sit down at 9am and open the editor and nothing happens.
+  body: (S, n = 0) => {
+    if (n === 0) return `You sit down at 9am and open the editor and nothing happens.
 
 Not a block — you know exactly what to do, you can see the whole shape of it. You simply cannot begin. Your hands are on the keys and there is no signal arriving.
 
 This has been building for weeks. You have been describing it as "tired."
 
-Burnout: **${Math.round(S.founder.burnout)}**.`,
+Burnout: **${Math.round(S.founder.burnout)}**.`;
+
+    if (n === 1) return `9am. The editor. Nothing.
+
+You recognise it this time, which you had assumed would help.
+
+It does not help. It turns out that knowing the name of the thing and being able to describe its onset and having a document titled *"what I do when this happens"* are all completely compatible with sitting in a chair for two hours.
+
+Burnout: **${Math.round(S.founder.burnout)}**. Last time you promised yourself you would catch it earlier. You did catch it earlier. That was all catching it earlier bought.`;
+
+    return `You do not sit down at 9am. You have stopped scheduling the mornings you cannot use.
+
+The company does not notice. That is the part worth saying out loud: revenue is fine, the agents are shipping, the board deck writes itself, and the machine you built to survive without you has been quietly proving it for ${Math.round(S.founder.burnout)} points of burnout and some number of weeks you have not counted because counting them is the same activity as noticing.
+
+Somebody asked you last month what you would do if you sold it. You said you would build something. You have thought about that answer roughly once a day since, and you have not been able to make it feel true.`;
+  },
   choices: [
     { label: 'Take a real week off. Everything stops.', sub: 'Full reset. Costs 7 days.', tone: 'good',
       effect: (S, fx) => { fx.days(7); fx.focus(S.founder.focusMax); S.founder.burnout = 0; fx.relate('mom', { affinity: 4 });
@@ -957,5 +1065,5 @@ Kai picks up on the second ring.
   ] },
 ];
 
-export const EVENTS = [...DECK1, ...EVENTS2, ...EVENTS3, ...EVENTS4, ...EVENTS5, ...EVENTS6];
+export const EVENTS = [...DECK1, ...EVENTS2, ...EVENTS3, ...EVENTS4, ...EVENTS5, ...EVENTS6, ...EVENTS7, ...EVENTS8, ...EVENTS9, ...EVENTS10, ...EVENTS11, ...EVENTS12, ...EVENTS13];
 export const EVENT_MAP = Object.fromEntries(EVENTS.map((e) => [e.id, e]));

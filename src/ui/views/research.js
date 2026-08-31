@@ -32,7 +32,7 @@ export function render(S) {
   </div>
 
   ${active ? `
-  <div class="panel glow-violet mb16" data-tut="research-active">
+  <div class="panel glow-violet mb16" data-tut="research-status">
     <div class="panel-body">
       <div class="row between g12 mb8">
         <div style="min-width:0">
@@ -55,7 +55,7 @@ export function render(S) {
       </div>` : `<div class="tiny dimmer mt8">Tip: click <b>+</b> on any available node to queue it. The next one starts automatically.</div>`}
     </div>
   </div>` : `
-  <div class="panel mb16" style="border-color:rgba(245,166,35,.3)">
+  <div class="panel mb16" data-tut="research-status" style="border-color:rgba(245,166,35,.3)">
     <div class="panel-body row between g12">
       <div><div class="bold">Nothing is being researched.</div>
         <div class="small dim">Research points are accumulating with nowhere to go. Pick a node below.</div></div>
@@ -107,7 +107,7 @@ function nodeCard(S, n) {
   const b = BRANCHES[n.branch];
 
   const queued = (S.research.queue || []).indexOf(n.id);
-  return `<div class="tech-node ${cls} ${queued >= 0 ? 'queued' : ''}" ${avail && !active ? `data-act="research" data-v="${n.id}"` : ''}
+  return `<div class="tech-node ${cls} ${queued >= 0 ? 'queued' : ''}" data-ctx="node" data-id="${n.id}" ${avail && !active ? `data-act="research" data-v="${n.id}"` : ''}
     ${avail && !active ? 'role="button" tabindex="0"' : ''}>
     ${avail && !active ? `<button class="node-queue" data-act="queue" data-v="${n.id}"
       data-tip="${queued >= 0 ? 'Already queued' : 'Add to research queue'}">${queued >= 0 ? queued + 1 : '+'}</button>` : ''}

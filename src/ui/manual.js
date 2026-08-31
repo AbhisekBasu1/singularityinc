@@ -10,15 +10,34 @@ import * as Tutorial from './tutorial.js';
 import { play as sfx } from './audio.js';
 import { KEYS, GLOSSARY, ACT_GUIDE, FOOTNOTES } from '../data/manual.js';
 
-const MANUAL_TABS = [
+export const MANUAL_TABS = [
   { id: 'walk', name: 'Walkthroughs' },
   { id: 'keys', name: 'Keys' },
   { id: 'terms', name: 'Glossary' },
   { id: 'run', name: 'The run' },
 ];
 let manualTab = 'walk';
+export function getManualTab() { return manualTab; }
+export function setManualTab(t) { if (MANUAL_TABS.some((x) => x.id === t)) { manualTab = t; return true; } return false; }
 
-function manualBody() {
+// The manual's own markup, so the console can show it in a dialog and the
+// workstation can give it a window without either knowing about the other.
+export function manualTabsHtml() {
+  return MANUAL_TABS.map((t) => `<button class="branch-tab ${manualTab === t.id ? 'on' : ''}" data-man="tab:${t.id}">${esc(t.name)}</button>`).join('');
+}
+
+// One place answers a click on anything the manual prints. Returns true when
+// the caller should repaint. A walkthrough starts itself and says so with the
+// `run` result, because the two housings put it on screen differently.
+export function manualClick(v) {
+  if (!v) return false;
+  if (v.startsWith('tab:')) { setManualTab(v.slice(4)); sfx('click'); return true; }
+  if (v === 'toggle') { Tutorial.setDisabled(!Tutorial.isDisabled()); sfx('click'); return true; }
+  if (v.startsWith('run:')) return { run: v.slice(4) };
+  return false;
+}
+
+export function manualBody() {
   if (manualTab === 'walk') return manualWalk();
   if (manualTab === 'keys') return manualKeys();
   if (manualTab === 'run') return manualRun();
@@ -94,9 +113,7 @@ function manualRun() {
 
 export function showHelp() {
   const el = Modal.dialog({ title: 'Manual', wide: true,
-    body: `<div class="man-tabs" id="man-tabs">
-      ${MANUAL_TABS.map((t) => `<button class="branch-tab ${manualTab === t.id ? 'on' : ''}" data-man="tab:${t.id}">${esc(t.name)}</button>`).join('')}
-    </div>
+    body: `<div class="man-tabs" id="man-tabs">${manualTabsHtml()}</div>
     <div id="man-body">${manualBody()}</div>`,
     actions: [{ label: 'Close', cls: 'btn-primary' }] });
 

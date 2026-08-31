@@ -35,6 +35,8 @@ export const CHAPTERS = [
       { id: 'welcome',
         title: 'This is the console',
         body: `You are one person with a laptop and a model that will write whatever you describe.\n\nEverything you will ever do happens on the eight modules down the left. This walkthrough covers the first one, and takes about two minutes.\n\nSkip whenever you like — **?** reopens it, along with the manual for every term in the game.\n\n**The clock is held until you are done.**`,
+        os: { title: 'This is the machine',
+          body: `You are one person with a laptop and a model that will write whatever you describe.\n\nEverything you will ever do happens in the eight apps in the dock. This walkthrough covers the first one, and takes about two minutes.\n\nSkip whenever you like — **?** reopens it, along with the manual for every term in the game.\n\n**The clock is held until you are done.**` },
         cta: 'Begin' },
 
       { id: 'readouts', anchor: '.stat-strip', place: 'bottom',
@@ -47,7 +49,9 @@ export const CHAPTERS = [
 
       { id: 'nav', anchor: '#nav', place: 'right',
         title: 'Eight modules',
-        body: `Grouped by scale: what **you** do, what the **company** does, what the **empire** does, and the record.\n\nGreyed entries are not broken — they open when the company is big enough to need them.` },
+        body: `Grouped by scale: what **you** do, what the **company** does, what the **empire** does, and the record.\n\nGreyed entries are not broken — they open when the company is big enough to need them.`,
+        os: { place: 'top', title: 'Eight apps',
+          body: `Grouped by scale: what **you** do, what the **company** does, what the **empire** does, and the record.\n\nEach one opens as a window, and you can keep several open at once — the Market beside the Desk. Greyed tiles are not broken; they open when the company is big enough to need them. **1–8** opens them from the keyboard.` } },
 
       { id: 'objectives', view: 'desk', anchor: '[data-tut="objectives"]', place: 'bottom',
         title: 'When in doubt, read Next',
@@ -88,12 +92,15 @@ export const CHAPTERS = [
         body: `Field Notes names the single most useful thing you could be doing, and changes as the situation does.\n\nIf you are ever unsure what to do next, this is the answer.` },
 
       { id: 'wire', anchor: '#feed-rail', place: 'left',
+        os: { view: 'wire' },
         title: 'The world, talking',
         body: `Users, press, rivals, and your own agents. Most of it is texture.\n\nAnything marked **NEEDS YOU** is a real decision with real consequences, and it waits for you.` },
 
       { id: 'statusline', anchor: '.statusline', place: 'top',
         title: 'The bottom strip',
-        body: `Where you are, what is going wrong, and what the keys do — always visible, never in the way.\n\nWarnings appear in the middle the moment they matter.` },
+        body: `Where you are, what is going wrong, and what the keys do — always visible, never in the way.\n\nWarnings appear in the middle the moment they matter.`,
+        os: { place: 'bottom', title: 'The menu bar',
+          body: `Every number the world can see, the clock, and the doors to the Wire and to the world — always on top, never in the way.\n\nWarnings light up beside the numbers the moment they matter, and the app's own menu lists everything you can do here with the key beside it.` } },
 
       { id: 'release',
         title: 'That is the whole interface',
@@ -141,17 +148,22 @@ export const CHAPTERS = [
     auto: (S) => S.resources.research >= 14 && !S.research.active
                && !Object.keys(S.research.done || {}).length,
     steps: [
-      { id: 'tree', view: 'research', anchor: '[data-tut="research-active"]', place: 'bottom',
+      { id: 'tree', view: 'research', anchor: '[data-tut="research-status"]', place: 'bottom',
         title: 'Nothing compounds harder',
         body: `Research points accrue on their own and buy permanent, stacking upgrades. One node at a time.\n\nAn idle research queue is the most expensive mistake in the game, and it is completely silent.` },
 
       { id: 'branches', view: 'research',
         title: 'Seven branches, one company',
-        body: `Engineering, Product, Growth, Capital, Frontier, Infrastructure, Alignment.\n\nYou will not finish them all in one run. What you choose to skip is a real decision about what kind of company this is.` },
+        body: `Engineering, Intelligence, Growth, Capital, Infrastructure, Influence, Frontier.\n\nYou will not finish them all in one run. What you choose to skip is a real decision about what kind of company this is.` },
 
-      { id: 'queue', view: 'research', anchor: '.branch-tabs', place: 'bottom',
-        title: 'Pick a node',
-        body: `Click a branch, then a node, to queue it. Progress is driven by the Research lane and your Vision skill.\n\nCome back whenever the queue empties.`,
+      { id: 'branch', view: 'research', anchor: '.branch-tabs', place: 'bottom',
+        title: 'Pick a branch',
+        body: `Choose the part of the company you want to compound first. This only changes the tree in front of you—it does not spend anything yet.`,
+        advance: { act: 'branch' } },
+
+      { id: 'queue', view: 'research', anchor: '.tier-nodes', place: 'top',
+        title: 'Start a node',
+        body: `Click a ready node—or its **+**—to start it. Progress is driven by the Research lane and your Vision skill.\n\nThe **+** adds later nodes behind the one already running. Come back whenever the queue empties.`,
         advance: { pred: (S) => !!S.research.active } },
     ],
   },
@@ -294,10 +306,10 @@ export const CHAPTERS = [
       { id: 'who',
         title: 'That card was not written by us',
         body: `Your assistant wrote it — the title, the scene, and every choice on it.\n\nIt is playing the world: the market, the rivals, the press, the people. You are still the founder, and every button on this console is still yours.` },
-      { id: 'console', anchor: '[data-tut="author"]', place: 'left',
+      { id: 'console', anchor: '[data-tut="author"]', place: 'left', os: { view: 'wire' },
         title: 'What it is allowed to do',
         body: `Everything the world holds right now, and what it just did with it.\n\nThe bar on each line is how much of the browser's **1,500-character** result budget that call spent. A **✕** is the rules refusing it something.` },
-      { id: 'plug', anchor: '[data-act="mute-world"]', place: 'left',
+      { id: 'plug', anchor: '[data-act="mute-world"]', place: 'left', os: { view: 'wire' },
         title: 'And how to take it back',
         body: `One click revokes every tool at once.\n\nThe game does not stop. The written world — six files of authored cards, the rival's own moves, the press — takes back every slot. Nothing is lost by pulling it.` },
       { id: 'words',

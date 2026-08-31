@@ -138,7 +138,7 @@ function affinityNote(a) {
 const EFF_LABEL = { cash: 'cash', code: 'code', insight: 'insight', reputation: 'rep',
   research: 'research', techDebt: 'debt', focus: 'focus', alignment: 'align', heat: 'heat',
   opinion: 'approval', influence: 'influence', users: 'users', equity: 'equity', days: 'days',
-  control: 'control', rivals: 'rivals' };
+  control: 'control', rivals: 'rivals', compute: 'compute', race: 'rival frontier' };
 function effLabel(k) {
   if (k.startsWith('rel:')) { const c = CHARACTERS[k.slice(4)]; return c ? c.name.split(' ')[0] : k.slice(4); }
   if (k.startsWith('skill:')) return k.slice(6);

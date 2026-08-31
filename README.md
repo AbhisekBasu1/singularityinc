@@ -35,7 +35,8 @@ you pull the plug, the deck takes them all back mid-run and nothing is lost.
 
 Everything it can do to you is bounded, and the bounds come from the game itself.
 `tools/capsderive.mjs` executes all **383 authored choices** — once in every act
-each card can appear in, 715 executions — against a
+each card can appear in, five times each from a seeded stream so a `chance()`
+inside a choice is sampled rather than rolled once: 3,575 executions — against a
 representative state for each act and takes the 80th percentile of what the
 written game *takes* and what it *gives* — which are not the same number: Act I
 takes 30 code and gives 90. Those are the ceilings. On top of them sits a rolling
@@ -57,13 +58,13 @@ settings screen; it is written by how you play.
 |---|---|---|
 | a rival grows into your nemesis | gains `rival_move` | it can act against you |
 | you meet somebody | gains their voice | it can speak as them |
-| you reach Act III | gains the market and the regulators | |
+| you reach Act III | gains the market, the regulators, compute to grant and a hand on the race | the race on a budget for the whole run |
 | you earn **Untouchable** | **loses `regulator_pressure`** | for the rest of the run |
 | you earn **Beloved** | **loses the `cruel` tone** | it cannot write one at you |
 | you earn **Zero Entropy** | **can no longer add tech debt** | |
 | you press **Mute the world** | **loses all of it** | in one click |
 
-The count in the popover goes down because you earned something.
+A tool leaves the popover because you earned something, and it does not come back.
 
 ---
 
@@ -92,8 +93,15 @@ their authored consequences land, so it can react now and build callbacks later.
 Meaningful play outside cards reaches it as well: features shipped, launches,
 team changes, research, fundraising, pricing, projects, regions, commitments and
 act transitions. Fast repetitive work is coalesced into one short activity beat.
+When the written deck opens a card, the assistant receives the whole card —
+body, choices, tones — so *"what should I pick?"* is a question it answers from
+the card rather than from a guess. A voice may **ask**: a post with two or three
+one-click replies lands in the Wire as a thread, at a third of a card's
+ceilings, and your reply reaches it the same way.
 After a reload, `activity_log` recovers what happened; `inspect_module` reads the
-current state behind any of the eight tabs without moving your screen.
+current state behind any of the eight tabs without moving your screen — and what
+could be next: the research that could start, what a hire costs, the round on
+offer.
 During a live session the assistant keeps `wait_for_world` open even while you
 press **Accept** or **Decline**; you should not reconnect after each decision.
 The reconnect line is recovery for an interrupted or deliberately ended turn,
@@ -156,11 +164,34 @@ everybody registers tools and very few pages consume them.
 
 ---
 
+## Two housings
+
+The game plays in either of two shells, on one save, and you can move between
+them mid-run.
+
+| | |
+|---|---|
+| **`/`** — the console | The original: a topbar of readouts, a nav of eight modules, one view at a time, and the Wire down the right. |
+| **`/computer/`** — the workstation | The same game as the founder's own desktop: a menu bar, a dock, and windows you can open several of at once, drag, resize and keep where you left them. Logging in *is* continuing the run. |
+
+Nothing is exclusive to either. Every module, card, dialog, walkthrough,
+glossary hover and WebMCP tool is in both; the workstation adds a place to put
+them. Settings in each has a link to the other, and the save carries your window
+layout as fractions of the desktop, so a run arranged on a 27-inch screen opens
+sensibly in the ChatGPT pane.
+
+The workstation is what `desktopdesign.md` specifies and `src/ui/os/` implements.
+`src/ui/shell.js` is the seam: a facade in front of two implementations of one
+interface, so no view, system or tool knows which housing is up.
+
 ## Run it
 
 ```bash
 npm start          # or: node tools/serve.js
 ```
+
+Then open the printed URL for the console, or add `/computer/` for the
+workstation.
 
 No build step, no dependencies, no server, no API key, no network calls. It is a
 folder of ES modules and it saves to `localStorage`.
@@ -198,6 +229,7 @@ Before committing:
 ```bash
 node tools/lint.mjs          # content integrity
 node tools/uitest.mjs        # every view renders, every choice executes
+node tools/ostest.mjs        # the workstation's own housing, headlessly
 node tools/tutorialtest.mjs  # every walkthrough step still anchors
 node tools/fmttest.mjs       # the string a player reads means the number held
 node tools/worldtest.mjs     # every rule the world plays under
@@ -382,17 +414,22 @@ one of those words as a label, resting on it explains it. Add a term to
 ## Layout
 
 ```
-index.html            shell
-styles/               main.css (system) · components.css · intro.css · console.css (reskin)
+index.html            the console
+computer/index.html   the workstation — the same modules, on a desktop
+styles/               main.css (system) · components.css · intro.css
+                      console.css (reskin) · hud.css (emissive) · os.css (the desktop)
 src/
   main.js             bootstrap, input, render loop
   game.js             orchestration — wires systems to the loop
   engine/             state, loop, save, rng, format, bus
   data/               balance + all content (research, events×6, tutorial, manual, …)
   systems/            simulation (product, agents, economy, narrative, world, race, …)
-  ui/                 shell, intro, typewriter, tutorial, modal, toast, audio, ending + one per view
+  ui/                 shell.js (the seam) · shell-console.js · readouts.js
+                      intro, typewriter, tutorial, modal, toast, audio, ending + one per view
+  ui/os/              the workstation: window manager, menu bar, dock, desktop,
+                      notifications, login, the app registry and its models
 assets/img/           character portraits and act banners
-tools/                serve.js, simtest.mjs, balance.mjs, uitest.mjs, lint.mjs
+tools/                serve.js, simtest.mjs, balance.mjs, uitest.mjs, ostest.mjs, lint.mjs
 ```
 
 ## Development
@@ -400,6 +437,7 @@ tools/                serve.js, simtest.mjs, balance.mjs, uitest.mjs, lint.mjs
 ```bash
 node tools/lint.mjs                        # content lint (refs, reachability, schema)
 node tools/uitest.mjs                      # render every view + resolve every event choice
+node tools/ostest.mjs                      # the workstation: every readout, menu, layout and widget
 node tools/savetest.mjs                    # save / load / migrate / offline / corrupt input
 node tools/prestigetest.mjs                # the new-timeline loop and legacy maths
 node tools/endingtest.mjs                  # every ending path is buildable and reachable
@@ -421,6 +459,25 @@ Dev harness (URL params on the running game):
 ?dev=1&career=1&view=legacy                # a plausible career ledger
 ?dev=1&brief=1                             # the "while you were gone" briefing
 ?dev=1&notut=1                             # suppress walkthroughs (clean screenshots)
+```
+
+Every browser tool takes a `ROUTE`, because there are two housings and both have
+to survive all three widths:
+
+```
+PLAYWRIGHT=/tmp/pw/node_modules/playwright/index.js ROUTE=/computer/ node tools/shot.mjs
+PLAYWRIGHT=… ROUTE=/computer/ node tools/oneside.mjs
+PLAYWRIGHT=… ROUTE=/computer/ node tools/liveworld.mjs
+```
+
+`tools/oslive.mjs` is the workstation's own: a real browser logging in, walking
+every step of First Light, dragging and snapping windows, answering a thread
+from a notification, taking a call, turning an act, shutting the machine down,
+and carrying one save between the two housings — a hundred assertions and twenty
+screenshots.
+
+```
+PLAYWRIGHT=… node tools/oslive.mjs
 ```
 
 `tools/titleshot.mjs` is `shot.mjs` for the first screen: it renders the title in
