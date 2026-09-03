@@ -166,6 +166,8 @@ a { color: var(--cyan); text-decoration: none; }
 .speed-btn:hover { color: var(--ink); background: var(--panel-2); }
 .speed-btn.on { background: var(--green); color: #05060a; box-shadow: 0 0 12px rgba(0,229,160,0.4); }
 .speed-btn.pause.on { background: var(--amber); box-shadow: 0 0 12px rgba(245,166,35,0.4); }
+.speed-btn.next { letter-spacing: -0.08em; }
+.speed-btn.next.on { background: var(--cyan); color: #04141a; box-shadow: 0 0 12px rgba(77,208,225,0.4); }
 
 /* ── Nav ────────────────────────────────────────────────────────────────── */
 .nav {

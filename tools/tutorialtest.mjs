@@ -23,12 +23,17 @@ const SOURCES = [
   // and the world map render anchors too.
   ...fs.readdirSync(path.join(ROOT, 'src/ui')).filter((f) => f.endsWith('.js')).map((f) => 'src/ui/' + f),
   ...fs.readdirSync(path.join(ROOT, 'src/ui/views')).map((f) => 'src/ui/views/' + f),
+  // The workstation's apps render anchors of their own.
+  ...fs.readdirSync(path.join(ROOT, 'src/ui/os')).filter((f) => f.endsWith('.js')).map((f) => 'src/ui/os/' + f),
 ].map((p) => ({ p, src: read(p) }));
 const ALL_SRC = SOURCES.map((s) => s.src).join('\n');
 
 const VIEW_IDS = [...read('src/ui/shell.js').matchAll(/\{\s*id:\s*'([a-z]+)',\s*name:/g)].map((m) => m[1]);
+// The workstation's windows: a step may name one under `os`, and a chapter
+// marked `osOnly` may name one outright.
+const APP_IDS = [...read('src/ui/os/apps.js').matchAll(/\{\s*id:\s*'([a-z]+)',\s*title:/g)].map((m) => m[1]);
 const ACTIONS = new Set([...ALL_SRC.matchAll(/data-act="([a-z0-9-]+)"/g)].map((m) => m[1]));
-const CSS = ['main', 'components', 'intro', 'console'].map((f) => read(`styles/${f}.css`)).join('\n');
+const CSS = ['main', 'components', 'intro', 'console', 'os'].map((f) => read(`styles/${f}.css`)).join('\n');
 
 let fails = 0, warns = 0, checks = 0;
 const fail = (m) => { fails++; console.log('  ✗ ' + m); };
@@ -87,7 +92,14 @@ for (const c of CHAPTERS) {
     if (st.title && st.title.length > 46) warn(`${where}: title is ${st.title.length} chars — it will wrap hard`);
     if (st.body && st.body.length > 420) warn(`${where}: body is ${st.body.length} chars — long for a card`);
 
-    if (st.view && !VIEW_IDS.includes(st.view)) fail(`${where}: unknown view "${st.view}"`);
+    const viewOk = (v) => VIEW_IDS.includes(v) || ((c.osOnly || false) && APP_IDS.includes(v));
+    if (st.view && !viewOk(st.view)) fail(`${where}: unknown view "${st.view}"`);
+    // The workstation's overrides are checked the same way, against its ids.
+    if (st.os) {
+      if (st.os.view && !VIEW_IDS.includes(st.os.view) && !APP_IDS.includes(st.os.view)) fail(`${where}: os.view "${st.os.view}" is not a window`);
+      if (st.os.anchor && !anchorExists(st.os.anchor)) fail(`${where}: os.anchor ${st.os.anchor} matches nothing`);
+      if (st.os.title && st.os.title.length > 46) warn(`${where}: os.title is ${st.os.title.length} chars`);
+    }
 
     if (st.anchor) {
       if (!anchorExists(st.anchor)) {
@@ -144,6 +156,13 @@ late.legacy.runs = 2;
 // A grown run has had an assistant at the table, so the chapter that teaches
 // the world's own console is reachable in a probe rather than only in a tab.
 late.world.author.stats.cards = 3;
+// And it has met people, so the chapter about the phone is reachable.
+late.narrative.relationships.sam = { met: true, affinity: 4, arc: 1 };
+late.narrative.relationships.mom = { met: true, affinity: 4, arc: 1 };
+// And Vance has appeared, so the chapter about his company has a panel to point at.
+{ const { spawnAperture } = await import('../src/systems/rivalco.js'); try { spawnAperture(late); } catch {} }
+// And the Wire has asked it something, so the chapter about the Wire is reachable.
+late.feed.push({ id: 1, type: 'social', text: 'probe', tone: 'neutral', thread: 'probe', resolved: false, day: 40 });
 
 for (const S of [early, late]) {
   for (const c of CHAPTERS) {

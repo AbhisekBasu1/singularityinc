@@ -5,10 +5,10 @@
 // real tools and the real reducers. A shot list in a document rots between
 // being written and being shot; a shot list that is a test does not.
 //
-// Every beat asserts the thing the camera is supposed to catch — the popover
-// count moving, the refusal arriving with a number in it, the clock stopping
-// when the founder says stop, the tool leaving the list because they earned
-// something. If a beat here fails, the take fails, and better here.
+// Every beat asserts the thing the camera is supposed to catch — the stable
+// popover, live authority changing underneath it, a refusal arriving with a
+// number, and the clock stopping when the founder says stop. If a beat here
+// fails, the take fails, and better here.
 // ─────────────────────────────────────────────────────────────────────────────
 import { installDom, ok, eq, section, report } from './headless.mjs';
 installDom();
@@ -76,7 +76,7 @@ await section('0:30 — "I call Marcus Vance and offer a merger"', async () => {
   s.narrative.relationships.vance = { met: true, affinity: -1, respect: 2, fear: 0, arc: 2 };
   markOut();
   await Surface.reconcile(s, 'take');
-  ok('and now the world can speak as him', R.has('post_as_vance'), R.list().join(','));
+  ok('the stable cast tool is ready to speak as him', R.has('post_as_character'), R.list().join(','));
 
   markOut();
   const card = await mc.call('write_event', {
@@ -133,7 +133,9 @@ await section('0:50 — the founder answers, and the numbers move', async () => 
 
 await section('1:00 — the world keeps playing while they do', async () => {
   const before = s.feed.length;
-  const r = await mc.call('post_as_vance', { text: 'took a call today. some people grow up.' });
+  const r = await mc.call('post_as_character', {
+    character: 'vance', text: 'took a call today. some people grow up.',
+  });
   eq('posted', r.status, 'ok');
   ok('it is in the Wire', s.feed.length > before);
   ok('and marked as the world\'s', !!s.feed[0].byWorld);
@@ -186,7 +188,7 @@ await section('1:20 — the scripted failure, and the recovery', async () => {
   resolveChoice(s, 1); dismissEvent(s);
 });
 
-await section('1:40 — the founder earns something, and the world loses a tool', async () => {
+await section('1:40 — the founder earns something, and the world loses authority', async () => {
   markOut();
   // Act III is where the regulators enter the world's hand. Set it rather than
   // playing two hundred days to get there: this beat is about the popover, and
@@ -200,14 +202,16 @@ await section('1:40 — the founder earns something, and the world loses a tool'
   emit('doctrine', { id: 'untouchable', name: 'Untouchable' });
   await new Promise((r) => setTimeout(r, 30));
 
-  ok('and now they are not', !R.has('regulator_pressure'));
-  // With a full hand a teaching tool steps into the vacated slot, so the total
-  // may hold at sixteen; what the shot shows is the named tool leaving, and
-  // nothing the world plays with taking its place.
-  ok('and nothing the world plays with took its place', R.count() <= countBefore, `${countBefore} → ${R.count()}`);
+  ok('the capability stays visible', R.has('regulator_pressure'));
+  eq('the popover is unchanged', R.count(), countBefore);
+  const pressure = await mc.call('regulator_pressure', {
+    heat: 1, line: 'The committee opens an inquiry.',
+  });
+  eq('but the earned immunity blocks the call', pressure.status, 'refused');
+  eq('and says why', pressure.rule, 'immunity');
   eq('and the founder is told what it cost the world', s.world.author.stats.revokedByDoctrine >= 1, true);
-  beat(10, 'ONE CONTINUOUS SHOT, popover open: the founder earns Untouchable and');
-  beat(11, '  regulator_pressure disappears from the list, for the rest of the run.');
+  beat(10, 'ONE CONTINUOUS SHOT, popover open: the founder earns Untouchable;');
+  beat(11, '  regulator_pressure stays stable and refuses with the earned immunity.');
 });
 
 await section('1:50 — a press release that is not a press release', async () => {
@@ -271,7 +275,7 @@ await section('2:20 — the plug', async () => {
 
 await section('2:40 — the numbers', async () => {
   ok('there is an eval table to point at', true);
-  beat(18, 'ON SCREEN: evals/README.md — 74% top-1, every gate clean, the band holds.');
+  beat(18, 'ON SCREEN: evals/README.md — 76% top-1 over 82 phrases, all of them scored, every gate clean, the band holds.');
   beat(19, 'THE REPO, THE LICENCE, THE DEEP LINK.');
 });
 

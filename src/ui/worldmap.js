@@ -9,7 +9,7 @@
 
 import { esc } from './dom.js';
 import { REGIONS, STAGES, STAGE_INDEX, stanceOf } from '../data/regions.js';
-import { regionState, canEngage } from '../systems/regions.js';
+import { regionState, canEngage, rivalIn, rivalName } from '../systems/regions.js';
 
 const W = 1000, H = 440;
 // The blocs occupy x 94..868, y 56..394. Crop to that plus a margin so the
@@ -48,7 +48,11 @@ export function worldMap(S) {
     const idx = STAGE_INDEX[st.stage] || 0;
     const stance = stanceOf(st.stance);
     const check = canEngage(S, r.id);
-    return { r, st, idx, stance, ready: !!check?.ok, building: !!st.building };
+    // §A10. Somebody else is in the room. No new art: a small ⊘ over the bloc's
+    // shoulder, and the bloc's own tooltip says who and at what depth.
+    const rv = rivalIn(S, r.id);
+    return { r, st, idx, stance, ready: !!check?.ok, building: !!st.building,
+             rival: rv ? { stage: STAGE_INDEX[rv.stage] || 0, who: rivalName(S, r.id) } : null };
   });
 
   const held = rows.filter((x) => x.idx > 0).map((x) => x.r);
@@ -56,10 +60,14 @@ export function worldMap(S) {
   const gdp = rows.reduce((a, x) => a + (x.idx > 0 ? x.r.gdp : 0), 0);
   const sovereign = rows.filter((x) => x.idx >= 4).length;
 
-  const blocs = rows.map(({ r, st, idx, stance, ready, building }) => {
+  const contested = rows.filter((x) => x.rival).length;
+
+  const blocs = rows.map(({ r, st, idx, stance, ready, building, rival }) => {
     const cls = ['wm-bloc', idx > 0 ? 'held' : '', ready ? 'ready' : '', building ? 'building' : '',
-                 idx >= 4 ? 'sovereign' : ''].filter(Boolean).join(' ');
-    const tip = `${stance.name} &middot; ${esc(STAGES[idx].name)}${building ? ' (building)' : ''}\n${esc(r.desc)}`;
+                 idx >= 4 ? 'sovereign' : '', rival ? 'contested' : ''].filter(Boolean).join(' ');
+    const tip = `${stance.name} &middot; ${esc(STAGES[idx].name)}${building ? ' (building)' : ''}`
+      + (rival ? `<br><b>${esc(rival.who)}</b> holds ${esc(STAGES[rival.stage].name.toLowerCase())} here.` : '')
+      + `\n${esc(r.desc)}`;
     return `<g class="${cls}" style="--rc:${r.color};--fill:${FILL[idx]}"
       data-act="focus-region" data-v="${r.id}" role="button" tabindex="0"
       data-tip="${tip}" data-tip-title="${esc(r.name)}">
@@ -67,6 +75,7 @@ export function worldMap(S) {
       <text class="wm-code" x="${r.at[0]}" y="${r.at[1]}">${esc(r.short)}</text>
       <text class="wm-stage" x="${r.at[0]}" y="${r.at[1] + 15}">${idx ? ROMAN[idx] : '—'}</text>
       ${ready ? `<circle class="wm-ping" cx="${r.at[0]}" cy="${r.at[1] - 26}" r="4"/>` : ''}
+      ${rival ? `<text class="wm-rival" x="${r.at[0] + 26}" y="${r.at[1] - 14}">⊘</text>` : ''}
     </g>`;
   }).join('');
 
@@ -78,6 +87,7 @@ export function worldMap(S) {
         <span><i>pop</i>${(pop * 100).toFixed(0)}%</span>
         <span><i>output</i>${(gdp * 100).toFixed(0)}%</span>
         <span><i>blocs</i>${held.length}/8</span>
+        ${contested ? `<span class="wm-cold"><i>contested</i>${contested}</span>` : ''}
         ${sovereign ? `<span class="wm-hot"><i>sovereign</i>${sovereign}</span>` : ''}
       </span>
     </div>
@@ -93,6 +103,7 @@ export function worldMap(S) {
       <span class="wmk"><i class="wmk-sw s2"></i>infrastructure</span>
       <span class="wmk"><i class="wmk-sw s3"></i>partnership</span>
       <span class="wmk"><i class="wmk-sw s4"></i>sovereign</span>
+      <span class="wmk"><i class="wmk-sw contested">⊘</i>somebody else is there</span>
       <span class="wmk-tip">click a bloc for its file &middot; a dot means you can act there now</span>
     </div>
   </div>`;

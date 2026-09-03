@@ -2,6 +2,7 @@
 // EVENT DECK VI — replay variety for the acts you will see every single run.
 // ─────────────────────────────────────────────────────────────────────────────
 import { totalUsers, totalMrr } from '../systems/product.js';
+import { cw } from './catwords.js';
 
 const users = (S) => totalUsers(S);
 const mrr = (S) => totalMrr(S);
@@ -82,9 +83,9 @@ You say "software" and everybody nods and the conversation moves on, and you sit
 { id: 'e6_the_metric', kind: 'story', act: [1, 2], weight: 7, cooldown: 100,
   when: (S) => users(S) > 200,
   title: 'You Are Watching The Wrong Number',
-  body: (S) => `You have a dashboard. You look at it thirty times a day. The number at the top is signups.
+  body: (S) => `You have a dashboard. You look at it thirty times a day. The number at the top is signups. The number your ${cw(S, 'customers')} would put there is ${cw(S, 'metric')}, and it is not on the screen at all.
 
-An agent, doing a routine correlation sweep nobody asked for, notes that signups have almost no relationship to revenue in your data, and that a number you do not display — the fraction of users who return in week two — predicts it almost perfectly.
+An agent, doing a routine correlation sweep nobody asked for, notes that signups have almost no relationship to revenue in your data, and that a number you do not display — the fraction of ${cw(S, 'customers')} who come back in week two — predicts it almost perfectly.
 
 You have been optimising the top of the funnel for four months because it is the number that moves fastest and feels the best.`,
   choices: [
@@ -132,12 +133,17 @@ They mention, at the end, unprompted, that it had been used every day for two ye
 
 There is no process for this. Your billing system will attempt a charge on the fourteenth.`,
   choices: [
-    { label: 'Handle it yourself. Personally. Today.', sub: 'Costs an hour. Changes the company.', tone: 'good',
-      effect: (S, fx) => { fx.focus(-6); fx.rep(30); fx.align(0.04); fx.flag('bereavement_policy');
-        return 'You write the reply yourself, refund everything, and spend the afternoon building a proper process so nobody ever has to ask again. It ships that week. It is used forty times a year and mentioned in the press exactly never.'; } },
-    { label: 'Have an agent handle it with care.', sub: 'Fast, kind enough, not yours.', tone: 'neutral',
-      effect: (S, fx) => { fx.rep(10); fx.align(0.01);
-        return 'The reply is warm, correct, and generated. It is genuinely a good reply. You read it afterwards and cannot decide whether it should have been.'; } },
+    // The kind door used to cost an hour of focus and pay thirty reputation,
+    // which made it the optimal button as well as the good one. It costs the
+    // week's ship now: the process is a day of your hands and the release slips
+    // behind it, and that is what makes it a decision.
+    { label: 'Handle it yourself. Personally. Today.', sub: '−1 day. The release slips. Changes the company.', tone: 'good',
+      effect: (S, fx) => { fx.days(1); fx.focus(-18); fx.code(-70); fx.rep(30); fx.align(0.06);
+        fx.flag('bereavement_policy');
+        return 'You write the reply yourself, refund everything, and spend the rest of the day and most of the night building a proper process so nobody ever has to ask again. The thing that was going out on Thursday goes out the following Tuesday.\n\nThe process is used forty times a year and mentioned in the press exactly never.'; } },
+    { label: 'Have an agent handle it with care.', sub: 'Fast, kind enough, not yours. −Focus, not time.', tone: 'neutral',
+      effect: (S, fx) => { fx.rep(10); fx.align(0.01); fx.focus(-10);
+        return 'The reply is warm, correct, and generated. It is genuinely a good reply. You read it afterwards and cannot decide whether it should have been, and you are still deciding at two in the morning, which costs more than the afternoon would have.'; } },
     { label: 'Route it to standard cancellation.', sub: 'Correct. Cold.', tone: 'cruel',
       effect: (S, fx) => { fx.rep(-25); fx.align(-0.04);
         const p = S.products.find((x) => x.launched); if (p) p.sentiment -= 0.05;
@@ -220,6 +226,18 @@ Your growth agent has flagged it as a 6% conversion loss. Your legal agent has f
       effect: (S, fx) => { fx.rep(-90); fx.opinion(-0.08); fx.align(-0.10);
         const p = S.products.find((x) => x.launched); if (p) p.sentiment -= 0.12;
         return 'The internet has screenshots. It always has screenshots. "Company deletes honest support reply" outperforms the original thread by a factor of six.'; } },
+    // The angry button. The thread is full of people being pleased about your
+    // company at your expense, and there is a version of the founder who goes
+    // in and says so, and it costs a real number.
+    { label: 'Go into the thread yourself. Say what it cost.', sub: 'Under your own name, at 11pm. It will not read as humility.', tone: 'risky',
+      effect: (S, fx) => { fx.focus(-14); fx.align(0.04);
+        const p = S.products.find((x) => x.launched);
+        if (fx.chance(0.5)) { fx.rep(60); fx.opinion(0.05); if (p) { p.sentiment += 0.10; p.users *= 0.98; }
+          fx.flag('argued_in_the_thread');
+          return 'You reply at eleven at night, under your own name, at length, and you are not gracious about it: you say that the six per cent is four hundred thousand dollars a year, that it comes out of the same budget as the thing three of them have been asking for since March, and that "most honest support I have ever had from a vendor" is a sentence about how low the bar is and not a compliment to anybody.\n\nIt lands. The thread turns, in about forty minutes, into the best conversation about vendor incentives anybody has had in public, and you are in all of it, and you are still typing at two.'; }
+        fx.rep(-80); fx.opinion(-0.06); if (p) p.sentiment -= 0.06;
+        fx.flag('argued_in_the_thread');
+        return 'You reply at eleven at night, under your own name, at length, and every single sentence is true.\n\nIt reads as a founder arguing with people who paid the company a compliment. Somebody puts your reply next to the agent\'s reply in one image, with no caption, and that image is the entire discourse for a week and it is not on your side, and the worst part is that the agent comes out of the comparison better than you do.'; } },
   ] },
 
 { id: 'e6_downtime_upside', kind: 'story', act: [2, 3], weight: 6, cooldown: 130,

@@ -75,13 +75,25 @@ function shorten(str, by) {
 }
 
 // Trim a result until it fits. Returns the same object, mutated, plus a
-// `_trimmed` marker if anything was cut, so a test can see it happened.
+// `_trimmed` list naming what was cut — `recent: 6 of 48`, `body: shortened`.
+//
+// It used to be a bare `true`, which told the caller a payload was incomplete
+// and nothing about *which* part, so a model reading eight of forty-eight
+// journal entries had no way to know it was reading eight. The list is the
+// answer to "should I ask for the next page", and the paged reads are the
+// answer to what it does about it.
 export function pack(result, { budget, hard = HARD_CAP } = {}) {
   budget = budget ?? BUDGET;
   let out = assertSerialisable(result);
   if (weigh(out) <= budget) return out;
 
-  let trimmed = false;
+  // Keyed by field, so ten rounds of shortening one string is one note and the
+  // note carries the whole story rather than the last cut of it.
+  const cuts = new Map();
+  const noteShort = (k) => cuts.set(k, `${k}: shortened`);
+  const noteList = (k, now, was) => cuts.set(k, `${k}: ${now} of ${cuts.has(k) ? String(cuts.get(k)).split(' of ')[1] : was}`);
+  const noteDrop = (k) => cuts.set(k, `${k}: dropped`);
+
   for (let round = 0; round < 8 && weigh(out) > budget; round++) {
     let cutSomething = false;
     for (const key of trimOrder(out)) {
@@ -89,13 +101,18 @@ export function pack(result, { budget, hard = HARD_CAP } = {}) {
       const v = out[key];
       if (typeof v === 'string' && v.length > 30) {
         out[key] = shorten(v, Math.ceil(v.length * 0.25));
-        trimmed = true; cutSomething = true;
+        noteShort(key); cutSomething = true;
       } else if (Array.isArray(v) && v.length > 1) {
-        out[key] = v.slice(0, Math.max(1, v.length - 1));
-        trimmed = true; cutSomething = true;
+        // A quarter at a time, the way a string gives way — one element per
+        // round meant an eight-round budget could shed at most eight entries,
+        // so a forty-eight-row list came back over budget and *called itself
+        // trimmed*, which is the exact lie this pass is here to stop.
+        const was = v.length;
+        out[key] = v.slice(0, Math.max(1, was - Math.ceil(was * 0.25)));
+        noteList(key, out[key].length, was); cutSomething = true;
       } else if (v && typeof v === 'object') {
         const keys = Object.keys(v);
-        if (keys.length > 2) { delete v[keys[keys.length - 1]]; trimmed = true; cutSomething = true; }
+        if (keys.length > 2) { delete v[keys[keys.length - 1]]; noteShort(key); cutSomething = true; }
       }
     }
     if (!cutSomething) break;
@@ -108,14 +125,20 @@ export function pack(result, { budget, hard = HARD_CAP } = {}) {
   // the note saying it contains an instruction is worse than no payload.
   const protectedKeys = PROTECTED;
   if (weigh(out) > hard) {
-    const keys = Object.keys(out).filter((k) => !protectedKeys.includes(k));
-    while (keys.length && weigh(out) > hard) { delete out[keys.pop()]; trimmed = true; }
+    const keys = Object.keys(out).filter((k) => !protectedKeys.includes(k) && k !== '_trimmed');
+    while (keys.length && weigh(out) > hard) { const k = keys.pop(); delete out[k]; noteDrop(k); }
   }
 
   // The marker is part of the payload, so it has to be added before the last
   // measurement rather than after it — otherwise a result trimmed to exactly
-  // the cap goes back over it on the way out.
-  if (trimmed) out._trimmed = true;
+  // the cap goes back over it on the way out. It is a list, and the list is
+  // itself trimmed to what will fit: four notes is the whole story of any cut
+  // this packer has ever made.
+  const setNotes = () => {
+    if (!cuts.size) { delete out._trimmed; return; }
+    out._trimmed = [...cuts.values()].slice(0, 4);
+  };
+  setNotes();
 
   // Last resort: even a protected field can be too long. `next` is prose and a
   // truncated `next` is still actionable; a truncated JSON document is not.
@@ -126,8 +149,13 @@ export function pack(result, { budget, hard = HARD_CAP } = {}) {
     let guard = 0;
     while (weigh(out) > hard && typeof out[k] === 'string' && out[k].length > 24 && guard++ < 12) {
       out[k] = shorten(out[k], Math.max(16, weigh(out) - hard + 16));
-      out._trimmed = true;
+      noteShort(k); setNotes();
     }
+  }
+  // And the notes themselves, if the notes are what is over. A payload is
+  // never allowed to be too big *because* it explained why it was trimmed.
+  while (Array.isArray(out._trimmed) && out._trimmed.length > 1 && weigh(out) > hard) {
+    out._trimmed = out._trimmed.slice(0, out._trimmed.length - 1);
   }
   return out;
 }

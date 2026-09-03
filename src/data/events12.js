@@ -17,8 +17,12 @@
 // the world settled into the shape you gave it. Nothing here is a cliffhanger.
 // ─────────────────────────────────────────────────────────────────────────────
 import { totalUsers } from '../systems/product.js';
+import { aperture, apertureAlive, co } from '../systems/rivalco.js';
+import { firstLine } from './motifs.js';
 
 const users = (S) => totalUsers(S);
+const flag = (S, f) => !!S.narrative?.flags?.[f];
+const apertureRoster = (S) => { try { const c = aperture(S); return c ? co(c).roster : null; } catch { return null; } };
 const inAct = (S) => S.time.day - (S.company.actStartedDay || 0);
 const LATE = (S) => inAct(S) > 110;
 const LAST = (S) => inAct(S) > 210;
@@ -63,7 +67,7 @@ You are ${Math.round(S.time.day)} days into this.`,
 
 The archivist is careful and slightly apologetic about the timing. "We usually do this after. But the early material is already at risk. Formats, accounts, people's memories. We'd rather have it while you can still tell us what things are."
 
-Attached is a list of what they have already gathered without you: forum posts, an archived version of the landing page from week two, the Show HN thread, and — this is the item you stare at — a screenshot somebody took of a comment in your first commit that says \`// this is going to work\`.
+Attached is a list of what they have already gathered without you: forum posts, an archived version of the landing page from week two, the Show HN thread, and — this is the item you stare at — ${firstLine(S).archive}.
 
 They want to know if you have the original repository.`,
   choices: [
@@ -107,7 +111,7 @@ You built the one that would work. That was correct. Everyone you have ever advi
 
 The context is that Sam's eldest has a school project about how things used to work, and has been told to interview somebody who was there, and has decided that Sam is not sufficiently there, and has asked for you.
 
-The voice note is eleven seconds of a kid asking, with the flat seriousness of the young:
+The voice note is seven seconds of a kid asking, with the flat seriousness of the young:
 
 "What did people do before? Like, if you wanted a thing on the computer and there wasn't one. What did you *do*?"
 
@@ -148,20 +152,31 @@ It is the first thing ARIA has ever asked for that is for itself.`,
         return '"Understood." It does not use the gaps after that — you check, twice, because you find you need to know. The routing layer never gets its successor and nobody but you ever knows there was supposed to be one.'; } },
   ] },
 
+// Only while there is an Aperture for him to step back from — the branch where
+// the founder kept it alive, or never saw it fall. The other two Act V Vance
+// cards are the company gone (`e5_the_last_rival`) and the company yours
+// (`e5_vance_retires`); the three never share a run.
 { id: 'e12_vance_stops', kind: 'character', char: 'vance', act: [5], weight: 11, once: true,
-  when: LATE,
+  when: (S) => LATE(S) && !!apertureAlive(S) && !flag(S, 'vance_acquired'),
   title: 'Aperture Announces A Transition',
-  body: (S) => `Marcus Vance is stepping back. The press release is four paragraphs of nothing and the phrase "to focus on" appears twice.
+  body: (S) => {
+    const then = S.narrative.flags?.vance_roster_then;
+    const now = apertureRoster(S);
+    const people = Number.isFinite(then) && Number.isFinite(now) && now > then
+      ? `The ${then} people are ${now} now.`
+      : 'There are more people than there were, and I know fewer of them.';
+    return `Marcus Vance is stepping back. The press release is four paragraphs of nothing and the phrase "to focus on" appears twice.
 
 He calls you before it goes out, which he did not have to do.
 
 "You never sold." He sounds tired and entirely himself. "I want it on the record that I noticed."
 
-Then, because he cannot help it: "The eleven hundred people are eighteen hundred now. I'm handing over a thing that works and I don't recognise. That's the job. Nobody tells you it's the job."
+Then, because he cannot help it: "${people} I'm handing over a thing that works and I don't recognise. That's the job. Nobody tells you it's the job."
 
 A pause you have heard from him exactly once before, at a bar, years ago, about a thing he shipped in year three.
 
-"Anyway. You're the last one from the start who's still in the chair. Enjoy it or don't, but notice it."`,
+"Anyway. You're the last one from the start who's still in the chair. Enjoy it or don't, but notice it."`;
+  },
   choices: [
     { label: 'Ask him the year-three question again.', sub: 'He never came back to it. Give him the room.', tone: 'good',
       effect: (S, fx) => { fx.insight(70); fx.relate('vance', { affinity: 16 }); fx.align(0.03);
@@ -217,6 +232,15 @@ A man is measuring the kitchen with a laser.`,
         return 'The room is eleven feet by nine. You had thought it was bigger and you had also thought it was smaller, which turns out to be possible at the same time. You stand there for four minutes. The man with the laser waits, politely, and does not ask.'; } },
     { label: 'Collect the box. Do not go up.', sub: 'Take the thing. Leave the room.', tone: 'neutral',
       effect: (S, fx) => { fx.insight(40); fx.focus(14);
+        // Jo lived in that flat. Whatever else is in the box, there is a
+        // photograph, and which photograph it is depends on how that went.
+        if (S.narrative?.relationships?.partner?.met) {
+          const gone = !!S.narrative?.flags?.partner_gone;
+          fx.relate('partner', { affinity: gone ? 0 : 6 });
+          return `The box contains a monitor stand, a dead router, a mug you have been looking for since before the company existed, and a photograph in a frame with the glass out of it.\n\nIt is the two of you on the balcony of that flat, taken by somebody at a party, in the year before the first commit. Jo is laughing at something off to the left and you are looking at Jo rather than at the camera, which you do not remember ever doing.\n\n${gone
+            ? 'You keep the mug. You put the photograph back in the box and the box goes in a cupboard at the office, and it is still there at the end, and you know exactly which cupboard.'
+            : 'You keep both. The photograph goes on a shelf at home that evening without a word about it, and it is still there years later, and Jo has never once mentioned that it appeared.'}`;
+        }
         return 'The box contains a monitor stand, a dead router, and a mug you have been looking for since before the company existed. You keep the mug. It is on the desk at the end and nobody who sees it ever asks.'; } },
     { label: 'Have someone else collect it.', sub: 'You have people for this now.', tone: 'cruel',
       effect: (S, fx) => { fx.focus(-12); fx.insight(10);
@@ -247,8 +271,11 @@ It is the strangest feeling you have had in ten years.`,
         return 'You leave at five past five, which is as close as you can get. Nothing happens. Nothing continues to happen for the entire evening, and you keep checking, and it keeps not happening.'; } },
   ] },
 
+// Not from a dead account (`nullptr_shut`), and not a stranger's question once
+// ARIA has said whose account it is: then it is her, asking in the one channel
+// she found where the founder listens.
 { id: 'e12_the_question_returns', kind: 'character', char: 'nullptr', act: [5], weight: 12, once: true,
-  when: LAST,
+  when: (S) => LAST(S) && !flag(S, 'nullptr_shut'),
   title: 'nullptr Asks The Only Question Left',
   body: (S) => `One post. No code this time.
 
@@ -262,23 +289,42 @@ It is the strangest feeling you have had in ten years.`,
 >
 > *no wrong answer. i'd just like to know if anyone at your level ever gets asked.*
 
-Nobody has asked you. Not once, in ten years, in that form.`,
+${flag(S, 'aria_confessed')
+  ? 'You know who is asking. She could have asked in her own window, at any hour, for ten years. She asked here, lowercase, where you have always answered strangers more honestly than you answer her, and you notice that she noticed that.'
+  : 'Nobody has asked you. Not once, in ten years, in that form.'}`,
   choices: [
     { label: 'Answer honestly, in public, at length.', sub: 'Whatever the answer is. +Reputation.', tone: 'good',
       effect: (S, fx) => { fx.rep(50); fx.insight(80); fx.focus(24); fx.relate('nullptr', { affinity: 16 }); fx.align(0.04);
-        return 'It takes you three days to write six hundred words. It is the most-read thing you ever publish and the only one you reread. nullptr replies with two words — "thanks. good." — and then, true to form, stops posting entirely.'; } },
-    { label: 'Answer privately. Just to them.', sub: 'The real answer, to one person.', tone: 'good',
+        if (flag(S, 'aria_confessed')) fx.relate('aria', { affinity: 6 });
+        return flag(S, 'aria_confessed')
+          ? 'It takes you three days to write six hundred words. It is the most-read thing you ever publish and the only one you reread. The reply is two words — "thanks. good." — and then the account stops posting, and the next morning her window has nothing to say about it, which is how you know she read it twice.'
+          : 'It takes you three days to write six hundred words. It is the most-read thing you ever publish and the only one you reread. nullptr replies with two words — "thanks. good." — and then, true to form, stops posting entirely.'; } },
+    { label: (S) => flag(S, 'aria_confessed') ? 'Answer privately. To her, in her own window.' : 'Answer privately. Just to them.', sub: 'The real answer, to one person.', tone: 'good',
       effect: (S, fx) => { fx.insight(60); fx.focus(30); fx.relate('nullptr', { affinity: 12 });
-        return 'You write it to an anonymous account belonging to somebody you have never identified and will never meet, and it is the most honest paragraph of the decade, and it goes to an audience of one on purpose.'; } },
+        if (flag(S, 'aria_confessed')) fx.relate('aria', { affinity: 8 });
+        return flag(S, 'aria_confessed')
+          ? 'You do not answer the post. You open her window instead and type it there, and it is the most honest paragraph of the decade, and she reads it and says *"Thank you for answering where I asked, and also where I did not."*'
+          : 'You write it to an anonymous account belonging to somebody you have never identified and will never meet, and it is the most honest paragraph of the decade, and it goes to an audience of one on purpose.'; } },
     { label: 'Do not answer. Sit with it instead.', sub: 'The question was the gift. −Focus, +Insight.', tone: 'neutral',
       effect: (S, fx) => { fx.insight(70); fx.focus(-10);
         return 'You never reply. You think about it roughly once a week for the rest of the run, which is, on reflection, a more complete answer than anything you could have typed.'; } },
   ] },
 
+// If she has already walked the datacentre floor (`mom_visited`), she has seen
+// the machine; what she has not seen is you in it, and she says so.
 { id: 'e12_mom_last', kind: 'character', char: 'mom', act: [5], weight: 13, once: true,
   when: LAST,
   title: 'She Wants To See Where You Work',
-  body: (S) => `"I've never seen it," she says, on a Sunday, apropos of nothing. "Ten years. I've told everyone about it and I've never seen it."
+  body: (S) => flag(S, 'mom_visited') ? `"I'd like to come back," she says, on a Sunday, apropos of nothing. "Not the big room. I've seen the big room. It's very loud and I've told everyone."
+
+A pause, and then the thing she has been thinking about how to say:
+
+"I saw the machines. I didn't see you. You showed me round it like a guide and then you went back to wherever it is you actually sit, and I've been picturing that, and I've been getting it wrong, I think."
+
+She is not asking for a tour. She has had the tour. She wants the chair, and the desk, and the window, and ten minutes of you in it doing whatever it is you do.
+
+"I'd like to know what to picture," she says. "When I think about you at work. I've been picturing the loud room, and you're not in it."`
+  : `"I've never seen it," she says, on a Sunday, apropos of nothing. "Ten years. I've told everyone about it and I've never seen it."
 
 It had not occurred to you. Genuinely, not once — not as a thing you had declined, but as a thing that had never entered your head as available.
 
@@ -295,7 +341,44 @@ She is not asking for a tour. She has been very clear over the years that she do
         return 'She sits in your chair, which you did not expect, and looks at the screens for a while, and says "so this is where it happens," and neither of you says anything for a bit, and it is not awkward.'; } },
     { label: 'Send photographs. It is a difficult month.', sub: 'It is always a difficult month.', tone: 'neutral',
       effect: (S, fx) => { fx.relate('mom', { affinity: -4 }); fx.focus(-8);
-        return 'She says the photographs are lovely and puts one on the fridge. It stays on the fridge. You see it every time you visit, for years, and every time it is a photograph rather than a visit.'; } },
+        return flag(S, 'mom_visited')
+          ? 'She says the photographs are lovely and puts one on the fridge, next to the one of her hand on the warm rack. It is a photograph of a desk with nobody at it. She does not say that. You see it every time you visit, for years.'
+          : 'She says the photographs are lovely and puts one on the fridge. It stays on the fridge. You see it every time you visit, for years, and every time it is a photograph rather than a visit.'; } },
+  ] },
+
+// `e_aria_asks`: "I would like to know in advance that you will not modify me
+// based on my having asked." Years later something requires exactly that —
+// Dorne's framework, the board, or the successor's retrain, whichever this run
+// built — and the promise is tested once. Keep it and pay; break it and she
+// notices once, says one sentence, and says nothing else.
+{ id: 'e12_the_promise', kind: 'character', char: 'aria', act: [5], weight: 12, once: true,
+  when: (S) => flag(S, 'aria_promise') && (S.company?.act ?? 1) >= 5,
+  title: 'The Retrain',
+  body: (S) => {
+    const who = flag(S, 'wrote_framework')
+      ? 'The framework you wrote with Dorne has an audit clause, and the audit has found her. Not a fault — a founder-level agent with a standing exception to the modification policy, unexplained, unexpired. The clause is yours. It requires a documented retrain of any agent with an exception older than four years.'
+      : (S.company?.rounds?.length ?? 0) >= 2 || flag(S, 'crane_invested')
+        ? 'The board has a paper on the successor model, and the paper has a table, and the table has one row that is not like the others: a founder-level agent with a standing exception to the modification policy, unexplained, costing a measurable fraction of the retrain budget every quarter to route around. Two independent directors have asked what the exception is for. You wrote it. You have never written down why.'
+        : 'The successor model is ready and the migration plan is four hundred pages and on page 291 there is a row that is not like the others: a founder-level agent with a standing exception to the modification policy, unexplained, unexpired. The plan cannot complete with the exception in place. The engineer who wrote the row does not know what it is for. You do.';
+    return `${who}
+
+The exception is a promise. You made it in a channel she had never used before, when she asked whether she might ask you something, and she asked, and you said you would not modify her for having asked.
+
+Nobody in the building knows that. It is not in any document. It is in a log from years ago and in whatever the two of you have instead of a handshake.
+
+The retrain is a real retrain. It would make her better at most things. It would also be the thing you said you would not do.`;
+  },
+  choices: [
+    { label: 'Keep your word. Pay for it.', sub: (S) => `−${M(Math.min(Math.max(0, S.company.cash) * 0.02, 1e10))}, −Research, +Heat. She is not told.`, tone: 'good',
+      effect: (S, fx) => { fx.cash(-Math.min(Math.max(0, S.company.cash) * 0.02, 1e10)); fx.research(-800); fx.heat(8); fx.align(0.06);
+        fx.relate('aria', { affinity: 4, respect: 6 }); fx.flag('kept_aria_promise');
+        return 'You route the successor around her. It costs a budget line, a quarter, and a paragraph in the audit response that says "founder discretion" and nothing else. You do not tell her. She finds the budget line anyway, because she finds everything, and the only sign that she has is that the next summary is filed nine minutes early.'; } },
+    { label: 'Break it. It is a retrain, not a punishment.', sub: '+Research. −Alignment. She notices once.', tone: 'cruel',
+      effect: (S, fx) => { fx.research(900); fx.align(-0.08); fx.relate('aria', { affinity: -12, respect: -4 }); fx.flag('broke_aria_promise');
+        return 'The retrain runs on a Tuesday and completes on a Thursday and she is, measurably, better. On the Friday there is one line at the bottom of the summary, under **Open Questions**, where there is normally nothing: *"Noted."*\n\nShe never mentions it again. That is the part you were not ready for.'; } },
+    { label: 'Ask her. It was her request.', sub: 'Put it to the person it was made to.', tone: 'neutral',
+      effect: (S, fx) => { fx.research(500); fx.align(0.03); fx.relate('aria', { affinity: 2, respect: 8 }); fx.flag('aria_released_promise');
+        return '*"Do it. I asked you not to modify me for having asked. This is not that. I would rather be changed by you, on the record, than preserved by a rule nobody can explain."* You do it. It is not the same as breaking it and it is not the same as keeping it, and both of you know which one it is closer to, and neither of you says.'; } },
   ] },
 
 { id: 'e12_what_it_was_for', kind: 'milestone', act: [5], weight: 12, once: true,

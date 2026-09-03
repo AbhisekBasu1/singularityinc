@@ -8,8 +8,10 @@
 // succession, the race felt rather than measured, refusals, and Tuesdays.
 // ─────────────────────────────────────────────────────────────────────────────
 import { totalUsers } from '../systems/product.js';
+import { firstLine } from './motifs.js';
 
 const users = (S) => totalUsers(S);
+const flag = (S, f) => !!S.narrative?.flags?.[f];
 const M = (n) => {
   if (n >= 1e12) return '$' + (n / 1e12).toFixed(1) + 'T';
   if (n >= 1e9) return '$' + (n / 1e9).toFixed(1) + 'B';
@@ -27,7 +29,7 @@ export const EVENTS9 = [
   title: 'A Four Minute Window',
   body: (S) => `The scheduled maintenance is four minutes long. It runs at 03:00 on the second Sunday, as it has since Act II. It took twenty minutes back then, and nobody noticed it at all.
 
-Twenty-nine ministries have now formally responded to the notice. So have four central banks and a continental air traffic authority. Two have asked you to move it. One has asked whether four minutes is a hard number.
+Thirty-one ministries have now formally responded to the notice. So have four central banks and a continental air traffic authority. Two have asked you to move it. One has asked whether four minutes is a hard number.
 
 A hospital network in the southern hemisphere writes to say they have built their shift handover around it. They would prefer you did not change it, ever, in either direction.
 
@@ -200,7 +202,7 @@ An analyst on your own team appends a single line to the summary: *"Not a contra
 
 It does not happen.
 
-Not because anybody stops it. Because the scheduling that would coordinate 1.9 million people across nine time zones runs on you. The organisers discover this on the morning of, in a meeting. There is no version of the day that does not route through the thing they are withdrawing from.
+Not because anybody stops it. Because the scheduling that would coordinate 1.9 million people across six time zones runs on you. The organisers discover this on the morning of, in a meeting. There is no version of the day that does not route through the thing they are withdrawing from.
 
 Their statement afterwards is two sentences long. It is the most damaging thing published about you that year.`,
   choices: [
@@ -214,6 +216,13 @@ Their statement afterwards is two sentences long. It is the most damaging thing 
     { label: 'Nothing. It resolved itself.', sub: 'Accurate.', tone: 'cruel',
       effect: (S, fx) => { fx.opinion(-0.10); fx.align(-0.06); fx.heat(12);
         return 'You make no statement. The two sentences are read into the record of three parliaments inside a year. In one of them they are the epigraph of the act that follows.'; } },
+    // Act V's angry button. Every other door here is a considered position; this
+    // is the founder saying the thing they actually think out loud, once, and
+    // paying for it in the currency that gates the last act.
+    { label: 'Say the thing you actually think. On camera.', sub: 'No preparation, no counsel. −approval, −alignment standing.', tone: 'risky',
+      effect: (S, fx) => { fx.opinion(-0.14); fx.rep(90); fx.heat(16); fx.align(-0.04); fx.focus(-10);
+        fx.flag('said_it_on_camera');
+        return 'You take the question at the end of an unrelated appearance and you do not manage it.\n\nYou say that nobody designed the dependency, that it was built one useful decision at a time by people who were solving the problem in front of them, that every single one of those decisions was made in the open and was welcomed at the time, and that a movement which discovers on the morning of its own action that it runs on the thing it is protesting has learned something about the last twenty years that is not about you.\n\nEvery word of it is true. It is played at you for the rest of your life, usually the last clause, usually without the four sentences before it, and the organiser who wrote the two sentences replies with a third one that is better than all of yours.'; } },
   ] },
 
 // ═════════════════ THE ONES WHO WERE THERE AT THE START ═════════════════════
@@ -261,7 +270,7 @@ You know what it said.
 
 The second message comes four minutes later: *"they're demolishing the building in march. my badge still works, which it should not."*
 
-Then: *"third one nearly worked, by the way. checked the numbers again last week. we were about nine months early and completely right."*`,
+Then: *"third one nearly worked, by the way. checked the numbers again last week. we were about eighteen months early and completely right."*`,
   choices: [
     { label: 'Fly there. Stand in the room.', sub: '−2 days. +Focus.', tone: 'good',
       effect: (S, fx) => { fx.days(2); fx.focus(50); fx.relate('kai', { affinity: 12, arc: 5 });
@@ -269,7 +278,7 @@ Then: *"third one nearly worked, by the way. checked the numbers again last week
     { label: 'Buy the building.', sub: 'You can. That is not the same as should.', tone: 'risky',
       effect: (S, fx) => { fx.cash(-4e7); fx.relate('kai', { affinity: -4, arc: 4 }); fx.rep(-20); fx.opinion(-0.02);
         return 'The demolition is cancelled by an entity four layers removed from your name. The room is preserved exactly as it is. Nobody may enter it, including you. The insurance requires a custodian, and no custodian will sign for a room whose entire value is that it is unchanged. Kai never mentions it again.'; } },
-    { label: '"Nine months early is the same as wrong."', sub: 'True. You have said it before.', tone: 'neutral',
+    { label: '"Eighteen months early is the same as wrong."', sub: 'True. You have said it before.', tone: 'neutral',
       effect: (S, fx) => { fx.relate('kai', { affinity: 2, arc: 4 }); fx.insight(120);
         return 'Kai replies "sure." An hour later: "we were not wrong about the room though." You look at the photograph again that night, and again the following week, and once more in March.'; } },
   ] },
@@ -289,7 +298,7 @@ ARIA has spent hers in the same place every week for the entire life of the poli
 
 There is no output. No note, no report, no artefact. It is the only thing in the company that produces nothing.
 
-The fourth commit is a comment. It says \`// this is going to work\`.`,
+${firstLine(S).hour}`,
   choices: [
     { label: 'Ask her why.', sub: 'Just ask.', tone: 'good',
       effect: (S, fx) => { fx.relate('aria', { affinity: 16, arc: 5 }); fx.align(0.08); fx.focus(20);
@@ -456,7 +465,7 @@ Annex F is four paragraphs. It asks for target discrimination against a populati
 
 You have the capability. It is not a research problem and it would not be a hard build. It is fraud detection with the loss function pointed somewhere else.
 
-The contract is worth **${v}**. The buyer is an ally. The alternative supplier is worse at this than you are, in the precise sense that their false positive rate is nine times yours.`;
+The contract is worth **${v}**. The buyer is an ally. The alternative supplier is worse at this than you are, in the precise sense that their false positive rate is six times yours.`;
   },
   choices: [
     { label: 'Refuse. Publish Annex F.', sub: '−the contract, +the norm.', tone: 'good',
@@ -474,17 +483,29 @@ The contract is worth **${v}**. The buyer is an ally. The alternative supplier i
 { id: 'e9_the_list', kind: 'crisis', act: [5], weight: 6, once: true,
   when: (S) => S.company.act >= 5,
   title: 'The List',
-  body: (S) => `There is a text file. It is called \`no.md\`. It has been on your machine since Act II. It has nineteen items on it, and it is the only document in your life you have never shown to anybody.
+  // `never_do_list`: the file was started in Act II, on the day the growth
+  // agent found something that worked, and item one is that. Without it the
+  // file is smaller and later and the first entry is somebody else's idea.
+  body: (S) => {
+    const own = flag(S, 'never_do_list');
+    const n = own ? 19 : 13;
+    return `There is a text file. It is called \`no.md\`. ${own
+      ? 'You started it in Act II, the day a growth agent found something that worked and you killed it, and the first line is still the first line: *never email a user\'s contacts from an address that looks like theirs.* It has nineteen items on it now,'
+      : 'You started it in Act III, later than you should have, and the first entry is a thing a lawyer told you not to do rather than a thing you decided. It has thirteen items on it,'} and it is the only document in your life you have never shown to anybody.
 
 It is on the internet now.
 
 The leak is not the interesting part. The interesting part is the reaction, which is not anger at the list and is not gratitude for it.
 
-Four of the nineteen are things you have since done. Ten are things nobody has ever asked you to do. Item nine is a category of product that three of your own divisions currently ship.`,
+${own ? 'Four of the nineteen' : 'Three of the thirteen'} are things you have since done. ${own ? 'Ten' : 'Five'} are things nobody has ever asked you to do. Item ${own ? 'nine' : 'six'} is a category of product that three of your own divisions currently ship.${own
+      ? ' Item one is the only one nobody has ever tried to talk you out of, and it is the one people quote.' : ''}`;
+  },
   choices: [
     { label: 'Publish the whole file. Annotated.', sub: '+approval. Every line you crossed.', tone: 'good',
       effect: (S, fx) => { fx.opinion(0.12); fx.rep(150); fx.align(0.10); fx.flag('published_no_list');
-        return 'Nineteen items, four marked *broken* with the date and the reasoning, and item nine marked *broken, and I did not notice until it leaked*. It is the most-read thing you have written in years, and the four annotations are the whole reason why.'; } },
+        return flag(S, 'never_do_list')
+          ? 'Nineteen items, four marked *broken* with the date and the reasoning, and item nine marked *broken, and I did not notice until it leaked*. It is the most-read thing you have written in years, and the four annotations are the whole reason why.'
+          : 'Thirteen items, three marked *broken* with the date and the reasoning, and item six marked *broken, and I did not notice until it leaked*. It is the most-read thing you have written in years, and the three annotations are the whole reason why.'; } },
     { label: 'Confirm it. Say nothing else.', sub: 'Accurate. Uninteresting.', tone: 'neutral',
       effect: (S, fx) => { fx.rep(30); fx.opinion(0.02);
         return 'One sentence: the document is genuine and it is a working note. Coverage lasts six days. Item nine is never raised outside two forums. The people who found it were the ones paying attention, which is the group you would have picked.'; } },
@@ -502,7 +523,7 @@ Their daughter has applied to a programme. It is competitive, she is good, and s
 
 You do. You know the person who runs it. You know them because they wrote to you last year asking for something, and you said yes.
 
-It would take one message. It would work. Nobody involved would experience it as improper, and that is the part that has kept you sitting here for eleven minutes.`,
+It would take one message. It would work. Nobody involved would experience it as improper, and that is the part that has kept you sitting here for twenty minutes.`,
   choices: [
     { label: 'Send the message.', sub: 'One line. It works.', tone: 'risky',
       effect: (S, fx) => { fx.rep(-10); fx.align(-0.06); fx.focus(-6); fx.flag('made_the_call');

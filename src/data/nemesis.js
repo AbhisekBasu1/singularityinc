@@ -14,13 +14,18 @@
 //   min      minimum grudge before they will do this
 //   only     restrict to these personalities
 //   need(S)  extra precondition
-//   line     what they post — {you} {them} {founder} {product} are filled in
+//   line     what they post — {you} {them} {founder} {product} {agent} are
+//            filled in; a function receives (S, c, ctx) with what the move did
 //   sub      the small grey line under it
-//   effect   (S, c) => [label, value] pairs, applied immediately
+//   effect   (S, c, m, sys) => [label, value] pairs, applied immediately. `m`
+//            is the modifier table (repDamage scales what a move costs you);
+//            `sys` is what a move may reach into the game with, the way a card
+//            reaches through `fx` — this file never imports a system.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { clamp } from '../engine/format.js';
 import { pick } from '../engine/rng.js';
+import { MARKET } from './balance.js';
 
 export const MOVES = [
   {
@@ -62,26 +67,43 @@ export const MOVES = [
       'published the comparison {you} would not. draw your own conclusions.',
     ]),
     sub: 'Selective, defensible, and effective.',
-    effect: (S) => {
-      S.resources.reputation = Math.max(0, S.resources.reputation * 0.965);
-      return [['reputation', -Math.round(S.resources.reputation * 0.035)]];
+    effect: (S, c, m) => {
+      const share = 0.035 * (m?.repDamage ?? 1);   // Crisis Comms, Untouchable
+      const lost = Math.round(S.resources.reputation * share);
+      S.resources.reputation = Math.max(0, S.resources.reputation * (1 - share));
+      return [['reputation', -lost]];
     },
   },
   {
     id: 'poach', name: 'Came for your people', weight: 0.8, min: 1.0,
     only: ['shark', 'blitz', 'giant'],
     need: (S) => (S.agents?.length || 0) >= 2,
-    line: () => pick([
+    line: (S, c, ctx) => ctx?.poached ? pick([
+      '{agent} starts with us on monday. we did not have to ask twice.',
+      'welcome {agent}. {you} built something good and then stopped looking after the people who built it.',
+      '{agent} came from {you} this week. ask it why.',
+    ]) : pick([
       'we are hiring. specifically, we are hiring from {you}. ask me how.',
-      'two of the best engineers I have met this year came from {you} this month.',
+      'made {agent} an offer this week. it said no. it took a while to say no.',
       '{them} is paying above market for anyone who has shipped against us.',
     ]),
-    sub: 'Morale takes the hit even when nobody leaves.',
-    effect: (S) => {
-      let hit = 0;
-      for (const a of S.agents || []) { a.morale = clamp((a.morale ?? 1) - 0.08, 0.1, 1); hit++; }
-      return [['morale', -8 * Math.min(1, hit)]];
-    },
+    sub: 'A name, an offer, and a few days before they answer it.',
+    effect: (S, c, m, sys) => sys.poach(S, c),
+  },
+  {
+    // §H13. A named target and a few days to answer it. The move opens the
+    // approach; `systems/nemesis.js` resolves it, and until it does the
+    // counter list has something in it that is actually about this week.
+    id: 'sabotage', name: 'Went after the product', weight: 0.5, min: 1.6,
+    only: ['shark', 'giant'],
+    need: (S) => !!(S.products || []).some((p) => p.launched),
+    line: (S, c, ctx) => pick([
+      'somebody is going to find out how {product} handles load this month. not us, obviously.',
+      'interesting week ahead for {product}. that is all I am going to say about it.',
+      'we have been reading the {product} status page with real interest lately.',
+    ]),
+    sub: 'They have named a target. There are a few days to answer it.',
+    effect: (S, c, m, sys) => sys.sabotage(S, c),
   },
   {
     id: 'fud', name: 'Briefed a journalist', weight: 0.7, min: 1.4,
@@ -121,10 +143,11 @@ export const MOVES = [
       'the community version does 80% of what {you} charges for. it is on GitHub.',
     ]),
     sub: 'Hard to compete with free, and they know it.',
-    effect: (S) => {
+    effect: (S, c, m) => {
       S.market.priceSiege = Math.max(S.market.priceSiege || 0, 20);
-      S.resources.reputation = Math.max(0, S.resources.reputation * 0.98);
-      return [['fair price', -1], ['reputation', -2]];
+      const share = 0.02 * (m?.repDamage ?? 1);
+      S.resources.reputation = Math.max(0, S.resources.reputation * (1 - share));
+      return [['fair price', -1], ['reputation', -Math.round(share * 100)]];
     },
   },
   {
@@ -135,7 +158,14 @@ export const MOVES = [
       'funded. we are going to spend all of it on the {cat} category.',
     ]),
     sub: 'War chest. They can afford to lose money at you for years.',
-    effect: (S, c) => { c.funding += c.mrr * 26 + 4e6; c.growth *= 1.16; return [['their runway', 1]]; },
+    // Growth compounds here and nowhere else, and a feud can raise many times
+    // in a run — a chair pressing it every week could — so it stops at the
+    // ceiling the market gives any rival.
+    effect: (S, c) => {
+      c.funding += c.mrr * 26 + 4e6;
+      c.growth = Math.min((c.growth || 0) * 1.16, MARKET.RIVAL_GROWTH_CAP);
+      return [['their runway', 1]];
+    },
   },
   {
     id: 'respect', name: 'Said something true', weight: 0.4, min: 0,
@@ -150,6 +180,77 @@ export const MOVES = [
 ];
 
 export const MOVE_MAP = Object.fromEntries(MOVES.map((m) => [m.id, m]));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §A14 THE SEASON — what they are trying to do, for the next few months.
+//
+// A rival that draws from a pool with no objective is weather with a founder's
+// name on it. Each season they pick a goal, say something in the Wire that
+// gives it away without naming it, weight their moves toward it, and at the end
+// of the season somebody has won that argument. Intelligence agents on
+// Operations read the goal outright; without them the founder has the
+// telegraph and whatever they can infer from what the rival keeps doing.
+//
+//   pick(S, c)          → { key, label } or null when the goal has no target
+//   telegraph(S,c,t)    → the line they post when the season opens
+//   favours             → move ids this goal weights up
+//   judge(S, c, t, se)  → did they get it? (`se` is the season record)
+//   won / lost          → the line the season closes on
+//
+// This file never imports a system: `t` is handed in by `systems/nemesis.js`.
+// ─────────────────────────────────────────────────────────────────────────────
+export const GOALS = [
+  {
+    id: 'category', name: 'Your best line', weight: 1.2,
+    sub: 'They want the category you are known for.',
+    pick: (S) => { const p = (S.products || []).filter((x) => x.launched)
+                     .sort((a, b) => (b.mrr || 0) - (a.mrr || 0))[0];
+                   return p ? { key: p.id, label: p.category } : null; },
+    telegraph: (S, c, t) => `we have decided to be the best ${t.label} company in the world. that is the whole plan. that is the whole post.`,
+    favours: ['mirror', 'undercut', 'benchmark', 'open_source'],
+    // Their share of the category is the honest test: did the product you are
+    // known for lose ground while they were pointed at it?
+    judge: (S, c, t, se) => c.users > (se.mark || 0) * 1.25,
+    won: (S, c, t) => `A quarter of pointing everything at ${t.label} has worked for them: they finish it larger than they started, and the comparison articles have stopped putting you first.`,
+    lost: (S, c, t) => `They spent a season on ${t.label} and came out of it where they went in. Somebody there has started using the phrase "next year".`,
+  },
+  {
+    id: 'people', name: 'A name on your roster', weight: 1.0,
+    sub: 'They want a specific person, and they have said so in every way but the name.',
+    pick: (S) => { const a = (S.agents || []).filter((x) => x.status === 'active')
+                     .sort((x, y) => (y.level || 0) - (x.level || 0))[0];
+                   return a ? { key: a.id, label: a.name } : null; },
+    telegraph: () => 'hiring update: we are done building teams from scratch. we are going to hire the four people who already did it somewhere else. two of them have replied.',
+    favours: ['poach', 'raise', 'fud'],
+    judge: (S, c, t) => !(S.agents || []).some((a) => a.id === t.key && a.status === 'active'),
+    won: (S, c, t) => `${t.label} took the offer. The season was about one person and they got them, and everybody left knows which desk is empty.`,
+    lost: (S, c, t) => `${t.label} stayed. They ran a whole season at one person and that person is still here, which is a fact the rest of the roster has noticed.`,
+  },
+  {
+    id: 'bloc', name: 'A market you are in', weight: 1.0,
+    sub: 'They want a bloc, and they are willing to be patient about it.',
+    pick: (S) => { const held = Object.entries(S.world?.regions || {})
+                     .filter(([, v]) => v.stage !== 'none').map(([k]) => k);
+                   return held.length ? { key: held[held.length - 1], label: held[held.length - 1] } : null; },
+    telegraph: () => 'the next billion users are not where the last billion were. we have opened an office. we are not saying where yet.',
+    favours: ['channel', 'undercut', 'raise'],
+    judge: (S, c, t) => !!S.world?.regionRivals?.[t.key],
+    won: (S, c, t, se) => `They are in ${se.regionName || 'the bloc'} now, with a building and a ministry liaison. It took them a season and they did not once say your name.`,
+    lost: (S, c, t, se) => `Whatever they were trying to arrange in ${se.regionName || 'that bloc'} did not arrange itself. Their regional lead is back at head office with a new title.`,
+  },
+  {
+    id: 'story', name: 'The story about you', weight: 0.9,
+    sub: 'They do not want your customers. They want to be the ones who are believed.',
+    pick: () => ({ key: 'story', label: 'the story' }),
+    telegraph: () => 'we are going to stop talking about the competition and start publishing everything. numbers, failures, the lot. let people decide who is honest.',
+    favours: ['fud', 'benchmark', 'respect', 'open_source'],
+    judge: (S, c, t, se) => (S.resources.reputation || 0) < (se.mark || 0) * 0.95,
+    won: () => 'The season ends with two profiles in the same week, and neither of them is about you. That was the objective and they hit it.',
+    lost: () => 'They spent a season trying to be the honest one and it did not take. The pieces that ran were about the pieces, which is the worst outcome available to a press strategy.',
+  },
+];
+
+export const GOAL_MAP = Object.fromEntries(GOALS.map((g) => [g.id, g]));
 
 // What the dossier says about the state of the feud.
 export const GRUDGE_BANDS = [
@@ -177,7 +278,68 @@ export function grudgeBand(v) {
 //   do(S, c)    apply it; return the line the player reads
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── §H13 What is on the table right now ─────────────────────────────────────
+// A pending approach: a name they have gone after, or a product they have
+// named, with a few days on it. `systems/nemesis.js` opens and resolves it;
+// this is a pure read of the state so the two counters below can be data like
+// every other counter. `when` is what keeps them off the Market view entirely
+// when there is nothing on the table — a permanently greyed row that is
+// *usually* meaningless teaches the founder to stop reading the list.
+const onTable = (S, kind) => {
+  const p = S?.market?.nemesis?.pending;
+  if (!p || p.countered) return null;
+  if (kind && p.kind !== kind) return null;
+  return (S.time?.day ?? 0) <= p.counterUntil ? p : null;
+};
+
+// The line a founder reads when the approach is visible at all. Named by lane
+// and never by person: what Intelligence buys is "they are in your infra team
+// this week", not a name badge.
+export const APPROACH = {
+  poach: [
+    'Somebody at {them} has been in the {lane} team\'s inboxes since Tuesday. The message is the same message and the number in it is not.',
+    'Two of your {lane} people have had the same recruiter call this week. It is a good offer and it is meant to be found out about.',
+    'A {them} recruiter has worked out who on {lane} is unhappy, which means somebody told them.',
+  ],
+  sabotage: [
+    'Traffic against {product} from four addresses that do not resolve to anything. Not enough to hurt. Enough to map.',
+    'Somebody is walking {product} end to end, slowly, at three in the morning, and being careful about it.',
+    'A vulnerability report about {product} arrives from a researcher who does not exist and knows the codebase.',
+  ],
+};
+export const APPROACH_META = 'Intelligence · a few days before it lands';
+
 export const COUNTERS = [
+  {
+    id: 'counter_offer', name: 'Match what they offered',
+    desc: 'Pay to keep the person they are in the middle of hiring away from you.',
+    costLabel: 'cash — a quarter of what they already draw',
+    when: (S) => !!onTable(S, 'poach'),
+    cost: (S) => ({ cash: onTable(S, 'poach')?.keepCost || 0 }),
+    need: (S) => !!onTable(S, 'poach'),
+    do: (S, c) => {
+      const p = onTable(S, 'poach');
+      if (!p) return 'The offer was withdrawn before you could answer it.';
+      p.countered = true;
+      return `You do not pretend it is about anything but money, which ${p.name} appreciates more than a speech would have. ${c.name} will find out what you paid within a fortnight, and the number is now the number.`;
+    },
+    grudge: 0.12,
+  },
+  {
+    id: 'harden', name: 'Harden the target',
+    desc: 'Two weeks of the roster on the thing they have decided to break.',
+    costLabel: 'code · focus',
+    when: (S) => !!onTable(S, 'sabotage'),
+    cost: (S) => ({ code: onTable(S, 'sabotage')?.code || 0, focus: onTable(S, 'sabotage')?.focus || 0 }),
+    need: (S) => !!onTable(S, 'sabotage'),
+    do: (S) => {
+      const p = onTable(S, 'sabotage');
+      if (!p) return 'Whatever they were looking at, they have stopped looking at it.';
+      p.countered = true;
+      return `Rate limits, a rotation, and a fortnight of somebody reading their own logs properly for the first time. When it comes — and it comes — most of it lands on a wall you built on a Wednesday.`;
+    },
+    grudge: 0.06,
+  },
   {
     id: 'answer_benchmark', name: 'Publish your own numbers',
     desc: 'Reproduce their benchmark honestly, including where you lose.',

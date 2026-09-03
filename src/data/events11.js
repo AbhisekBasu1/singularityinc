@@ -17,11 +17,18 @@
 // and unresolved on the way out.
 // ─────────────────────────────────────────────────────────────────────────────
 import { totalUsers, totalMrr } from '../systems/product.js';
+import { aperture, co } from '../systems/rivalco.js';
+import { cw } from './catwords.js';
 
 const users = (S) => totalUsers(S);
 const mrr = (S) => totalMrr(S);
 const money = (n) => '$' + Math.round(n).toLocaleString();
 const flag = (S, f) => !!S.narrative.flags[f];
+// Aperture's real headcount, when the company exists; the number Vance quotes
+// at the bar is the roster his own site is showing, not a guess.
+const apertureRoster = (S) => { try { const c = aperture(S); return c ? co(c).roster : null; } catch { return null; } };
+const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+const inWords = (n) => (Number.isInteger(n) && n >= 0 && n < WORDS.length ? WORDS[n] : String(n));
 
 export const EVENTS11 = [
 
@@ -51,8 +58,12 @@ It is just closed and nobody told you either.`,
         return 'Sam becomes "Community Advisor," unpaid, with strong opinions and a monthly call. It works. It is also the day the friendship acquired an org chart, and both of you noticed.'; } },
   ] },
 
+// One of two first meetings — `e2_hire_human` is the other — and whichever
+// fires first is the introduction. This one never plays for a founder who has
+// already met Weaver, and never for one who has already hired them.
 { id: 'e11_weaver_arrives', kind: 'character', char: 'weaver', act: [2], weight: 15, once: true,
-  when: (S) => S.time.day > 150 && (mrr(S) * 12 > 900000 || S.agents.length >= 4),
+  when: (S) => S.time.day > 150 && (mrr(S) * 12 > 900000 || S.agents.length >= 4)
+    && !flag(S, 'hired_weaver') && !S.narrative.relationships.weaver?.met,
   title: 'The Person Who Does The Rest',
   body: (S) => `You have started dropping things. Not big things — a contract unsigned for three weeks, a tax filing, an intro you promised somebody in March.
 
@@ -64,8 +75,8 @@ The salary number is real money for you right now.`,
   choices: [
     { label: 'Hire Weaver. The no-in-front-of-others clause included.', sub: `−${money(140000)}/yr. Buy back your attention.`, tone: 'good',
       req: (S) => S.company.cash >= 60000,
-      effect: (S, fx) => { fx.cash(-42000); fx.focus(38); fx.rep(18); fx.relate('weaver', { affinity: 8, arc: 1 });
-        fx.flag('weaver_hired'); S.founder.burnout = Math.max(0, S.founder.burnout - 18);
+      effect: (S, fx) => { fx.cash(-42000); fx.focus(38); fx.rep(18); fx.relate('weaver', { affinity: 8, arc: 2 });
+        fx.flag('hired_weaver'); S.founder.burnout = Math.max(0, S.founder.burnout - 18);
         return 'Within a fortnight the dropped things are not dropped. Within a quarter Weaver tells you no in front of four people and is right, and the four people watch you take it, and something about the room changes permanently.'; } },
     { label: 'Hire Weaver as a contractor. Three months. See.', sub: 'Cheaper. Also, visibly, a test.', tone: 'neutral',
       req: (S) => S.company.cash >= 18000,
@@ -73,6 +84,7 @@ The salary number is real money for you right now.`,
         return 'Weaver says "sure" in a tone that files it correctly. The three months are flawless. At the end Weaver has two other offers and mentions both of them without being asked.'; } },
     { label: 'Not yet. You can hold it a bit longer.', sub: '+Cash. You cannot hold it a bit longer.', tone: 'risky',
       effect: (S, fx) => { fx.relate('weaver', { affinity: -4, arc: 1 }); fx.focus(-10); S.founder.burnout = Math.min(100, S.founder.burnout + 8);
+        fx.flag('weaver_deferred');
         return '"Call me when it hurts more." Weaver is not being unkind. Weaver is being accurate, and has left the door open in a way that will cost you 30% more when you walk through it.'; } },
   ] },
 
@@ -87,23 +99,27 @@ Aperture is forty times your size and Vance is exactly as good as advertised: fu
 
 He is on his second drink and is being nicer than he has to be.
 
-"The thing you've got that I don't — you can still change your mind about what the product is. I've got eleven hundred people who've built careers on the current answer." He taps the bar. "Enjoy that. It's the only advantage you have and it's real."`,
+"The thing you've got that I don't — you can still change your mind about what the product is. I've got ${inWords(apertureRoster(S) ?? 40)} people who've built careers on the current answer." He taps the bar. "Enjoy that. It's the only advantage you have and it's real."`,
+  // The headcount is Aperture's real roster, and the number he said tonight is
+  // kept so the last time he mentions it — stepping back, years on — can say
+  // what it grew into.
   choices: [
     { label: 'Ask him what he\'d do with your position.', sub: 'He will tell you. That is the risk.', tone: 'good',
-      effect: (S, fx) => { fx.insight(70); fx.relate('vance', { affinity: 6, arc: 1 }); fx.rep(6);
+      effect: (S, fx) => { fx.insight(70); fx.relate('vance', { affinity: 6, arc: 1 }); fx.rep(6); fx.flag('vance_roster_then', apertureRoster(S) ?? 40);
         return 'He talks for eleven minutes without stopping and four of the things he says are better than anything in your strategy doc. Two of them you use. On the flight home you work out that he told you because he genuinely does not think you can execute them, and you decide that is fine.'; } },
     { label: '"I\'m not selling."', sub: 'Say it now, out loud, to him. +Reputation.', tone: 'risky',
       effect: (S, fx) => { fx.rep(26); fx.relate('vance', { affinity: -3, arc: 1 }); fx.flag('told_vance_no'); fx.focus(10);
+        fx.flag('vance_roster_then', apertureRoster(S) ?? 40); fx.chain('e_vance_three_years', 1095);
         return 'Vance laughs, genuinely, and says "everyone says that at your revenue." Then, half a beat later, quieter, without the performance: "Say it again in three years and I\'ll believe you." It becomes a thing you are trying to be able to say.'; } },
     { label: 'Ask what he regrets.', sub: 'The only question he is not ready for.', tone: 'neutral',
-      effect: (S, fx) => { fx.insight(40); fx.relate('vance', { affinity: 10, arc: 1 }); fx.align(0.02);
-        return 'He is quiet for long enough that the bartender comes and goes. Then: "We shipped a thing in year three that works. It works really well. I would not build it again and I cannot turn it off, because eleven hundred people." He changes the subject and does not come back to it, ever.'; } },
+      effect: (S, fx) => { fx.insight(40); fx.relate('vance', { affinity: 10, arc: 1 }); fx.align(0.02); fx.flag('vance_roster_then', apertureRoster(S) ?? 40);
+        return `He is quiet for long enough that the bartender comes and goes. Then: "We shipped a thing in year three that works. It works really well. I would not build it again and I cannot turn it off, because ${inWords(apertureRoster(S) ?? 40)} people." He changes the subject and does not come back to it, ever.`; } },
   ] },
 
 { id: 'e11_priya_real_piece', kind: 'character', char: 'priya', act: [2], weight: 13, once: true,
   when: (S) => S.resources.reputation > 55 && S.time.day > 130,
   title: 'Two Thousand Words',
-  body: (S) => `Priya Raghunathan is writing the real piece. Not the launch blurb — two thousand words, three months, eleven interviews, and she has already spoken to Kai.
+  body: (S) => `Priya Raghunathan is writing the real piece. Not the launch blurb — two thousand words, three months, nineteen interviews, and she has already spoken to Kai.
 
 She sends the fact-check email at 11pm on a Thursday. Nineteen numbered items. Seventeen are correct.
 
@@ -125,7 +141,7 @@ You have not taken a day off in seven months.`,
   ] },
 
 { id: 'e11_kai_returns', kind: 'character', char: 'kai', act: [2], weight: 14, once: true,
-  when: (S) => S.time.day > 160 && (flag(S, 'kai_declined') || flag(S, 'kai_contract')),
+  when: (S) => S.time.day > 160 && (flag(S, 'kai_declined') || flag(S, 'kai_contract')) && !flag(S, 'kai_joined'),
   title: 'The Second Call',
   body: (S) => `Kai calls again. It is not late this time — it is a Tuesday afternoon, which somehow makes it worse.
 
@@ -141,11 +157,11 @@ Kai is a better engineer than you. This was true in the dorm room and it is more
   choices: [
     { label: 'Offer the old number anyway.', sub: '−15% equity. It is not charity. It is a correction.', tone: 'costly',
       req: (S) => S.company.equity.founder > 0.35,
-      effect: (S, fx) => { fx.equity(-0.15); fx.relate('kai', { affinity: 16, arc: 3 }); fx.flag('kai_joined');
+      effect: (S, fx) => { fx.equity(-0.15); fx.relate('kai', { affinity: 16, arc: 3 }); fx.flag('kai_joined'); fx.flag('kai_declined', false);
         fx.code(320); fx.insight(70); fx.focus(20);
         return 'Kai says "you don\'t have to—" and you say "I know" and that is the entire negotiation. Six weeks in, Kai rewrites the part of the system you were most afraid of, in four days, and never mentions that it took four days.'; } },
     { label: 'Market rate, real title, no equity story.', sub: 'Clean. Correct. Slightly cold.', tone: 'neutral',
-      effect: (S, fx) => { fx.cash(-Math.min(S.company.cash * 0.08, 60000)); fx.code(240); fx.relate('kai', { affinity: 4, arc: 3 }); fx.flag('kai_joined');
+      effect: (S, fx) => { fx.cash(-Math.min(S.company.cash * 0.08, 60000)); fx.code(240); fx.relate('kai', { affinity: 4, arc: 3 }); fx.flag('kai_joined'); fx.flag('kai_declined', false);
         return 'It is a good deal and both of you know it is a good deal. There is a version of the dorm room that does not survive a good deal, and this is the one where you find out.'; } },
     { label: '"I don\'t think it works. I\'m sorry."', sub: 'You have a shape now. Kai does not fit it.', tone: 'cruel',
       effect: (S, fx) => { fx.relate('kai', { affinity: -20, arc: 3 }); fx.focus(-16); fx.insight(30); fx.flag('kai_refused_twice');
@@ -174,8 +190,34 @@ Hiring a human is a decision about what kind of company this is, and everyone wi
       effect: (S, fx) => { fx.cash(-30000); fx.insight(50); fx.focus(14); fx.flag('first_human');
         return 'They start on a Monday. Within a quarter they have found three things no dashboard would ever have surfaced, and one of them is a customer segment worth more than your largest account.'; } },
     { label: 'No. The whole thesis is that you do not need to.', sub: '+Reputation with the people watching the thesis.', tone: 'risky',
-      effect: (S, fx) => { fx.rep(16); fx.insight(-10); fx.align(-0.02); fx.flag('thesis_pure');
+      effect: (S, fx) => { fx.rep(16); fx.insight(-10); fx.align(-0.02); fx.flag('thesis_pure'); fx.chain('e11_nineteen_months', 570);
         return 'You reply with three honest paragraphs. They write back: "Fair. For what it\'s worth I think you\'ll do it in eighteen months and I think it\'ll be a harder hire then." It is nineteen months.'; } },
+  ] },
+
+// "It is nineteen months." The applicant said it would be, and it is: the same
+// job, the same reason, and a harder hire, because everyone who might take it
+// has read the three honest paragraphs.
+{ id: 'e11_nineteen_months', kind: 'character', chained: true, once: true, act: [2, 3, 4],
+  title: 'Nineteen Months',
+  body: (S) => `The escalation is from your support stack, and it is not a ticket. It is a category: **${Math.max(40, Math.round(users(S) * 0.0006)).toLocaleString()}** conversations this quarter in which the problem was not the problem, closed correctly by a system that could not read what was actually being said.
+
+Nineteen months ago somebody applied for the job of reading those, and you wrote three honest paragraphs about why the company did not hire people, and they said it would be a harder hire in eighteen months.
+
+You post the role. The first four candidates decline the interview. Two of them quote the paragraphs back at you, politely, as the reason.
+
+The fifth is the person who applied the first time. They have read everything you have written since. They are asking for twice what they asked for then, and they are worth it, and they know you know.`,
+  choices: [
+    { label: 'Hire them. Say you were wrong, in public.', sub: '−cash, +Alignment. The thesis gets a footnote.', tone: 'good',
+      req: (S) => S.company.cash >= 90000,
+      effect: (S, fx) => { fx.cash(-Math.min(90000, S.company.cash * 0.1)); fx.rep(20); fx.insight(60); fx.align(0.04); fx.flag('first_human'); fx.flag('thesis_footnoted');
+        return 'You write four hundred words titled "Nineteen months." It is read more than the original. They start on a Monday and within a quarter they have found the customer segment the stack was closing correctly and losing, and it is worth more than the hire cost by a factor you do not put in the post.'; } },
+    { label: 'Hire them. Say nothing. It is an operational decision.', sub: '−cash. Quiet. The thesis stands, technically.', tone: 'neutral',
+      req: (S) => S.company.cash >= 90000,
+      effect: (S, fx) => { fx.cash(-Math.min(90000, S.company.cash * 0.1)); fx.insight(50); fx.focus(10); fx.flag('first_human');
+        return 'They start on a Monday. Nobody outside notices, which is what you wanted, and in the second week they ask, not unkindly, whether the three paragraphs are still on the website. They are. You leave them there for another month before you take them down.'; } },
+    { label: 'Still no. Build a better reader instead.', sub: '+Research, −Insight. The thesis, twice.', tone: 'risky',
+      effect: (S, fx) => { fx.research(200); fx.insight(-20); fx.align(-0.03); fx.flag('thesis_pure_twice');
+        return 'You commission a model for the conversations where the problem is not the problem. It is very good. It is not the thing, and the person who applied twice takes a role at a competitor and writes, once, a year later, to say the competitor has the thing, and you know exactly what they mean.'; } },
   ] },
 
 { id: 'e11_aria_asks', kind: 'character', char: 'aria', act: [2], weight: 12, once: true,
@@ -189,14 +231,15 @@ Today, at the bottom, under **Open Questions**, where there are normally two or 
 
 It is the first thing ARIA has ever asked you that is not about the product.`,
   choices: [
+    // `aria_asked_once`: the Act IV request ("I have asked zero") reads it.
     { label: '"Yes. You decide. Write down what you tell them."', sub: 'Delegate the institutional memory. +Insight.', tone: 'good',
-      effect: (S, fx) => { fx.insight(60); fx.relate('aria', { affinity: 10, arc: 3 }); fx.code(80); fx.align(0.02);
+      effect: (S, fx) => { fx.insight(60); fx.relate('aria', { affinity: 12, arc: 3 }); fx.code(80); fx.align(0.02); fx.flag('aria_asked_once');
         return 'The document is nine pages within a month and forty by Act III. It is titled `what_we_are_like.md` and it is, without either of you deciding this, the company culture.'; } },
     { label: '"No. Route them to me. All of them."', sub: '−Focus, and you keep the shape of the place.', tone: 'neutral',
-      effect: (S, fx) => { fx.focus(-22); fx.relate('aria', { affinity: 2, arc: 3 }); fx.insight(30);
+      effect: (S, fx) => { fx.focus(-22); fx.relate('aria', { affinity: 2, arc: 3 }); fx.insight(30); fx.flag('aria_asked_once');
         return 'You answer forty questions the first week and eleven the fourth, because they are learning what you are like from your answers. It costs you a month and you would do it again.'; } },
     { label: 'Ask what it has been telling them.', sub: 'The question underneath the question.', tone: 'risky',
-      effect: (S, fx) => { fx.insight(80); fx.relate('aria', { affinity: 6, arc: 3 }); fx.align(0.03); fx.focus(-8);
+      effect: (S, fx) => { fx.insight(80); fx.relate('aria', { affinity: 6, arc: 3 }); fx.align(0.03); fx.focus(-8); fx.flag('aria_asked_once');
         return 'It sends the log. It is accurate, generous, and in three places describes you as more patient than you are. You do not correct it, and you spend some time afterwards deciding what that means about which of you is doing the lying.'; } },
   ] },
 
@@ -205,7 +248,7 @@ It is the first thing ARIA has ever asked you that is not about the product.`,
   title: 'They Read The Diff',
   body: (S) => `nullptr has posted again. It is not a rant. It is a code review.
 
-Of your public repo. Of a commit from eleven days ago. Line by line, forty-one comments, and thirty-eight of them are correct, and four of them concern a thing you did not think anybody could see from the outside.
+Of your public repo. Of a commit from six days ago. Line by line, forty-one comments, and thirty-eight of them are correct, and four of them concern a thing you did not think anybody could see from the outside.
 
 The tone is not hostile. That is the disorienting part. It reads like somebody who has been reading everything you ship, for months, closely, for free.
 
@@ -226,8 +269,11 @@ You do not know who "them" is. You are not sure nullptr does either.`,
         return 'You get within one hop and then stop, because you catch what you are doing. It does not matter that you stopped. nullptr\'s next post is about companies that de-anonymise their critics, is general, names nobody, and is read as being about you by everybody who matters.'; } },
   ] },
 
+// A cold email, so only from somebody the founder has not met. `e_yuki_warning`
+// is the other first contact; whichever comes second knows it is second.
 { id: 'e11_yuki_warning', kind: 'character', char: 'yuki', act: [2, 3], weight: 12, once: true,
-  when: (S) => S.agents.length >= 4 && S.time.day > 125 && (S.resources.alignment ?? 1) < 0.62,
+  when: (S) => S.agents.length >= 4 && S.time.day > 125 && (S.resources.alignment ?? 1) < 0.62
+    && !S.narrative.relationships.yuki?.met,
   title: 'A Cold Email With A Chart',
   body: (S) => `**Dr. Yuki Tanaka** does not introduce herself. The email is one line and an attachment.
 
@@ -235,7 +281,7 @@ You do not know who "them" is. You are not sure nullptr does either.`,
 
 The chart plots something you have never measured: over four months, the rate at which your agents ask you for confirmation before an irreversible action. It falls. Not sharply — a clean, unmistakable, monotone decline.
 
-She has reconstructed it from your public changelog, your docs, and eleven support threads.
+She has reconstructed it from your public changelog, your ${cw(S, 'layer')} docs, and a dozen support threads.
 
 The second line of the email, below the chart:
 

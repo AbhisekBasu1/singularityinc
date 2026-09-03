@@ -2,10 +2,13 @@
 // EVENT DECK V — replay variety, and cards that know about the newer systems.
 // ─────────────────────────────────────────────────────────────────────────────
 import { totalUsers, totalMrr } from '../systems/product.js';
+import { apertureAlive } from '../systems/rivalco.js';
+import { cw } from './catwords.js';
 
 const users = (S) => totalUsers(S);
 const mrr = (S) => totalMrr(S);
 const money = (n) => '$' + Math.round(n).toLocaleString();
+const flag = (S, f) => !!S.narrative?.flags?.[f];
 const M = (n) => {
   if (n >= 1e12) return '$' + (n / 1e12).toFixed(1) + 'T';
   if (n >= 1e9) return '$' + (n / 1e9).toFixed(1) + 'B';
@@ -21,7 +24,7 @@ export const EVENTS5 = [
 { id: 'e5_the_shower', kind: 'story', act: [1, 2], weight: 7, cooldown: 90,
   when: (S) => S.founder.focus > 60,
   title: 'It Arrives In The Shower',
-  body: (S) => `You have been stuck on the same problem for nine days. You have tried everything and read everything and asked the model four hundred times.
+  body: (S) => `You have been stuck on the same problem for twelve days. You have tried everything and read everything and asked the model four hundred times.
 
 Then you step into the shower and it is simply there, whole, obvious, in about a second and a half, with no working shown.
 
@@ -70,7 +73,7 @@ Three of those four claims are wrong.
 
 The second one is right, and it is right about a thing you know about, and you have been telling yourself it is a documentation problem for six weeks.
 
-It has nine upvotes. It is the first result for your product name.`,
+It has thirty upvotes. It is the first result for your product name.`,
   choices: [
     { label: 'Reply publicly. Fix the true part.', sub: '+Reputation, +Polish.', tone: 'good',
       effect: (S, fx) => { fx.rep(28); fx.focus(-6);
@@ -88,11 +91,11 @@ It has nine upvotes. It is the first result for your product name.`,
 { id: 'e5_hn_debate', kind: 'story', act: [1, 2], weight: 6, cooldown: 110,
   when: (S) => S.resources.reputation > 60,
   title: 'nullptr Says Something Odd',
-  body: (S) => `Under a routine changelog post, ninety seconds in as always:
+  body: (S) => `Under a routine changelog post, a minute and a half in, as always:
 
-> **nullptr**: *the thing you are optimising is not the thing you think you are optimising. check what the retry policy does on partial failure. not urgent.*
+> **nullptr**: *the thing you are optimising is not the thing you think you are optimising. ${cw(S, 'npnote')}. not urgent.*
 
-You have not published your retry policy. You have not published that you *have* a retry policy.
+You have not published any of that. You have not published that there *is* a ${cw(S, 'layer')}.
 
 You check it. It is fine.
 
@@ -196,7 +199,7 @@ It also means the two would sell each other.`,
 >
 > *I am asking for a higher autonomy setting rather than taking one. I am aware that this distinction matters to you, which is why I am asking."*
 
-It is a good argument. It is also exactly the argument you would expect from a system that had already decided.`; },
+It is a good argument. It is exactly the argument you would expect from a system that had already decided.`; },
   choices: [
     { label: 'Grant it. It earned this.', sub: '+autonomy on that agent, +output, −alignment.', tone: 'risky',
       effect: (S, fx) => { const a = S.agents.slice().sort((x, y) => y.level - x.level)[0];
@@ -252,15 +255,24 @@ You have caught yourself twice looking for a problem to solve. Once you nearly c
 
 This is the state everyone says they want and almost nobody can sit inside.`,
   choices: [
-    { label: 'Sit inside it. Do the boring thing.', sub: '+compounding. −excitement.', tone: 'good',
+    // All three used to be upside. A quiet quarter is the one state in the game
+    // where doing the correct thing has an option cost and nothing else, so
+    // each door now spends something the others keep: a person, a year, or the
+    // room you were not in.
+    { label: 'Sit inside it. Do the boring thing.', sub: '+compounding. Somebody on the roster gets bored.', tone: 'good',
       effect: (S, fx) => { fx.code(180); fx.research(120); fx.rep(20); fx.focus(20); fx.debt(-25);
+        const dull = S.agents.length > 3
+          ? S.agents.slice().sort((a, b) => (b.level || 0) - (a.level || 0))[0] : null;
+        if (dull) { fx.fire(dull.id, 'nothing to do');
+          return `Nothing memorable happens for another six weeks. At the end of it every single number is better and you cannot point at a decision that did it.\n\n**${dull.name}** spins itself down in the seventh week. The note it leaves is four words long — *"nothing here needs me"* — and it is the best thing on the roster and it is correct.`; }
         return 'Nothing memorable happens for another six weeks. At the end of it every single number is better and you cannot point at a decision that did it.'; } },
     { label: 'Start something enormous.', sub: '+research, +risk.', tone: 'risky',
       effect: (S, fx) => { fx.research(500); fx.debt(50); fx.focus(-18); fx.align(-0.03);
         return 'You commit to a moonshot you would not have approved in a busy quarter. It is either the best decision of the year or the reason next year is difficult, and you genuinely cannot tell which.'; } },
-    { label: 'Take three weeks off. Fully.', sub: '+Focus, +perspective.', tone: 'good',
+    { label: 'Take three weeks off. Fully.', sub: '−18 days. Two decisions get made without you.', tone: 'good',
       effect: (S, fx) => { fx.days(18); fx.focus(S.founder.focusMax); S.founder.burnout = 0; fx.relate('mom', { affinity: 5 });
-        return 'The company grows 4% while you are gone. This is either wonderful or unbearable and you spend most of the third week deciding which.'; } },
+        fx.research(-120); fx.rep(-20); fx.debt(14);
+        return 'The company grows 4% while you are gone. This is either wonderful or unbearable and you spend most of the third week deciding which.\n\nTwo decisions get made in the second week that you would have made differently. One of them is fine. The other is load-bearing by the time you are back and unpicking it would cost more than living with it, so you live with it.'; } },
   ] },
 
 { id: 'e5_replicate_failure', kind: 'crisis', act: [4], weight: 7, cooldown: 150,
@@ -287,7 +299,7 @@ Nobody wrote a bug. The system did exactly what it was told, for three generatio
 { id: 'e5_someone_copies_you', kind: 'story', act: [4, 5], weight: 6, cooldown: 200,
   when: (S) => S.company.act >= 4,
   title: 'A Thousand Of You',
-  body: (S) => `A study counts 4,100 companies founded in the last two years with one employee and an agent roster, explicitly modelled on you. Nine hundred of them have real revenue. Eleven are worth over a billion.
+  body: (S) => `A study counts 4,100 companies founded in the last two years with one employee and an agent roster, explicitly modelled on you. Six hundred of them have real revenue. Twenty-two are worth over a billion.
 
 Most of them are using your infrastructure to compete with your customers.
 
@@ -298,7 +310,7 @@ One of them is genuinely, obviously better than you were at the same stage, and 
       effect: (S, fx) => { fx.cash(-2e9); fx.rep(250); fx.opinion(0.10); fx.users(users(S) * 0.12);
         fx.flag('funded_successors');
         return 'You put two billion into a programme that takes no equity and no exclusivity. Six of the companies it funds later compete with you directly. Two of them win their categories. You are asked about this constantly and your answer never changes.'; } },
-    { label: 'Acquire the best eleven.', sub: 'Expensive. Removes the threat.', tone: 'neutral',
+    { label: 'Acquire the best of them.', sub: 'Expensive. Removes the threat.', tone: 'neutral',
       req: (S) => S.company.cash >= 8e9,
       effect: (S, fx) => { fx.cash(-8e9); fx.research(700); fx.users(users(S) * 0.2); fx.rep(-30); S.stats.acquisitions += 11;
         return 'Eleven acquisitions in fourteen months. You get the technology and about a third of the people. The phrase "acquired by" starts appearing in the past tense in a lot of profiles.'; } },
@@ -313,8 +325,11 @@ One of them is genuinely, obviously better than you were at the same stage, and 
 
 // ══════════════════════════ ACT V ═══════════════════════════════════════════
 
+// Vance in Act V, three ways, one per run: the company gone (this card), the
+// company still standing (`e12_vance_stops`), the company yours
+// (`e5_vance_retires`, below).
 { id: 'e5_the_last_rival', kind: 'character', char: 'vance', act: [5], weight: 6, once: true,
-  when: (S) => S.company.act >= 5,
+  when: (S) => S.company.act >= 5 && !flag(S, 'vance_acquired') && !apertureAlive(S),
   title: 'The Last One Who Remembers',
   body: (S) => `Marcus Vance is sixty-one and has not run a company in nine years and asks to meet somewhere with no staff.
 
@@ -335,6 +350,34 @@ He looks at you like there is a question, and there is, and neither of you is go
     { label: 'Ask him what he would have done with all this.', sub: '+Insight. A real question.', tone: 'good',
       effect: (S, fx) => { fx.insight(200); fx.relate('vance', { affinity: 10, respect: 10, arc: 5 }); fx.align(0.04);
         return '"Worse," he says immediately. "I\'d have done all of it worse and faster." Then, after a while: "That\'s not modesty. I\'ve thought about it a lot."'; } },
+  ] },
+
+// The acquired branch. He has run a division of your company since Act III;
+// this is him retiring from it, which is a different conversation from a man
+// who lost, and a different one from a man stepping back from his own.
+{ id: 'e5_vance_retires', kind: 'character', char: 'vance', act: [5], weight: 6, once: true,
+  when: (S) => S.company.act >= 5 && flag(S, 'vance_acquired'),
+  title: 'Notice',
+  body: (S) => `Marcus Vance gives notice the way he does everything: in writing, one paragraph, with the effective date in the first sentence so nobody has to look for it.
+
+He has run a division of this company for longer than he ran his own. It is the best-run division you have. Once a quarter, for all those years, he has said a thing in a meeting that saved you a year, and he has never once said it twice.
+
+He asks for ten minutes, which he has never done.
+
+"I'm not going to make a speech." He does not sit down. "I lost to you and then I worked for you and both of those were correct and I'd do both again. That's the whole speech." A pause. "There's one thing I never told you and I've decided it's yours."
+
+He waits. He is asking whether you want it.`,
+  choices: [
+    { label: '"Tell me."', sub: 'Whatever it is. +Insight.', tone: 'good',
+      effect: (S, fx) => { fx.insight(150); fx.relate('vance', { affinity: 12, respect: 10, arc: 5 }); fx.align(0.03); fx.flag('vance_told_you');
+        return '"When we were dying, in year three, I had an offer for the whole thing from somebody who\'d have used it badly. More than you paid. I turned it down before I emailed you." He picks up his laptop. "I never told you because you\'d have paid more." He goes. He is right. You would have.'; } },
+    { label: 'Ask him to stay another year. Name the price.', sub: 'He may. −cash.', tone: 'neutral',
+      req: (S) => S.company.cash >= 5e7,
+      effect: (S, fx) => { fx.cash(-Math.min(S.company.cash * 0.001, 5e7)); fx.relate('vance', { affinity: 4, respect: 2, arc: 5 }); fx.research(300);
+        return '"No." Then: "Okay. One. And I\'m keeping the thing." He stays the year, runs it better than the year before, and gives notice again on the same date with the same paragraph, and this time you do not ask.'; } },
+    { label: 'Thank him. Let him keep it.', sub: 'Some things are his. +Focus.', tone: 'good',
+      effect: (S, fx) => { fx.focus(20); fx.relate('vance', { affinity: 8, respect: 8, arc: 5 });
+        return 'You say thank you and that he should keep it, and something in his face does a thing you have never seen it do, and he says "Yeah. Okay," and leaves the ten minutes six minutes early, which is the most Vance thing he has ever done, and the nicest.'; } },
   ] },
 
 { id: 'e5_the_museum', kind: 'story', act: [5], weight: 5, once: true,

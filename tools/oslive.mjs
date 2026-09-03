@@ -78,6 +78,34 @@ const ok = (name, cond, detail) => {
 const section = (t) => console.log(`\n── ${t} ──`);
 
 const browser = await pw.chromium.launch({ args: ['--enable-gpu'] });
+
+// The hand that walks a waiting step, installed on every page: what the card
+// asks for decides what is pressed. Ship wants the ship key once the bar is
+// full and prompts until it is; the hours step nudges the Rest slider from the
+// keyboard, which is the same handler a drag feeds; anything else is a hand
+// on the Desk, prompt-first when the card says so.
+const HAND = () => {
+  window.pressHand = () => {
+    const asks = document.querySelector('.tut-card')?.textContent || '';
+    const press = (sel) => { const e = document.querySelector(sel); if (e && !e.disabled) { e.click(); return true; } return false; };
+    if (/\brest\b/i.test(asks)) {
+      const s = document.querySelector('.slider[data-slider="alloc:rest"]');
+      if (!s) return false;
+      s.focus();
+      s.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true, cancelable: true }));
+      return true;
+    }
+    if (/\bship\b/i.test(asks)) {
+      if (press('[data-act="ship"]')) return true;
+      return press('[data-act="do"][data-v="prompt"]') || press('[data-act="do"][data-v="code"]');
+    }
+    const order = /machine|prompt|delegate|\bW\b/i.test(asks)
+      ? ['[data-act="do"][data-v="prompt"]', '[data-act="do"][data-v="code"]']
+      : ['[data-act="do"][data-v="code"]', '[data-act="do"][data-v="prompt"]'];
+    for (const sel of order) if (press(sel)) return true;
+    return press('[data-act="thread"]');
+  };
+};
 const shots = [];
 async function shot(p, name) {
   if (!KEEP) return;
@@ -90,12 +118,22 @@ async function shot(p, name) {
 // so every check below looks at the ordinary desktop rather than at a dialog.
 async function played(w, h, q = '', opts = {}) {
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, ...opts });
+  await ctx.addInitScript(HAND);
   const p = await ctx.newPage();
   p.__errors = [];
   p.on('pageerror', (e) => p.__errors.push('pageerror: ' + e.message));
   p.on('console', (m) => { if (m.type() === 'error') p.__errors.push(m.text()); });
-  await p.goto(`${BASE}${ROUTE}?dev=1&notut=1&pause=1${q}`, { waitUntil: 'networkidle' });
+  await p.goto(`${BASE}${ROUTE}?dev=1&notut=1&pause=1${q}`, { waitUntil: 'load' });
   await p.waitForTimeout(2200);
+  await settle(p);
+  return p;
+}
+
+// Answer whatever is holding the clock. A card, and — because a written ring
+// holds it exactly as a card does, and `?days=` runs the day hooks live — the
+// phone, hung up the way `tools/shot.mjs` hangs it up. Any section that lets
+// the clock run for a few seconds can find one of these in its way.
+async function settle(p) {
   for (let i = 0; i < 3; i++) {
     const c = await p.$('#event-modal .choice:not(.choice-free)');
     if (!c) break;
@@ -104,7 +142,27 @@ async function played(w, h, q = '', opts = {}) {
     await p.click('#event-continue').catch(() => {});
     await p.waitForTimeout(420);
   }
-  return p;
+  for (let i = 0; i < 2; i++) {
+    const hang = await p.$('[data-call-hang]');
+    if (!hang) break;
+    await hang.click().catch(() => {});
+    await p.waitForTimeout(420);
+    await p.click('#call-close').catch(() => {});
+    await p.waitForTimeout(420);
+  }
+  // On the workstation a call from a person announces itself as a banner
+  // first, so the plate — and its hang-up key — may not be in the DOM yet.
+  // The call is still holding the clock, so put it down through the system
+  // the plate would have called and close whatever is left on screen.
+  await p.evaluate(async () => {
+    const { S } = await import('/src/engine/state.js');
+    if (!S?.calls?.active) return;
+    const Calls = await import('/src/systems/calls.js');
+    Calls.hangUp(S, { accept: false });
+  }).catch(() => {});
+  await p.waitForTimeout(220);
+  await p.evaluate(() => document.getElementById('call-close')?.click()).catch(() => {});
+  await p.waitForTimeout(220);
 }
 const rect = (p, sel) => p.evaluate((s) => {
   const e = document.querySelector(s); return e ? e.getBoundingClientRect().toJSON() : null;
@@ -120,11 +178,12 @@ try {
   section('a first run: title → setup → desktop → First Light');
   {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
+    await ctx.addInitScript(HAND);
     const p = await ctx.newPage();
     const errs = [];
     p.on('pageerror', (e) => errs.push('pageerror: ' + e.message));
     p.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
-    await p.goto(`${BASE}${ROUTE}?cold=0`, { waitUntil: 'networkidle' });
+    await p.goto(`${BASE}${ROUTE}?cold=0`, { waitUntil: 'load' });
     await p.waitForTimeout(1500);
     ok('the title screen comes up', await p.evaluate(() => !!document.querySelector('.title-word')));
     await shot(p, '01-title');
@@ -132,8 +191,14 @@ try {
     ok('the setup assistant opens', await p.evaluate(() => !!document.querySelector('.beat')));
     await shot(p, '02-setup');
     await p.click('[data-act="beat-next"]'); await p.waitForTimeout(900);
-    await p.click('.choice-card'); await p.waitForTimeout(1100);
-    await p.click('.choice-card'); await p.waitForTimeout(1400);
+    // The founder beat is skipped when only one archetype is open — a first
+    // run — so the number of card beats between the name and the threshold is
+    // one or two. Click cards until there are none.
+    for (let i = 0; i < 2; i++) {
+      const card = await p.$('.choice-card');
+      if (!card) break;
+      await card.click(); await p.waitForTimeout(1200);
+    }
     ok('the threshold arrives', await p.evaluate(() => !!document.querySelector('[data-act="start-game"]')));
     await shot(p, '03-threshold');
     await p.click('[data-act="start-game"]'); await p.waitForTimeout(5200);
@@ -145,8 +210,9 @@ try {
     // be a deliberately centred one — a spotlight pointing at nothing is worse
     // than no walkthrough at all, and it fails silently in a browser.
     let steps = 0; const missed = []; const seenTitles = new Set();
-    let approachFullyVisible = false;
-    for (let i = 0; i < 26; i++) {
+    let allocFullyVisible = false;
+    const total = await p.evaluate(async () => (await import('/src/data/tutorial.js')).CHAPTER_MAP.first_light.steps.length);
+    for (let i = 0; i < 40; i++) {
       const st = await p.evaluate(() => {
         const c = document.querySelector('.tut-card'); if (!c) return null;
         const ring = document.querySelector('.tut-ring');
@@ -160,9 +226,9 @@ try {
       steps++;
       seenTitles.add(st.title);
       if (!st.ringed && !st.centred) missed.push(st.title);
-      if (st.title === 'How you ask changes what you get') {
-        approachFullyVisible = await p.evaluate(() => {
-          const target = document.querySelector('.approach-strip');
+      if (st.title === 'The other sixteen hours') {
+        allocFullyVisible = await p.evaluate(() => {
+          const target = document.querySelector('[data-tut="alloc"]');
           const clip = target?.closest('.win-body');
           if (!target || !clip) return false;
           const r = target.getBoundingClientRect();
@@ -171,22 +237,12 @@ try {
         });
       }
       if (st.waiting) {
-        // Press the hand the step is actually waiting for. This used to try
+        // Do the thing the step is actually waiting for. This used to try
         // Write Code first whatever the step asked, so the chapter stalled on
-        // "Now let the machine do it" — which wants Prompt — and looped
-        // twenty-six times on one card. Every assertion below still passed,
-        // because counting iterations is not the same as walking a chapter.
-        const did = await p.evaluate(() => {
-          const asks = (document.querySelector('.tut-card')?.textContent || '');
-          const order = /machine do it|prompt|delegate/i.test(asks)
-            ? ['[data-act="do"][data-v="prompt"]', '[data-act="do"][data-v="code"]']
-            : ['[data-act="do"][data-v="code"]', '[data-act="do"][data-v="prompt"]'];
-          for (const sel of order) {
-            const e = document.querySelector(sel);
-            if (e && !e.disabled) { e.click(); return true; }
-          }
-          return false;
-        });
+        // the prompt step and looped twenty-six times on one card. Every
+        // assertion below still passed, because counting iterations is not
+        // the same as walking a chapter.
+        const did = await p.evaluate(() => pressHand());
         await p.waitForTimeout(700);
         if (!did) { await p.click('[data-tutact="next"]').catch(() => {}); await p.waitForTimeout(500); }
       } else {
@@ -194,10 +250,10 @@ try {
         await p.waitForTimeout(560);
       }
     }
-    ok(`First Light walks all ${seenTitles.size} of its steps`, seenTitles.size >= 15,
+    ok(`First Light walks all ${total} of its steps`, seenTitles.size >= total,
       `${seenTitles.size} distinct cards in ${steps} turns`);
     ok('and every one of them lands on something', missed.length === 0, missed.join(' | '));
-    ok('step 9 scrolls the prompting controls fully inside the Desk window', approachFullyVisible);
+    ok('the hours step scrolls the allocation panel fully inside the Desk window', allocFullyVisible);
     ok('with no console errors', errs.length === 0, errs.slice(0, 3).join(' | '));
     await shot(p, '05-desk');
     await ctx.close();
@@ -208,9 +264,9 @@ try {
   {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
     const p = await ctx.newPage();
-    await p.goto(`${BASE}${ROUTE}?dev=1&notut=1&days=60`, { waitUntil: 'networkidle' });
+    await p.goto(`${BASE}${ROUTE}?dev=1&notut=1&days=60`, { waitUntil: 'load' });
     await p.waitForTimeout(2500);                                  // makes a save
-    await p.goto(`${BASE}${ROUTE}`, { waitUntil: 'networkidle' });
+    await p.goto(`${BASE}${ROUTE}`, { waitUntil: 'load' });
     await p.waitForTimeout(2200);
     const tile = await p.evaluate(() => {
       const t = document.querySelector('.login-tile');
@@ -295,8 +351,12 @@ try {
       return true;
     }));
     await p.keyboard.press('0'); await p.waitForTimeout(520);
+    // Two named widgets at minimum — the goal card and the readouts, which have
+    // been there since the desktop existed. §I3 adds a third once there is a
+    // roster to put in it, so this counts what must be there rather than how
+    // many there happen to be.
     ok('and the widgets are behind it', await p.evaluate(() =>
-      document.querySelectorAll('.widget').length === 2
+      !!document.querySelector('.widget-now') && !!document.querySelector('.widget-readouts')
       && [...document.querySelectorAll('.win:not(.hidden)')].every((el) => Number(getComputedStyle(el).opacity) < 0.2)));
     await shot(p, '08-widgets');
     await p.keyboard.press('0'); await p.waitForTimeout(520);
@@ -333,17 +393,17 @@ try {
     await p.waitForTimeout(600);
     ok('assign-all moves every agent', await state(p, (S) => S.agents.length > 0 && S.agents.every((a) => a.lane === 'research')));
 
-    // Time is the most-pressed control in the game and there is no key for
-    // speed — Space pauses and the digits are the eight modules — so it has to
-    // be in the bar rather than behind the clock's popover, which was three
-    // actions instead of one, many times a session.
+    // Time is the most-pressed control in the game, so it has to be in the bar
+    // rather than behind the clock's popover, which was three actions instead
+    // of one, many times a session. Six keys: pause, the four speeds, and the
+    // run to the next decision. `-`, `=` and `N` do the same from the keyboard.
     const speed = async () => p.evaluate(async () => {
       const { S } = await import('/src/engine/state.js');
       return { paused: S.settings.paused, speed: S.settings.speed,
         keys: document.querySelectorAll('.mb-speed .sp').length,
         lit: [...document.querySelectorAll('.mb-speed .sp')].findIndex((b) => b.classList.contains('on')) };
     });
-    ok('the bar carries the transport', (await speed()).keys === 5);
+    ok('the bar carries the transport', (await speed()).keys === 6, JSON.stringify(await speed()));
     // A real pointer, not `el.click()`: a synthesised click has `detail: 0` and
     // is treated as the keyboard's, which is the whole point of the focus rule
     // being tested three lines down.
@@ -366,6 +426,30 @@ try {
     tr = await speed();
     ok('Space still works after a click, and the keys follow it',
       !tr.paused && tr.lit !== 0, JSON.stringify(tr));
+
+    // The run to the next decision: the top speed until something asks for the
+    // founder, and the founder's own speed back on the dial when it stops.
+    // The presses above left the clock running, so stop it and answer whatever
+    // arrived — a seek refuses while a card or a call is open, correctly — and
+    // then do the whole gesture inside one evaluate. Both handlers are
+    // synchronous, so nothing can tick between the press and the reading; at
+    // 5× with a real wait in the middle, a card can legitimately arrive and
+    // stop the seek, which is the feature rather than a failure.
+    await press(0);
+    await settle(p);
+    const seq = await p.evaluate(async () => {
+      const { S } = await import('/src/engine/state.js');
+      const read = () => ({ speed: S.settings.speed, paused: S.settings.paused });
+      const before = read();
+      document.querySelector('.mb-speed .sp.next')?.click();
+      const during = read();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+      return { before, during, after: read() };
+    });
+    ok('the next-decision key runs the clock at the top speed',
+      !seq.during.paused && seq.during.speed === 4, JSON.stringify(seq));
+    ok('and the founder\'s hand ends it with their own speed back',
+      seq.after.paused && seq.after.speed === seq.before.speed, JSON.stringify(seq));
 
     // The bar sheds rather than shrinks: nothing may run past the glass.
     for (const w of [1440, 1180, 1000, 760, 560, 420, 340, 300]) {
@@ -655,7 +739,8 @@ try {
     });
     await p.waitForTimeout(900);
     let steps = 0; const seen = new Set(); const blind = [];
-    for (let i = 0; i < 30; i++) {
+    const total = await p.evaluate(async () => (await import('/src/data/tutorial.js')).CHAPTER_MAP.first_light.steps.length);
+    for (let i = 0; i < 40; i++) {
       const st = await p.evaluate(() => {
         const c = document.querySelector('.tut-card'); if (!c) return null;
         const ring = document.querySelector('.tut-ring');
@@ -683,19 +768,12 @@ try {
       }));
       if (spun > 2) blind.push(`re-forces its view ${spun}× in 20 frames: ${st.title}`);
       if (st.waiting) {
-        const did = await p.evaluate(() => {
-          const asks = document.querySelector('.tut-card')?.textContent || '';
-          const order = /machine do it|prompt|delegate/i.test(asks)
-            ? ['[data-act="do"][data-v="prompt"]', '[data-act="do"][data-v="code"]']
-            : ['[data-act="do"][data-v="code"]', '[data-act="do"][data-v="prompt"]'];
-          for (const sel of order) { const e = document.querySelector(sel); if (e && !e.disabled) { e.click(); return true; } }
-          return false;
-        });
+        const did = await p.evaluate(() => pressHand());
         await p.waitForTimeout(650);
         if (!did) { await p.click('[data-tutact="next"]').catch(() => {}); await p.waitForTimeout(450); }
       } else { await p.click('[data-tutact="next"]').catch(() => {}); await p.waitForTimeout(520); }
     }
-    ok(`${label}: First Light walks its whole chapter`, seen.size >= 14,
+    ok(`${label}: First Light walks its whole chapter`, seen.size >= total,
       `${seen.size} distinct cards in ${steps} turns`);
     ok(`${label}: and every step lands on something on screen`, blind.length === 0, blind.slice(0, 3).join(' | '));
     ok(`${label}: no console errors`, p.__errors.length === 0, p.__errors.slice(0, 2).join(' | '));
@@ -718,6 +796,9 @@ try {
         keys: [...win.querySelectorAll('.wk')].filter((k) => k.offsetParent).map((k) => k.dataset.winkey) };
     });
     const b0 = await box();
+    // A window that is not there is a failure to report, not a crash that eats
+    // every section after this one.
+    if (!b0) { ok(`${label}: a window is on the glass`, false, 'nothing focused'); await p.context().close(); continue; }
     if (b0.keys.includes('zoom')) {
       await p.evaluate(() => document.querySelector('.win.on [data-winkey="zoom"]')?.click());
       await p.waitForTimeout(420);
@@ -1050,7 +1131,7 @@ try {
     });
     const day = await state(p, (S) => Math.floor(S.time.day));
     const layout = await state(p, (S) => Object.keys(S.ui.os.windows).filter((k) => S.ui.os.windows[k].open).sort().join(','));
-    await p.goto(`${BASE}/`, { waitUntil: 'networkidle' }); await p.waitForTimeout(1400);
+    await p.goto(`${BASE}/`, { waitUntil: 'load' }); await p.waitForTimeout(1400);
     await p.click('[data-act="continue-game"]'); await p.waitForTimeout(2600);
     ok('the console opens the workstation’s save', Math.abs((await state(p, (S) => Math.floor(S.time.day))) - day) < 10);
     ok('and it is the console', await p.evaluate(() => !!document.querySelector('#app .topbar .brand') && !document.querySelector('#app.os')));
@@ -1059,7 +1140,7 @@ try {
       const { S } = await import('/src/engine/state.js');
       Save.save(S);
     });
-    await p.goto(`${BASE}${ROUTE}`, { waitUntil: 'networkidle' }); await p.waitForTimeout(1600);
+    await p.goto(`${BASE}${ROUTE}`, { waitUntil: 'load' }); await p.waitForTimeout(1600);
     await p.click('[data-act="continue-game"]'); await p.waitForTimeout(3200);
     ok('and the workstation gets its layout back',
       (await state(p, (S) => Object.keys(S.ui.os.windows).filter((k) => S.ui.os.windows[k].open).sort().join(','))) === layout);

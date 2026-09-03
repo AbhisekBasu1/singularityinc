@@ -14,10 +14,12 @@ import { LATE_START } from '../data/balance.js';
 import { doShipFeature, doLaunch } from '../game.js';
 import { actionPromptAI, actionWriteCode, actionTalkToUsers } from './founder.js';
 import { startResearch, availableResearch } from './research.js';
-import { rollCandidate, hireAgent, maxAgents, hireCost } from './agents.js';
+import { rollCandidate, hireAgent, maxAgents, hireCost, canReview } from './agents.js';
 import { startProject, availableProjects } from './projects.js';
-import { availableRounds, raiseOffer, acceptRound } from './economy.js';
+import { availableRounds, raiseOffer, acceptRound, upkeepOf, canCarry,
+         runwayDays, burnPerDay } from './economy.js';
 import { resolveChoice, dismissEvent } from './narrative.js';
+import { availableIntentions, toggleIntention, quarterDue, quarterState } from './board.js';
 import { markDirty } from './modifiers.js';
 import { rand } from '../engine/rng.js';
 
@@ -39,8 +41,23 @@ export function step(S) {
     const av = availableResearch(S).sort((a, b) => a.cost - b.cost);
     if (av.length) startResearch(S, av[0].id);
   }
-  if (S.agents.length < maxAgents(S) && S.company.cash > hireCost(S) * 3) hireAgent(S, rollCandidate(S));
+  // Same budget rule as `tools/bot.mjs`, and for the same reason: since §A1 a
+  // wage is permanent and rises with the agent's level, so a fast-forward that
+  // hires on cash alone hands the founder a company it cannot pay for.
+  if (S.agents.length < maxAgents(S) && S.company.cash > hireCost(S) * 3
+      && (burnPerDay(S) <= 0 || runwayDays(S) > 120)) {
+    // §A4: and only while the founder's day could still read its work.
+    const cand = rollCandidate(S);
+    if (canReview(S, cand)) hireAgent(S, cand);
+  }
   if (S.company.directive === 'none') { S.company.directive = 'ship'; S.company.directiveSince = S.time.day; markDirty(); }
+  // §A2. One intention a quarter, the same rule the two node-side bots keep:
+  // Act IV closes on keeping one, so a fast-forward that never wrote anything
+  // down would hand the founder an act it could not leave.
+  if (!quarterDue(S) && !quarterState(S).intentions.length) {
+    const iv = availableIntentions(S).filter((x) => !x.chosen);
+    if (iv.length) toggleIntention(S, iv[0].id);
+  }
   if (S.narrative.activeEvent && !S.narrative.activeEvent.outcome) {
     // Any door but the ones that end the run, at random from the seeded
     // stream — always taking the first door picked the dear one too often and
@@ -54,7 +71,9 @@ export function step(S) {
   if (rounds.length && S.company.cash < 5e5) {
     try { const offer = raiseOffer(S, rounds[0]); if (offer) acceptRound(S, offer); } catch {}
   }
-  const projs = availableProjects(S).filter((x) => x.available && S.company.cash > x.cost * 4);
+  const projs = availableProjects(S).filter((x) => x.available
+    && (S.world.projectsBuilt?.[x.id] || 0) < 3
+    && S.company.cash > x.cost * 4 && canCarry(S, upkeepOf(x.cost)));
   if (projs.length) startProject(S, projs[0].id);
   Loop.simulate(1);
 }

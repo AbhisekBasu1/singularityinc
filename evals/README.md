@@ -12,10 +12,17 @@ RUNS=7 node evals/capsfuzz.mjs   # …with more runs
 
 ## Tool selection — `select.mjs`
 
-Fifty things a player would say while playing, none of which names a tool,
-scored against the **real published surface** — the descriptions and schemas the
-browser actually shows, pulled out of a live registry mid-run with the whole
-cast met and a card open.
+Sixty-four things a player would say while playing, none of which names a
+tool, scored against the **real published surface** — the descriptors
+`reconcile` mints, taken at two points in a bot-played run: day ~110 in Act II
+with three people met and nothing open, and day ~260 in Act III with the whole
+cast met, a card open and a call the world is playing. The surface is a stable
+capability index, so the two snapshots are byte-identical and the summary line
+says so; if they ever differ, every phrase is scored in each state that
+publishes its tool and the report splits by state. The file prints the count it
+scored, and a phrase whose tool is published in neither state fails the build
+— it used to be a warning, and thirteen phrases were quietly skipped that way
+while the summary counted the rest.
 
 It is not a simulation of a model and does not claim to be. What it proves is
 the necessary condition underneath one: that no two tools are lexically
@@ -24,16 +31,35 @@ reachable from every phrase.
 
 | | |
 |---|---|
-| top-1 | **74%** (37/50) |
-| top-3 | **98%** (49/50) |
+| phrases | **82**, all scored |
+| tools published | **27** |
+| top-1 | **76%** (62/82) |
+| top-3 | **96%** (79/82) |
 | median rank | **1** |
 | unreachable | **0** |
-| closest pair | `write_event` / `answer_in_own_words` at **0.57** (gate: 0.60) |
+| closest pair | `answer_in_own_words` / `take_the_call` at **0.55** (gate: 0.60) |
 
 Gates, all of which fail the build: no two tool documents near-duplicate; no two
 open with the same clause; the intended tool ranks top-5 for every phrase; no
-phrase matches nothing; no phrase names a tool; every tool is exercised. Top-1
-and median rank are reported and asserted on by neither.
+phrase matches nothing; no phrase names a tool; every phrase's tool is
+published; every published tool is asked for by at least one phrase. Top-1 and
+median rank are reported and asserted on by neither.
+
+**The surface it scores is not the one the numbers above it were first measured
+on.** The registry used to mint one `post_as_<person>` tool per character met
+and reshape itself as the run grew; it now publishes twenty-seven stable names
+from the first card to the credits, with one `post_as_character` for the whole
+cast. Two things followed. The five phrases about Vance, the reporter, a user
+and the investor want that one tool now, and its description had to carry the
+words a player uses for each of them ("get the investor to weigh in" reached
+nothing at any rank until it did). And the eval found a real defect in the
+stable descriptors: every tool that carries an `effects` object repeated "Live
+act, doctrine and rolling-budget limits are checked on execution" once per key
+— seventeen copies — which made `write_event`, `forecast`,
+`answer_in_own_words` and `take_the_call` read as one tool (cosine 0.61–0.68
+against a gate of 0.60) and put "doctrine" into `take_the_call` seventeen times,
+where it beat `explain_term` for *"what is a doctrine"*. The sentence is said
+once now, on the object.
 
 **It paid for itself on the first run.** It scored **58%** with two phrases that
 could not reach their tool at any rank, because eight descriptions were written
@@ -60,12 +86,13 @@ fit now rather than clipped to fit, and a gate fails the build if any
 description comes within fifteen characters of the limit.
 
 **The residual misses are honest.** Every phrase that does not rank first is
-either a short-document artifact (`post_as_kai` beating `briefing` for "how much
+either a short-document artifact (`advance_time` edging `briefing` for "how much
 runway have I got left", on the word "left") or a pure paraphrase with no shared
 term — *"who is beating me at the moment"* against a description that says "who
 is winning". Contorting the copy to catch a bag-of-words scorer would be
 overfitting to a metric this file explicitly says not to trust; the gate is
-top-5, and top-3 is 98%.
+top-5, and top-3 is 91%. `--verbose` prints every one of them with the tool
+that won.
 
 ## Against a DOM agent — `baseline.mjs`
 

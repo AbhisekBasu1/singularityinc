@@ -7,7 +7,8 @@
 // `tools/uitest.mjs` checks every view for.
 // ─────────────────────────────────────────────────────────────────────────────
 import { esc, bar, sparkline } from '../dom.js';
-import { fmt, gameDateShort } from '../../engine/format.js';
+import { fmt, gameDateShort, clockText } from '../../engine/format.js';
+import * as Transport from '../transport.js';
 import { isLocked, dockApps } from './apps.js';
 import { navBadge, ROMAN } from '../shell-console.js';
 import { visibleStats, alertChips, statsHtml, STAT_PRIORITY } from '../readouts.js';
@@ -16,10 +17,13 @@ import { researchProgressPct } from '../../systems/research.js';
 import { RESEARCH_MAP } from '../../data/research.js';
 import { activeObjectives, objectiveProgress } from '../../systems/objectives.js';
 import { openThreadCount } from '../../systems/feed.js';
+import { unread as unreadMail } from '../../systems/mail.js';
 import { ACTS, TIME } from '../../data/balance.js';
 import { ARCHETYPE_MAP } from '../../data/legacy.js';
 import { CATEGORY_MAP } from '../../data/products.js';
 import { OS, machineName } from './config.js';
+import { activity } from '../../systems/activity.js';
+import { nominalLine, bootRoll } from '../actchrome.js';
 
 const safe = (fn, dflt) => { try { const v = fn(); return v === undefined ? dflt : v; } catch { return dflt; } };
 
@@ -121,6 +125,10 @@ function badgeFor(S, a) {
     if (S.world?.author?.muted) return `<span class="nav-badge">✕</span>`;
     return '';
   }
+  if (a.id === 'mail') {
+    const n = safe(() => unreadMail(S).length, 0);
+    return n ? `<span class="nav-badge amber">${n}</span>` : '';
+  }
   return '';
 }
 
@@ -206,31 +214,51 @@ export function powerHtml(S) {
 // down when a decision is due. Behind the clock's popover it was three actions
 // instead of one, many times a session, and there is no key for speed: Space
 // pauses and the digits are the eight modules. So it lives in the bar.
+// `-` and `=` walk the speeds and `N` runs to the next decision; each key says
+// so in its tip, because for a long time this control had no key at all.
 export function speedHtml(S) {
   const paused = !!S.settings.paused;
+  const seeking = Transport.isSeeking();
   return `<div class="mb-speed" role="group" aria-label="Speed">
     <button class="sp ${paused ? 'on' : ''}" data-act="speed" data-v="0"
       aria-label="Pause" aria-pressed="${paused}" data-tip="Pause · <b>Space</b>">❚❚</button>
     ${TIME.SPEEDS.map((sp, i) => `<button class="sp ${!paused && S.settings.speed === i + 1 ? 'on' : ''}"
       data-act="speed" data-v="${i + 1}" aria-pressed="${!paused && S.settings.speed === i + 1}"
-      data-tip="${sp}× speed">${sp}×</button>`).join('')}
+      data-tip="${sp}× · <b>−</b> slower, <b>=</b> faster">${sp}×</button>`).join('')}
+    <button class="sp next ${seeking ? 'on' : ''}" data-act="next-decision"
+      aria-label="Run to the next decision" aria-pressed="${seeking}"
+      data-tip="${seeking ? 'Running to the next decision — press to stop' : 'Run to the next decision'} · <b>N</b>">▸❚</button>
   </div>`;
 }
 
+// The time of day, as the founder's clock reads it. The bar patches this into
+// `#mb-time` on every paint rather than rebuilding the clock button, because
+// the button is a menu anchor and a rebuilt anchor loses its lit state.
+export function clockTime(S) { return clockText(S.time.hourOfDay, TIME.DAWN_H); }
+
 export function clockHtml(S) {
-  return `<button class="mb-clock ${S.settings.paused ? 'paused' : ''}" data-act="os-menu" data-v="clock"
-      aria-label="Time" data-tip="Speed and the clock · <b>Space</b> pauses">
+  const seeking = Transport.isSeeking();
+  return `<button class="mb-clock ${S.settings.paused ? 'paused' : ''} ${seeking ? 'seeking' : ''}" data-act="os-menu" data-v="clock"
+      aria-label="Time" data-tip="Speed and the clock · <b>Space</b> pauses, <b>−</b> and <b>=</b> step, <b>N</b> runs to the next decision">
     <span class="mb-act">ACT ${ROMAN[S.company.act]}</span>
     <span class="mb-dot">·</span>
     <span class="mb-day">D ${Math.floor(S.time.day)}</span>
-    <span class="mb-dot">·</span>
+    <span class="mb-dot mb-dot-d">·</span>
     <span class="mb-date">${esc(gameDateShort(S.time.day).toUpperCase())}</span>
+    <span class="mb-dot mb-dot-t">·</span>
+    <span class="mb-time" id="mb-time">${clockTime(S)}</span>
   </button>`;
 }
 
 export function alertsHtml(S) {
   const alerts = alertChips(S);
-  if (!alerts.length) return `<span class="mb-nominal" data-tip="All systems nominal" aria-label="All systems nominal"></span>`;
+  // §I5. The nominal line is the act's own, so the machine sounds different in
+  // Act IV — and it is the tip and the label as well as the lamp, because the
+  // lamp itself is four pixels of accent and says nothing on its own.
+  if (!alerts.length) {
+    const line = safe(() => nominalLine(S), 'ALL SYSTEMS NOMINAL');
+    return `<span class="mb-nominal" data-tip="${esc(line)}" aria-label="${esc(line)}"></span>`;
+  }
   return alerts.map(([k, t]) => `<span class="sl-alert ${k}">${esc(t)}</span>`).join('');
 }
 
@@ -321,42 +349,95 @@ export function readoutsWidgetHtml(S) {
   </section>`;
 }
 
+// §I3. The roster, on the wallpaper. The Agents view has the whole strip; this
+// is the three rows a founder wants at a glance while looking at something
+// else, and it is drawn only once there is a roster to draw.
+export function floorWidgetHtml(S) {
+  const rows = safe(() => activity(S), []) || [];
+  if (!rows.length) return '';
+  const shown = rows.slice(0, 4);
+  return `<section class="widget widget-floor" aria-label="What the roster is doing">
+    <div class="widget-head"><span class="widget-k">ON THE FLOOR</span>
+      <span class="widget-n">${rows.length}</span></div>
+    <div class="act-strip">
+      ${shown.map((r) => `<button class="act-row" data-act="view" data-v="agents"
+          style="--lc:${r.color};--ph:${r.phase.toFixed(3)}" data-tip="${esc(r.task)}" data-tip-title="${esc(r.name)}">
+        <span class="act-who">${esc(r.name)}</span>
+        <span class="act-lane mono">${r.laneIcon}</span>
+        <span class="act-track" aria-hidden="true"><i></i></span>
+        <span class="act-task">${esc(r.task)}</span>
+      </button>`).join('')}
+      ${rows.length > shown.length ? `<div class="act-more tiny dimmer">${rows.length - shown.length} more on the roster</div>` : ''}
+    </div>
+  </section>`;
+}
+
 export function widgetsHtml(S) {
-  return nowWidgetHtml(S) + readoutsWidgetHtml(S);
+  return nowWidgetHtml(S) + floorWidgetHtml(S) + readoutsWidgetHtml(S);
 }
 
 // ── The login screen ────────────────────────────────────────────────────────
 
-export function loginTilesHtml(saved, { legacy } = {}) {
-  const arch = saved ? ARCHETYPE_MAP[saved.archetype] : null;
-  const cat = saved?.category ? CATEGORY_MAP[saved.category] : null;
-  const act = saved ? ACTS[saved.act] : null;
-  const tiles = [];
-  if (saved) {
-    tiles.push(`<div class="login-tile reveal" style="--tc:${arch?.color || 'var(--green)'}">
-      <div class="lt-face" aria-hidden="true">${esc(arch?.icon || '◈')}</div>
+// Three slots, three tiles. A machine with accounts on it shows the accounts:
+// one occupied slot is a run to log into, one empty slot is a run to begin, and
+// which of the three the game will write to is decided here rather than by
+// whatever happened to be in the browser last. A slot whose save will not parse
+// says so and offers the only thing left, which is to start over in it.
+export function loginTilesHtml(rows, { legacy } = {}) {
+  const list = Array.isArray(rows)
+    ? rows
+    // Called with a bare `peek()` by an older caller: one occupied slot.
+    : (rows ? [{ n: 1, saved: rows, active: true, empty: false, corrupt: false }] : []);
+  if (!list.length || (list.every((r) => r.empty) && list.length <= 1)) return '';
+  // A machine nobody has ever used shows no account rack at all — the title
+  // screen's own Begin is the whole of it.
+  if (list.every((r) => r.empty && !r.corrupt)) return '';
+  const tiles = list.map((r) => tileHtml(r, legacy));
+  return `<div class="login-tiles" role="group" aria-label="Accounts">${tiles.join('')}</div>`;
+}
+
+function tileHtml(r, legacy) {
+  const slot = `<span class="lt-slot mono">${r.n}</span>`;
+  if (r.corrupt) {
+    return `<button class="login-tile new reveal" data-act="new-game" data-v="${r.n}" style="--tc:var(--red)">
+      ${slot}
+      <div class="lt-face" aria-hidden="true">⚠</div>
       <div class="lt-who">
-        <div class="lt-name">${esc(saved.founderName)}</div>
-        <div class="lt-meta">${esc(saved.companyName)} · Act ${ROMAN[saved.act]}${act ? ` · ${esc(act.name)}` : ''}</div>
-        <div class="lt-meta dim">day ${fmt(saved.day)} · ${esc(arch?.name || saved.archetype)}${cat ? ` · ${esc(cat.name)}` : ''}</div>
+        <div class="lt-name">Unreadable</div>
+        <div class="lt-meta">This slot holds something this build cannot open.</div>
       </div>
-      <button class="btn btn-primary lt-go" data-act="continue-game">Log in</button>
-    </div>`);
+      <span class="btn lt-go" aria-hidden="true">Start over</span>
+    </button>`;
+  }
+  if (r.empty) {
     // The whole tile is the control here, so its call to action is a `span`
     // wearing the button's clothes — a real button inside a button is invalid,
     // and a card with nothing at the foot beside one that has a Log in reads
     // like the pair was left unfinished.
-    tiles.push(`<button class="login-tile new reveal" data-act="new-game" style="--tc:var(--violet)">
+    return `<button class="login-tile new reveal" data-act="new-game" data-v="${r.n}" style="--tc:var(--violet)">
+      ${slot}
       <div class="lt-face" aria-hidden="true">+</div>
       <div class="lt-who">
         <div class="lt-name">New timeline</div>
         <div class="lt-meta">${legacy?.points ? `${legacy.points} legacy points carried` : 'begin again, from one room'}</div>
       </div>
       <span class="btn lt-go" aria-hidden="true">Begin</span>
-    </button>`);
+    </button>`;
   }
-  if (!tiles.length) return '';
-  return `<div class="login-tiles" role="group" aria-label="Accounts">${tiles.join('')}</div>`;
+  const saved = r.saved;
+  const arch = ARCHETYPE_MAP[saved.archetype];
+  const cat = saved.category ? CATEGORY_MAP[saved.category] : null;
+  const act = ACTS[saved.act];
+  return `<div class="login-tile reveal ${r.active ? 'on' : ''}" style="--tc:${arch?.color || 'var(--green)'}">
+    ${slot}
+    <div class="lt-face" aria-hidden="true">${esc(arch?.icon || '◈')}</div>
+    <div class="lt-who">
+      <div class="lt-name">${esc(saved.founderName)}</div>
+      <div class="lt-meta">${esc(saved.companyName)} · Act ${ROMAN[saved.act]}${act ? ` · ${esc(act.name)}` : ''}</div>
+      <div class="lt-meta dim">day ${fmt(saved.day)} · ${esc(arch?.name || saved.archetype)}${cat ? ` · ${esc(cat.name)}` : ''}</div>
+    </div>
+    <button class="btn btn-primary lt-go" data-act="continue-game" data-v="${r.n}">Log in</button>
+  </div>`;
 }
 
 export function postLineHtml(saved) {
@@ -364,8 +445,15 @@ export function postLineHtml(saved) {
   return `<div class="post-line" id="post-line" aria-hidden="true"><span id="post-text"></span></div>`;
 }
 
+// §I5. The power-on self test, and what it is bringing up. Three modules on a
+// machine in a garage, six on one that runs a continent — the roll is the act's
+// own, from `ACT_CHROME`, and it is the only thing on the login screen that
+// says how far the saved run has come without printing a number.
 export function postText(saved) {
-  return `${machineName(saved?.companyName, saved?.act || 1)} · POST`;
+  const act = Math.max(1, Math.min(5, saved?.act || 1));
+  const roll = safe(() => bootRoll({ company: { act } }), []) || [];
+  const name = machineName(saved?.companyName, act);
+  return roll.length ? `${name} · POST · ${roll.join(' · ')}` : `${name} · POST`;
 }
 
 // ── About this machine ──────────────────────────────────────────────────────
@@ -397,11 +485,12 @@ export function transportHtml(S, { savedAgo = null } = {}) {
   const played = Math.floor((S.meta.playSeconds || 0) / 60);
   return `<div class="transport">
     <div class="tr-speeds">
-      <button class="speed-btn pause ${S.settings.paused ? 'on' : ''}" data-act="speed" data-v="0" aria-label="Pause">❚❚</button>
-      ${TIME.SPEEDS.map((s, i) => `<button class="speed-btn ${!S.settings.paused && S.settings.speed === i + 1 ? 'on' : ''}" data-act="speed" data-v="${i + 1}">${s}×</button>`).join('')}
+      <button class="speed-btn pause ${S.settings.paused ? 'on' : ''}" data-act="speed" data-v="0" aria-label="Pause" data-tip="Pause · <b>Space</b>">❚❚</button>
+      ${TIME.SPEEDS.map((s, i) => `<button class="speed-btn ${!S.settings.paused && S.settings.speed === i + 1 ? 'on' : ''}" data-act="speed" data-v="${i + 1}" data-tip="${s}× · <b>−</b> slower, <b>=</b> faster">${s}×</button>`).join('')}
+      <button class="speed-btn next ${Transport.isSeeking() ? 'on' : ''}" data-act="next-decision" aria-label="Run to the next decision" data-tip="Run to the next decision · <b>N</b>">▸❚</button>
     </div>
     <div class="tr-rows">
-      <div class="tr-row"><span class="tr-k">day</span><span>${fmt(Math.floor(S.time.day))} · ${esc(gameDateShort(S.time.day))}</span></div>
+      <div class="tr-row"><span class="tr-k">day</span><span>${fmt(Math.floor(S.time.day))} · ${esc(gameDateShort(S.time.day))} · ${clockTime(S)}</span></div>
       <div class="tr-row"><span class="tr-k">played</span><span>${played < 60 ? `${played}m` : `${Math.floor(played / 60)}h ${played % 60}m`}</span></div>
       <div class="tr-row"><span class="tr-k">saved</span><span>${savedAgo === null ? '—' : savedAgo < 3 ? 'just now' : `${savedAgo}s ago`}</span></div>
     </div>

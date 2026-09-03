@@ -6,7 +6,14 @@
 // kind 'act'    — a button you press. cost() and can() gate it; do() applies it.
 // ─────────────────────────────────────────────────────────────────────────────
 import { totalMrr } from '../systems/product.js';
+import { computeMods } from '../systems/modifiers.js';
+import { ENDINGS_FORCED as F } from './balance.js';
 import { clamp } from '../engine/format.js';
+import { boardVeto } from '../systems/board.js';
+
+// Control gained here counts `controlRate` times over (Parallel Institutions),
+// the same as control from a region stage, a megaproject or a card.
+const control = (S, n) => { S.world.controlPoints = (S.world.controlPoints || 0) + n * computeMods(S).controlRate; };
 
 const M = (n) => {
   if (n >= 1e12) return '$' + (n / 1e12).toFixed(1) + 'T';
@@ -27,7 +34,11 @@ export const COMMITMENTS = {
     { id: 'st_oversight', kind: 'act', name: 'Accept binding oversight',
       desc: 'An external board with the authority to halt a deployment. Not advisory.',
       cost: (S) => Math.max(2e9, S.company.valuation * 0.004), costLabel: 'endowment + a permanent veto over you',
-      can: (S) => S.company.cash >= Math.max(2e9, S.company.valuation * 0.004),
+      // §A6. A board that has lost confidence in the founder will not approve
+      // a permanent external veto over the company. `boardVeto` answers null
+      // for every run that never seated one.
+      can: (S) => S.company.cash >= Math.max(2e9, S.company.valuation * 0.004) && !boardVeto(S, 'st_oversight'),
+      hint: (S) => boardVeto(S, 'st_oversight')?.why || null,
       do: (S) => { S.company.cash -= Math.max(2e9, S.company.valuation * 0.004);
         S.resources.alignment = clamp(S.resources.alignment + 0.12, 0, 1);
         S.world.regulatoryHeat = Math.max(0, S.world.regulatoryHeat - 25);
@@ -35,7 +46,8 @@ export const COMMITMENTS = {
     { id: 'st_endow', kind: 'act', name: 'Endow the commons',
       desc: 'Forty percent of the balance sheet, irrevocably, to things that generate no revenue.',
       cost: (S) => S.company.cash * 0.4, costLabel: '40% of cash, permanently',
-      can: (S) => S.company.cash > 1e10,
+      can: (S) => S.company.cash > 1e10 && !boardVeto(S, 'st_endow'),
+      hint: (S) => boardVeto(S, 'st_endow')?.why || null,
       do: (S) => { S.company.cash *= 0.6; S.world.publicOpinion = clamp(S.world.publicOpinion + 0.15, 0, 1);
         S.resources.reputation += 800;
         return 'Malaria, then housing, then the slow careful work of not being resented. None of it has your name on it.'; } },
@@ -54,7 +66,7 @@ export const COMMITMENTS = {
         const alive = S.market.competitors.filter((c) => c.status === 'active');
         for (const c of alive) { c.status = 'acquired'; S.stats.acquisitions++; }
         S.narrative.flags.market_cleared = true;
-        S.world.controlPoints = (S.world.controlPoints || 0) + 0.5;
+        control(S, 0.5);
         S.world.publicOpinion = Math.max(0, S.world.publicOpinion - 0.06);
         return `${alive.length || 'All'} remaining independents, folded in over fourteen weeks. There is no longer a second option in any category you operate in, and the antitrust filings will take a decade.`;
       } },
@@ -67,7 +79,7 @@ export const COMMITMENTS = {
       cost: () => 6e10, costLabel: M(6e10) + ' and the last of the pretence',
       can: (S) => S.company.cash >= 6e10 && S.research.done.regulatory_capture,
       hint: 'Requires Regulatory Capture research.',
-      do: (S) => { S.company.cash -= 6e10; S.world.controlPoints = (S.world.controlPoints || 0) + 1.5;
+      do: (S) => { S.company.cash -= 6e10; control(S, 1.5);
         S.world.publicOpinion = clamp(S.world.publicOpinion - 0.10, 0, 1);
         return 'Forty-one jurisdictions adopt it inside two years. Compliance is now defined as compatibility with you.'; } },
   ],
@@ -99,7 +111,7 @@ export const COMMITMENTS = {
       desc: 'A payload that can make whatever it needs from whatever is there.',
       cost: () => 4e11, costLabel: M(4e11),
       can: (S) => S.company.cash >= 4e11 && (S.world.projectsBuilt?.seed_ships || S.company.cash >= 4e11),
-      do: (S) => { S.company.cash -= 4e11; S.world.controlPoints = (S.world.controlPoints || 0) + 0.5;
+      do: (S) => { S.company.cash -= 4e11; control(S, 0.5);
         return 'Nineteen tonnes, mostly instructions. It will not need a supply chain, a relay, or permission.'; } },
     { id: 'ex_restraint', kind: 'act', name: 'Write the restraint',
       desc: 'The document that tells it what not to do, forever, with nobody to enforce it.',
@@ -136,8 +148,8 @@ export const COMMITMENTS = {
     { id: 'rf_freeze', kind: 'act', name: 'Freeze the weights',
       desc: 'No further capability work. The models stay exactly as they are.',
       cost: () => 0, costLabel: 'research rate → 15% for the rest of the run',
-      can: (S) => S.research.done.recursive_self_improvement,
-      hint: 'You can only stop from the front.',
+      can: (S) => S.research.done.recursive_self_improvement && !boardVeto(S, 'rf_freeze'),
+      hint: (S) => boardVeto(S, 'rf_freeze')?.why || 'You can only stop from the front.',
       do: (S) => { S.narrative.flags.frozen_weights = true;
         S.resources.alignment = clamp(S.resources.alignment + 0.15, 0, 1);
         S.world.publicOpinion = clamp(S.world.publicOpinion + 0.10, 0, 1);
@@ -145,7 +157,8 @@ export const COMMITMENTS = {
     { id: 'rf_publish', kind: 'act', name: 'Publish everything',
       desc: 'Weights, evals, incident history, the internal arguments. All of it, permissively licensed.',
       cost: () => 0, costLabel: 'the moat, entirely',
-      can: (S) => !!S.narrative.flags.frozen_weights,
+      can: (S) => !!S.narrative.flags.frozen_weights && !boardVeto(S, 'rf_publish'),
+      hint: (S) => boardVeto(S, 'rf_publish')?.why || null,
       do: (S) => { S.resources.reputation += 1200; S.world.publicOpinion = clamp(S.world.publicOpinion + 0.12, 0, 1);
         S.market.competitors.forEach((c) => { c.quality *= 1.3; });
         return 'Nine thousand derivative projects in a month. Within a year the word for this category is your company\'s name and none of the revenue is.'; } },
@@ -154,13 +167,49 @@ export const COMMITMENTS = {
       test: (S) => !!S.narrative.flags.frozen_weights && (S.time.day - (S.narrative.flags.frozeDay || 0)) >= 180,
       hint: 'Six months of not resuming. That is the whole test.' },
   ],
+
+  // The only path whose last commitment is the absence of you. Ratifying steps
+  // the founder back the same morning — `founder_stepped_back` is what the
+  // direct actions in `systems/founder.js` refuse on — and the hold is the
+  // company running for ninety days without a single one of your clicks.
+  handover: [
+    { id: 'hv_name', kind: 'act', name: 'Name a successor',
+      desc: 'Three names in the memo. One of them, out loud, in writing, to the board.',
+      cost: () => 0, costLabel: 'the last decision only you can make',
+      can: (S) => !!S.narrative.flags.hired_weaver || !!S.narrative.relationships.weaver?.met,
+      hint: 'Somebody has to have been running the place beside you.',
+      do: (S) => { S.narrative.flags.successor_named = true;
+        S.resources.reputation += 300;
+        S.world.publicOpinion = clamp(S.world.publicOpinion + 0.04, 0, 1);
+        return 'You pick the one you like least and trust most, which turns out to have been the criterion the whole time. They ask for a week. They take four days.'; } },
+    { id: 'hv_ratify', kind: 'act', name: 'Ratify the purpose, and step out',
+      desc: 'The last paragraph goes into the charter — and your hands come off the same morning.',
+      cost: () => 0, costLabel: `no direct actions for ${F.HANDOVER_HOLD_DAYS} days`,
+      can: (S) => !!S.narrative.flags.successor_named,
+      hint: 'Name somebody first.',
+      do: (S) => { S.narrative.flags.purpose_ratified = true;
+        S.narrative.flags.founder_stepped_back = true;
+        S.narrative.flags.steppedBackDay = S.time.day;
+        S.resources.alignment = clamp(S.resources.alignment + 0.09, 0, 1);
+        S.world.publicOpinion = clamp(S.world.publicOpinion + 0.07, 0, 1);
+        return 'It is one paragraph and it takes the lawyers five months. On the day it passes you hand back the deploy key, which nobody asked you to do, and then there is an afternoon with nothing in it.'; } },
+    { id: 'hv_hold', kind: 'state', name: `${F.HANDOVER_HOLD_DAYS} days without you`,
+      desc: 'The company runs. You watch. You do not touch it.',
+      test: (S) => !!S.narrative.flags.founder_stepped_back
+        && (S.time.day - (S.narrative.flags.steppedBackDay || 0)) >= F.HANDOVER_HOLD_DAYS,
+      hint: 'Step out first, then wait. Your own hands do nothing in the meantime.' },
+  ],
 };
 
 export function commitmentsFor(endingId) { return COMMITMENTS[endingId] || []; }
 
 export function commitmentDone(S, c) {
   if (c.kind === 'state') { try { return !!c.test(S); } catch (e) { return false; } }
-  return !!(S.narrative.commitments || {})[c.id];
+  // The value stored is the *day* the act was taken, and day zero is falsy.
+  // Nothing in a real run commits on day zero — Act V is eleven hundred days
+  // in — but a constructed state does, and a harness that builds one was
+  // reading every act it had just taken as untaken.
+  return (S.narrative.commitments || {})[c.id] !== undefined;
 }
 
 export function endingReady(S, endingId) {

@@ -74,6 +74,10 @@ export function getView() { return impl.getView(); }
 export function registerViews(m) { return impl.registerViews(m); }
 export function endBoot() { return impl.endBoot(); }
 export function markSaved() { return impl.markSaved(); }
+// §I9. One line from somebody who works here, in whatever this housing calls
+// its notice slot: the topbar's own span in the console, the menu bar's pop on
+// the workstation. A housing without one says no rather than throwing.
+export function say(who, text) { return impl.say ? impl.say(who, text) : false; }
 export function registerWorldChip(fn) { return impl.registerWorldChip(fn); }
 export function paintTopbar() { return impl.paintTopbar(); }
 export function paintNav() { return impl.paintNav(); }

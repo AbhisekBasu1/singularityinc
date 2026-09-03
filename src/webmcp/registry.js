@@ -35,7 +35,7 @@ let root = new AbortController();    // MUTE aborts this; every call derives fro
 // see that it belongs to a world that no longer exists — the root signal alone
 // cannot tell it, because unmuting installs a fresh, unaborted controller.
 let generation = 0;
-const tools = new Map();             // name → { def, ac, token, fingerprint }
+const tools = new Map();             // name → { def, ac, token }
 let seq = 0;
 let mutex = Promise.resolve();
 const log = [];                      // the last 40 calls, for the panel
@@ -59,7 +59,6 @@ function changed(action, name, extra) {
 export const has = (n) => tools.has(n);
 export const list = () => [...tools.keys()];
 export const count = () => tools.size;
-export const fingerprintOf = (n) => tools.get(n)?.fingerprint;
 export const calls = () => log.slice();
 
 // ── Mint and revoke ─────────────────────────────────────────────────────────
@@ -79,8 +78,15 @@ export async function mint(def) {
     execute: wrap(def, token),
   };
 
+  // `exposedTo` is the other half of the origin story: a tool registered with
+  // it is published to the named origins and to nobody else — not even to this
+  // page's own agent. That is how a page offers a capability *outward* while
+  // keeping it off its own surface. Omitted entirely when there is no list,
+  // because `{ exposedTo: undefined }` is not the same as absent to every
+  // implementation.
+  const opts = { signal: ac.signal, ...(def.exposedTo?.length ? { exposedTo: def.exposedTo.slice() } : {}) };
   let p;
-  try { p = mc.registerTool(tool, { signal: ac.signal }); }
+  try { p = mc.registerTool(tool, opts); }
   catch (e) { return { ok: false, error: String(e?.name || e) }; }
 
   // Attach the handler before anything else. `ac.abort()` rejects this same
@@ -109,7 +115,7 @@ export async function mint(def) {
     return { ok: false, error: settled.error };
   }
 
-  tools.set(def.name, { def, ac, token, fingerprint: def.fingerprint ?? null });
+  tools.set(def.name, { def, ac, token });
   changed('mint', def.name);
   return { ok: true };
 }
@@ -124,7 +130,10 @@ export async function revoke(name, why = 'revoked') {
 }
 
 export async function revokeAll(why = 'revoked') {
-  for (const n of [...tools.keys()]) await revoke(n, why);
+  // Start every abort in one turn so consumers see one empty snapshot instead
+  // of every intermediate tool count. Some hosts cap descriptor changes for a
+  // document, and a sequential teardown can spend that budget by itself.
+  await Promise.all([...tools.keys()].map((n) => revoke(n, why)));
 }
 
 // The plug. One abort takes every registration with it, because every call's

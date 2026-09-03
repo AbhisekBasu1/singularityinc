@@ -458,11 +458,17 @@ function objectiveRows(St) {
 
 function achievementRows(St) {
   const got = St.achievements || {};
-  return ACHIEVEMENTS.map((a) => ({
-    kind: 'achievement', label: a.name, sub: a.desc, glyph: a.icon || '◈',
-    note: got[a.id] ? `DAY ${got[a.id]}` : a.rare ? 'RARE' : 'NOT YET',
-    act: 'view', v: 'legacy', why: a.desc,
-  }));
+  // A secret achievement is a story beat; until it lands, Find does not say
+  // what it is — the name would be the spoiler.
+  return ACHIEVEMENTS.map((a) => {
+    const hidden = a.secret && !got[a.id];
+    return {
+      kind: 'achievement', label: hidden ? '???' : a.name, sub: hidden ? 'Something in the story unlocks it.' : a.desc,
+      glyph: hidden ? '◌' : (a.icon || '◈'),
+      note: got[a.id] ? `DAY ${got[a.id]}` : hidden ? 'SECRET' : a.rare ? 'RARE' : 'NOT YET',
+      act: 'view', v: 'legacy', why: hidden ? 'Something in the story unlocks it.' : a.desc,
+    };
+  });
 }
 
 // ── The Record ──────────────────────────────────────────────────────────────

@@ -1,10 +1,18 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// DOCTRINES — permanent bonuses you earn by *how* you run the company, not by
-// spending anything. They are discovered, not bought, and they never expire.
-// Each has a `hold` in days: the condition must be true continuously.
+// DOCTRINES — bonuses you earn by *how* you run the company, not by spending
+// anything. They are discovered, not bought. Each has a `hold` in days: the
+// condition must be true continuously to earn it — and, since §A20, must go on
+// being true to keep it. Hold the opposite for as long as you held the thing
+// and it lapses: the achievement stays on the shelf, the bonus stops, and
+// anything the world layer lost to it comes back.
+//
+// `FORBIDS` at the bottom is the other half of that: two of these are doors,
+// and a founder who has walked through one does not also get the other.
 // ─────────────────────────────────────────────────────────────────────────────
 import { totalUsers, totalMrr } from '../systems/product.js';
 import { computeLaneOutput } from '../systems/agents.js';
+import { isAvailable } from '../systems/research.js';
+import { RESEARCH } from './research.js';
 
 const D = [];
 const d = (id, name, icon, colour, hold, hint, reveal, test, mods, flavour) =>
@@ -41,7 +49,11 @@ d('untouchable', 'Untouchable', '⛨', '#60a5fa', 90,
 d('compounding', 'Compounding', '∞', '#f5a623', 100,
   'Never leave research idle for a hundred consecutive days.',
   (S) => S.stats.researchDone >= 5,
-  (S) => !!S.research.active,
+  // A tree with nothing left to learn is not idle research; it is a finished
+  // tree. Without that clause this lapsed on everybody in Act V, for the crime
+  // of having read everything.
+  (S) => !!S.research.active || !!(S.research.queue || []).length
+    || !RESEARCH.some((n) => isAvailable(S, n)),
   { researchRate: 1.25 },
   'Something has been in progress every single day. The tree looks different from here.');
 
@@ -119,3 +131,27 @@ d('the_listener', 'The Listener', '☎', '#00e5a0', 90,
 
 export const DOCTRINES = D;
 export const DOCTRINE_MAP = Object.fromEntries(D.map((x) => [x.id, x]));
+
+// ── Exclusive pairs — §A20 ──────────────────────────────────────────────────
+// What a run can be doing that a doctrine will not stand beside. Each returns a
+// short mono note and a sentence, or null. `tickDoctrines` treats a forbidden
+// doctrine as failing its own test, so one already held lapses on the ordinary
+// clock rather than vanishing mid-sentence, and the panel says why.
+//
+// The other direction — what a *held* doctrine forbids the founder from doing —
+// is `doctrineBlocks` in systems/doctrines.js, because it is a rule about an
+// action rather than a fact about the run.
+export const FORBIDS = {
+  beloved: (S) => (S.company.directive === 'war'
+    ? { note: 'TOTAL WAR',
+        why: 'Total War is a company that has decided this market has room for exactly one. It does not also get to be loved.' }
+    : null),
+  no_casualties: (S) => (S.company.directive === 'war'
+    ? { note: 'TOTAL WAR',
+        why: 'You cannot be crushing rivals on purpose and counting nobody as a casualty.' }
+    : null),
+  frugal_empire: (S) => (S.stats.roundsRaised > 0
+    ? { note: 'ROUND RAISED',
+        why: 'Somebody else\u2019s money is in the company now.' }
+    : null),
+};

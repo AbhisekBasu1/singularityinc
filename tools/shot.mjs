@@ -72,11 +72,11 @@ try {
     // middle of them, and the page-eater check flags the card's own backdrop —
     // which is the game working, not a layout bug. It cost two false failures
     // on the workstation before it was added here.
-    await page.goto(`${BASE}${ROUTE}?dev=1&notut=1&pause=1`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}${ROUTE}?dev=1&notut=1&pause=1`, { waitUntil: 'load' });
     await page.evaluate(() => {
       try { localStorage.clear(); } catch {}
     });
-    await page.goto(`${BASE}${ROUTE}?dev=1&notut=1&pause=1`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}${ROUTE}?dev=1&notut=1&pause=1`, { waitUntil: 'load' });
     await page.waitForTimeout(500);
 
     console.log(`\n── ${name} · ${w}×${h}${OS ? ' · workstation' : ''} ──`);
@@ -98,6 +98,16 @@ try {
       await open.click().catch(() => {});
       await page.waitForTimeout(420);
       await page.click('#event-continue').catch(() => {});
+      await page.waitForTimeout(420);
+    }
+    // So is a call the written world placed while the clock ran: hang up, and
+    // put the phone down.
+    for (let i = 0; i < 2; i++) {
+      const hang = await page.$('[data-call-hang]');
+      if (!hang) break;
+      await hang.click().catch(() => {});
+      await page.waitForTimeout(420);
+      await page.click('#call-close').catch(() => {});
       await page.waitForTimeout(420);
     }
     await page.waitForTimeout(200);

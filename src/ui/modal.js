@@ -2,9 +2,10 @@
 // MODALS — narrative event cards, act transitions, dialogs.
 // ─────────────────────────────────────────────────────────────────────────────
 import { md, esc } from './dom.js';
-import { stagger } from './typewriter.js';
+import { stagger, typeInto } from './typewriter.js';
 import { CHARACTERS } from '../data/characters.js';
 import { ACTS } from '../data/balance.js';
+import { TONE_LEGEND } from '../data/manual.js';
 import { fmt, money } from '../engine/format.js';
 
 const root = () => document.getElementById('modal-root');
@@ -17,8 +18,22 @@ const KIND_ICON = {
   story: '◈', crisis: '⚠', opportunity: '↗', character: '☎', milestone: '✦',
 };
 
+// A choice's tone was colour alone — a lit edge — which is nothing to a
+// colour-blind player and little to anyone at 2am. Each tone has a mark now,
+// from the same table the manual prints as its legend.
+const TONES = Object.fromEntries(TONE_LEGEND.map(([glyph, tone, desc]) => [tone, { glyph, desc }]));
+function toneGlyph(tone) {
+  const t = TONES[tone] || TONES.neutral;
+  const name = TONES[tone] ? tone : 'neutral';
+  // The class as well as the glyph: the mark is the channel that survives a
+  // colour-blind eye, and the colour is what makes it agree with the manual's
+  // legend, which prints the same table with the same classes.
+  return `<span class="choice-tone ${name}" data-tip="<b>${esc(name)}</b> — ${esc(t.desc)}" aria-label="${esc(name)}">${t.glyph}</span>`;
+}
+
 let onChoose = null;
 let onDismiss = null;
+let onKeep = null;
 
 // Focus goes into a dialog when it opens and back to where it was when it
 // closes; Tab cycles inside it. Without the three, a screen reader is never
@@ -62,6 +77,16 @@ function freeText() {
     }
     return { available: !!value, waiting: false, pending: null, max: 600 };
   } catch { return { available: false, waiting: false, pending: null, max: 600 }; }
+}
+
+// §B6. The opt-in choice preview. A provider rather than an import, for the
+// reason `setFreeTextProvider` is one: this module holds no game state. It is
+// asked once, when the plate opens — never on a repaint, because a dry run is
+// a deep copy of the world per choice.
+let previewFn = () => null;
+export function setPreviewProvider(fn) { previewFn = fn || (() => null); }
+function previewFor(ev) {
+  try { const r = previewFn(ev); return Array.isArray(r) ? r : null; } catch { return null; }
 }
 
 let onOwnWordsSubmit = null, onOwnWordsCancel = null, onOwnWordsReconnect = null;
@@ -229,7 +254,7 @@ export function showProposal(ev, proposal) {
   return true;
 }
 
-export function setEventHandlers({ choose, dismiss }) { onChoose = choose; onDismiss = dismiss; }
+export function setEventHandlers({ choose, dismiss, keep }) { onChoose = choose; onDismiss = dismiss; onKeep = keep || null; }
 
 // ── Where a dialog hangs from ───────────────────────────────────────────────
 // The console centres everything, because there is one screen and one view. The
@@ -256,8 +281,26 @@ function setKicker(text, note = '') {
   if (n) n.textContent = note;
 }
 
+// A scene with more than one of the cast in it. `char` is still the card's
+// primary and still the portrait plate behind the title; this is the rest of
+// the room, at most three, as square chips with the person's own accent on all
+// four sides. A face with no portrait (Jo) gets its glyph, the way Contacts
+// already does it, so a character without an image is furniture rather than a
+// hole. Renders nothing at all when a card has no `chars`, which is every card
+// but eight.
+function castStrip(ev) {
+  const ids = Array.isArray(ev.chars) ? ev.chars.filter((id) => CHARACTERS[id]).slice(0, 3) : [];
+  if (!ids.length) return '';
+  return `<div class="event-cast">${ids.map((id) => {
+    const c = CHARACTERS[id];
+    return `<span class="ec-face${c.img ? '' : ' ec-glyph'}" style="--cc:${c.color}${c.img ? `;background-image:url('${c.img}')` : ''}"
+      title="${esc(c.name)} — ${esc(c.role)}">${c.img ? '' : esc(c.icon || '☎')}</span>`;
+  }).join('')}<span class="ec-n">${ids.length} in the room</span></div>`;
+}
+
 export function showEvent(ev) {
   const ownWords = freeText();
+  const preview = previewFor(ev);
   const char = ev.char ? CHARACTERS[ev.char] : null;
   const color = KIND_COLOR[ev.kind] || 'var(--violet)';
   const icon = char?.icon || KIND_ICON[ev.kind] || '◈';
@@ -285,6 +328,7 @@ export function showEvent(ev) {
               <div class="event-title" id="event-title">${esc(ev.title)}</div>
               ${char ? `<div class="event-char">${char.name.toLowerCase() === String(ev.title).toLowerCase()
                 ? esc(char.role) : `${esc(char.name)} · ${esc(char.role)}`}</div>` : ''}
+              ${castStrip(ev)}
             </div>
           </div>
           <div class="modal-body"><div class="event-body">${md(ev.body)}</div></div>
@@ -303,7 +347,9 @@ export function showEvent(ev) {
                 <div style="flex:1">
                   <div class="choice-label">${esc(c.label)}</div>
                   ${c.sub ? `<div class="choice-sub">${esc(c.sub)}</div>` : ''}
+                  ${previewHtml(preview?.[i])}
                 </div>
+                ${toneGlyph(c.tone)}
               </button>`).join('')}
             <div class="own-words-slot" id="own-words-slot"></div>
           </div>
@@ -350,41 +396,248 @@ const EFFECT_META = {
   race: { label: 'Rival frontier', fmt: (v) => fmt(v) + 'pt', icon: '✦', invert: true },
 };
 
+// One effect, as a chip. The outcome strip and §B6's preview print the same
+// vocabulary from the same table, so a chip a founder learns to read under a
+// choice means the same thing after it.
+function effectChip(k, v, { cls = 'eff', delay = 0 } = {}) {
+  const style = delay ? ` style="animation-delay:${delay}ms"` : '';
+  if (k.startsWith('rel:')) {
+    // A bare "+" told the player nothing. Name the direction and the size.
+    const c = CHARACTERS[k.slice(4)];
+    const label = c ? c.name : k.slice(4);
+    const mag = Math.abs(v);
+    const word = v > 0 ? (mag >= 12 ? 'much warmer' : mag >= 5 ? 'warmer' : 'a little warmer')
+                       : (mag >= 12 ? 'much colder' : mag >= 5 ? 'colder' : 'a little colder');
+    return `<span class="${cls} ${v > 0 ? 'pos' : 'neg'}"${style}>♥ ${esc(label)} ${word}</span>`;
+  }
+  if (k.startsWith('skill:')) {
+    const name = k.slice(6);
+    return `<span class="${cls} pos"${style}>✦ ${esc(name.charAt(0).toUpperCase() + name.slice(1))} +${v}</span>`;
+  }
+  const meta = EFFECT_META[k.split(':')[0]];
+  if (!meta) return '';
+  const pos = meta.invert ? v < 0 : v > 0;
+  return `<span class="${cls} ${pos ? 'pos' : 'neg'}"${style}>${meta.icon} ${esc(meta.label)} ${(v > 0 ? '+' : '') + meta.fmt(v)}</span>`;
+}
+
+// §B6. What the dry run found, under the choice it was taken on. `~` means the
+// effect rolled: the preview saw one branch and the stream was put back, so the
+// real resolution may land somewhere else.
+function previewHtml(entry) {
+  if (!entry) return '';
+  const chips = entry.effects.slice(0, 5)
+    .map(([k, v]) => effectChip(k, v, { cls: 'eff eff-pre' })).filter(Boolean).join('');
+  // A choice whose whole effect is a flag moves no number, and saying so is
+  // better than a gap: it tells the founder the difference is somewhere else.
+  if (!chips) return `<div class="choice-preview"><span class="eff eff-pre eff-none"
+    data-tip="Nothing this run measures. What it changes is what happens later — who remembers it, and which cards the deck can deal."
+    data-tip-title="No numbers">· nothing measurable</span></div>`;
+  return `<div class="choice-preview${entry.approx ? ' approx' : ''}"${entry.approx
+    ? ' data-tip="This one rolls. The preview took one of its branches and put the dice back where they were, so what actually happens may differ." data-tip-title="Not settled"'
+    : ''}>${entry.approx ? '<span class="eff-approx" aria-label="approximate">~</span>' : ''}${chips}</div>`;
+}
+
 export function showOutcome(ev, outcome, effects) {
   const box = document.getElementById('event-choices');
   if (!box) return;
   setKicker('what happened');
-  const effHtml = (effects || []).filter(([k, v]) => v !== 0 && Math.abs(v) > 0.001).map(([k, v], i) => {
-    const base = k.split(':')[0];
-    const meta = EFFECT_META[base];
-    let label, val, pos;
-    if (k.startsWith('rel:')) {
-      // A bare "+" told the player nothing. Name the direction and the size.
-      const c = CHARACTERS[k.slice(4)];
-      label = c ? c.name : k.slice(4);
-      const mag = Math.abs(v);
-      const word = v > 0 ? (mag >= 12 ? 'much warmer' : mag >= 5 ? 'warmer' : 'a little warmer')
-                         : (mag >= 12 ? 'much colder' : mag >= 5 ? 'colder' : 'a little colder');
-      return `<span class="eff ${v > 0 ? 'pos' : 'neg'}" style="animation-delay:${i * 45}ms">♥ ${esc(label)} ${word}</span>`;
-    }
-    if (k.startsWith('skill:')) {
-      const name = k.slice(6);
-      return `<span class="eff pos" style="animation-delay:${i * 45}ms">✦ ${esc(name.charAt(0).toUpperCase() + name.slice(1))} +${v}</span>`;
-    }
-    if (!meta) return '';
-    pos = meta.invert ? v < 0 : v > 0;
-    val = (v > 0 ? '+' : '') + meta.fmt(v);
-    return `<span class="eff ${pos ? 'pos' : 'neg'}" style="animation-delay:${i * 45}ms">${meta.icon} ${esc(meta.label)} ${val}</span>`;
-  }).join('');
+  const effHtml = (effects || []).filter(([k, v]) => v !== 0 && Math.abs(v) > 0.001)
+    .map(([k, v], i) => effectChip(k, v, { delay: i * 45 })).join('');
 
+  // Any card whose outcome is on the glass can be kept. A world card is kept
+  // whole; a written one is kept as a *memory* — what you did, and the road you
+  // did not take — so the founder with no assistant has a deck too. The key
+  // sits beside Continue, never in its way.
+  const world = !!(ev?.author === 'world' && ev?.runtime);
+  const keepable = !!(onKeep && ev && ev.outcome && (world || ev.chosen));
   box.innerHTML = `<div class="outcome">
       <div class="outcome-text">${md(outcome || '')}</div>
       ${effHtml ? `<div class="outcome-effects">${effHtml}</div>` : ''}
     </div>
+    ${keepable ? `<button class="btn btn-ghost btn-block keep-key" id="event-keep" data-tip="${world
+        ? `The world wrote this one. Keep it, and the written deck deals it in every timeline after this — once, in this act, to a founder who has met ${esc(ev.char ? (CHARACTERS[ev.char]?.name || 'them') : 'nobody in particular')}.`
+        : `Keep the memory of it. A later timeline is dealt this moment back, with what you did on one door and the road you did not take on the other.`}" data-tip-title="${world ? 'Keep this card' : 'Keep this memory'}">
+      <span class="keep-glyph">⊕</span> ${world ? 'Keep this card' : 'Keep this memory'}</button>` : ''}
     <button class="btn btn-primary btn-block btn-lg" id="event-continue">Continue <span class="dim mono tiny" style="opacity:.6">⏎</span></button>`;
   document.getElementById('event-continue')?.addEventListener('click', () => onDismiss?.());
+  document.getElementById('event-keep')?.addEventListener('click', (e) => {
+    const r = onKeep?.(ev);
+    const b = e.currentTarget;
+    if (b) { b.disabled = true; b.innerHTML = r?.ok ? '<span class="keep-glyph">✓</span> Kept — it is in the deck now' : `<span class="keep-glyph">·</span> ${esc(r?.reason || 'Not kept')}`; }
+  });
   setTimeout(() => document.getElementById('event-continue')?.focus(), 60);
 }
+
+// ── A phone call ────────────────────────────────────────────────────────────
+// The same plate a card from a person gets — the portrait across the header,
+// the decision down the right — because a call *is* a card from a person, one
+// that answers back. The transcript takes the choices' column; what you can
+// say next takes their place at the foot of it. In the written world that is
+// three things you might say; with somebody playing the line it is a field.
+//
+// `view` is computed by whoever owns the phone — options, status, the deal on
+// the table, the person's dossier — so this module stays free of game state.
+let onCallSay = null, onCallTopic = null, onCallHangUp = null;
+export function setCallHandlers({ say, topic, hangUp } = {}) {
+  onCallSay = say || null; onCallTopic = topic || null; onCallHangUp = hangUp || null;
+}
+
+const CALL_STATE_LINE = {
+  connected: 'connected', writing: 'the line is open', queued: 'holding the line',
+  them: 'they hung up', line: 'the line went dead', founder: 'call ended', quiet: 'nobody on the line',
+};
+
+export function showCall(view) {
+  if (!view?.call) return false;
+  const { call, person, options = [], status = 'connected', deal = '', dossier = {}, live = false, max = 6, said = 0 } = view;
+  const color = person?.color || 'var(--cyan)';
+  const html = `
+  <div class="modal-backdrop" id="call-modal">
+    <div class="modal modal-split ${person?.img ? 'has-portrait' : ''} call-modal ${call.done ? 'ended' : ''}" role="dialog" aria-modal="true" aria-labelledby="call-title" tabindex="-1"
+         style="--kind-color:${color};--char-color:${color}">
+      <div class="modal-cols">
+        <div class="modal-read">
+          <div class="modal-top">
+            ${person?.img
+              ? `<div class="event-plate" style="background-image:url('${person.img}');background-color:${color}18"></div>`
+              : `<div class="event-avatar" style="color:${color};border-color:var(--line-2)">${person?.icon || '☎'}</div>`}
+            <div style="flex:1;min-width:0">
+              <div class="event-kind kind-character call-kind"><span class="call-dot ${call.done ? 'off' : ''}"></span>${esc(CALL_STATE_LINE[status] || status)}</div>
+              <div class="event-title" id="call-title">${esc(person?.name || 'A call')}</div>
+              <div class="event-char">${esc(person?.role || '')}${person?.handle ? ` · ${esc(person.handle)}` : ''}</div>
+            </div>
+          </div>
+          <div class="modal-body">
+            ${dossier.bio ? `<div class="call-bio">${md(dossier.bio)}</div>` : ''}
+            <div class="call-dossier">
+              ${dossier.wants ? `<div class="call-k">wants</div><div class="call-v">${esc(dossier.wants)}</div>` : ''}
+              ${dossier.knows ? `<div class="call-k">knows</div><div class="call-v">${esc(dossier.knows)}</div>` : ''}
+              ${dossier.standing ? `<div class="call-k">standing</div><div class="call-v">${esc(dossier.standing)}</div>` : ''}
+              ${dossier.since ? `<div class="call-k">last spoke</div><div class="call-v">${esc(dossier.since)}</div>` : ''}
+              ${dossier.remembers?.length ? `<div class="call-k">remembers</div><div class="call-v call-mem">${dossier.remembers.map((m) => `<span class="quote">${esc(m)}</span>`).join('<br>')}</div>` : ''}
+              ${live ? `<div class="call-k">played by</div><div class="call-v">your assistant, live</div>` : ''}
+            </div>
+          </div>
+        </div>
+        <div class="modal-act">
+          <div class="act-head">
+            <span class="act-k" id="call-kicker">the call</span>
+            <span class="act-n">${said} of ${max}</span>
+          </div>
+          <div class="modal-choices call-choices" id="call-choices">
+            <div class="call-transcript" id="call-transcript">
+              ${call.rounds.map((r, i) => callLineHtml(r, person, i === call.rounds.length - 1)).join('')}
+            </div>
+            ${deal ? `<div class="call-deal" id="call-deal"><span class="call-deal-k">on the table</span><span class="mono">${esc(deal)}</span></div>` : ''}
+            <div class="call-controls" id="call-controls">${callControlsHtml(view)}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  captureFocus();
+  root().innerHTML = html;
+  wireCall(view);
+  focusInto(root().querySelector(call.done ? '#call-close' : (live ? '#call-say' : '.call-topic')) || root().querySelector('.modal'));
+  const tr = document.getElementById('call-transcript');
+  if (tr) tr.scrollTop = tr.scrollHeight;
+  return true;
+}
+
+function callLineHtml(r, person, last) {
+  // First names on the rail: a label column has room for one word, and a call
+  // is on first-name terms by definition.
+  const who = r.who === 'you' ? 'you' : r.who === 'line' ? 'line' : String(person?.name || 'them').split(' ')[0];
+  return `<div class="call-line ${r.who}${r.bye ? ' bye' : ''}${last ? ' last' : ''}">
+    <span class="call-who">${esc(who)}</span>
+    <span class="call-text">${md(r.text)}</span>
+  </div>`;
+}
+
+function callControlsHtml({ call, options = [], live = false, status = 'connected', deal = '', pending = null, said = 0, max = 6 }) {
+  if (call.done) {
+    return `<button class="btn btn-primary btn-block btn-lg" id="call-close">Put the phone down <span class="dim mono tiny" style="opacity:.6">⏎</span></button>`;
+  }
+  const hang = deal
+    ? `<div class="call-hang row g8">
+         <button class="btn btn-primary grow" data-call-hang="accept">Accept the terms and hang up</button>
+         <button class="btn btn-ghost" data-call-hang="decline">Walk away</button>
+       </div>`
+    : `<div class="call-hang"><button class="btn btn-ghost btn-block" data-call-hang="decline">Hang up</button></div>`;
+  if (!live) {
+    return `${options.map((o, i) => `
+      <button class="choice call-topic neutral" data-call-topic="${esc(o.id)}">
+        <span class="choice-sheen" aria-hidden="true"></span>
+        <div class="choice-num">${i + 1}</div>
+        <div style="flex:1"><div class="choice-label">${esc(o.label)}${o.again ? ' <span class="call-again">again</span>' : ''}</div></div>
+      </button>`).join('')}
+      ${!options.length && said < max ? `<div class="tiny dim call-note">There is nothing else to say. Not today.</div>` : ''}
+      ${hang}`;
+  }
+  const waiting = pending && !pending.answered;
+  const spent = said >= max;
+  const line = waiting
+    ? (pending.delivered ? 'They heard you. The world is writing what they say back.' : 'Holding the line until the world checks in.')
+    : status === 'quiet' ? 'Nobody is on the line. Hang up and try again later.'
+    : spent ? 'That is enough for one call.'
+    : 'Say what you actually say. Your assistant answers as them.';
+  return `<form class="choice choice-free call-form ${waiting ? 'waiting' : ''}" novalidate>
+      <div class="choice-num" aria-hidden="true">✎</div>
+      <div class="own-words-main">
+        <label class="choice-label" for="call-say">${waiting ? 'You said' : 'You say'}</label>
+        ${waiting ? `<div class="own-words-quote">${esc(pending.text)}</div>`
+          : `<textarea id="call-say" class="own-words-textarea" rows="2" maxlength="400" ${spent || status === 'quiet' ? 'disabled' : ''}
+              placeholder="What do you say to them?"></textarea>`}
+        <div class="own-words-footer">
+          <span class="own-words-status ${waiting && pending.delivered ? 'live' : waiting ? 'queued' : 'live'}" role="status"><i></i>${esc(line)}</span>
+          ${waiting || spent ? '' : `<button type="submit" class="btn btn-violet btn-sm" id="call-send" disabled>Say it</button>`}
+        </div>
+      </div>
+    </form>
+    ${hang}`;
+}
+
+function wireCall(view) {
+  const box = root();
+  box.querySelectorAll('[data-call-topic]').forEach((b) => b.addEventListener('click', () => onCallTopic?.(b.dataset.callTopic)));
+  box.querySelectorAll('[data-call-hang]').forEach((b) => b.addEventListener('click', () => onCallHangUp?.(b.dataset.callHang === 'accept')));
+  box.querySelector('#call-close')?.addEventListener('click', () => { closeModal(); });
+  const form = box.querySelector('.call-form');
+  if (form) {
+    const input = form.querySelector('#call-say');
+    const send = form.querySelector('#call-send');
+    const sync = () => { if (send) send.disabled = !String(input?.value || '').trim(); };
+    input?.addEventListener('input', sync);
+    input?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit?.(); }
+    });
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const text = String(input?.value || '').trim();
+      if (!text || !onCallSay) return;
+      if (send) { send.disabled = true; send.textContent = 'Saying…'; }
+      let r;
+      try { r = await onCallSay(text); } catch (err) { r = { ok: false, reason: err?.message }; }
+      if (!r?.ok) {
+        if (send) { send.textContent = 'Say it'; sync(); }
+        const st = form.querySelector('.own-words-status');
+        if (st) st.innerHTML = `<i></i>${esc(r?.reason || 'That did not go through')}`;
+        input?.focus();
+      }
+    });
+    sync();
+  }
+  // The newest line from them types itself out, once: the reply arrives the
+  // way a person's does, not the way a page does. `typeInto` writes plain
+  // text, so the marked-up version goes back in when it lands.
+  const lastThem = box.querySelector('.call-line.them.last .call-text');
+  if (lastThem && view.typeLast) {
+    const html = lastThem.innerHTML;
+    typeInto(lastThem, view.typeLast, { cps: 46 }).then(() => { lastThem.innerHTML = html; });
+  }
+}
+
+export function isCallOpen() { return !!root()?.querySelector?.('#call-modal'); }
 
 export function closeModal() {
   if (transition) transition.close();

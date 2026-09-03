@@ -85,7 +85,7 @@ Revenue for the day is slightly above trend.`,
 
 "Just ${(S.company.name || 'Meridian').split(/\s+/)[0].toLowerCase()} it."
 
-They say it the way you would say *google it* — as a verb, without emphasis, as though it has always been a word. The other one nods and does it and it takes eleven seconds and then they are talking about something else.
+They say it the way you would say *google it* — as a verb, without emphasis, as though it has always been a word. The other one nods and does it and it takes four seconds and then they are talking about something else.
 
 Neither of them will ever know you were there. That is somehow the whole point of it.`,
   choices: [
@@ -105,7 +105,7 @@ Neither of them will ever know you were there. That is somehow the whole point o
   title: 'Somebody Else\'s Company',
   body: (S) => `An email with a subject line that is just a number: **$40,000**.
 
-> *You don't know me. I built a thing on top of yours eleven months ago because I needed it and nobody had made it. It does one narrow thing for one narrow industry and it is now paying my rent and my co-founder's rent and it did forty thousand dollars last month.*
+> *You don't know me. I built a thing on top of yours two years ago because I needed it and nobody had made it. It does one narrow thing for one narrow industry and it is now paying my rent and my co-founder's rent and it did forty thousand dollars last month.*
 >
 > *I'm not asking for anything. I wanted somebody to know. My mum doesn't really understand what I do either.*
 
@@ -161,7 +161,7 @@ You have no way of ever knowing which is which, and the arithmetic does not care
 
 **${M(S.company.valuation)}.**
 
-You do not hear the rest of the sentence. You are thinking about a specific evening, ${Math.round(S.time.day)} days ago, when you sat with a spreadsheet and worked out that if you ate the cheap noodles you could last eleven more weeks, and you remember being *calm* about it, and you remember thinking that the calm was probably a bad sign.
+You do not hear the rest of the sentence. You are thinking about a specific evening, ${Math.round(S.time.day)} days ago, when you sat with a spreadsheet and worked out that if you ate the cheap noodles you could last seven more weeks, and you remember being *calm* about it, and you remember thinking that the calm was probably a bad sign.
 
 The call continues. Somebody asks you a question. You answer it correctly. Nobody notices anything.`,
   choices: [
@@ -170,8 +170,13 @@ The call continues. Somebody asks you a question. You answer it correctly. Nobod
         return 'Lawyers, a real CFO-shaped person, an actual board pack. It is the least interesting week of the decade and it is the reason nothing detonates in Act V.'; } },
     { label: 'Send everyone who was here at the start something.', sub: 'Money, and a note you write yourself.', tone: 'good',
       effect: (S, fx) => { fx.cash(-Math.min(S.company.cash * 0.03, 9e6)); fx.rep(46); fx.focus(24);
-        for (const c of ['sam','kai','priya','aria','mom']) fx.relate(c, { affinity: 6 });
-        return 'The notes take you two days because you insist on writing them by hand. Sam replies with a photo of the original eleven-item bug list, which Sam apparently kept, printed, in a drawer, for years.'; } },
+        // Only the people who were actually there. A note to somebody the
+        // founder has never spoken to is not a note, it is an introduction.
+        const there = ['sam', 'kai', 'priya', 'aria', 'mom'].filter((c) => S.narrative.relationships[c]?.met);
+        for (const c of there) fx.relate(c, { affinity: 6 });
+        return there.includes('sam')
+          ? 'The notes take you two days because you insist on writing them by hand. Sam replies with a photo of the original eleven-item bug list, which Sam apparently kept, printed, in a drawer, for years.'
+          : 'The notes take you two days because you insist on writing them by hand. The list is shorter than you expected it to be, and you sit with that for a while before you start.'; } },
     { label: 'Go back to that spreadsheet and look at it.', sub: 'It is still in the folder. Open it.', tone: 'neutral',
       effect: (S, fx) => { fx.insight(70); fx.focus(-8);
         return 'The file is called `runway_ACTUAL_v3.xlsx`. The last edit is timestamped 1:47am. You look at it for a long time and you do not feel triumphant, you feel protective, which surprises you.'; } },
@@ -216,7 +221,7 @@ The write-up is four paragraphs. It is clearer than the last four internal docum
 It is signed with a run ID.`,
   choices: [
     { label: 'Publish it. Author credit as written.', sub: 'The run ID goes on the paper.', tone: 'risky',
-      effect: (S, fx) => { fx.rep(50); fx.research(60); fx.heat(0.05); fx.align(0.03);
+      effect: (S, fx) => { fx.rep(50); fx.research(60); fx.align(0.03);
         return 'The argument about the author line takes longer than the peer review. It goes out with the run ID on it. Two journals refuse to index it and the third one that accepts it becomes, for a while, the interesting journal.'; } },
     { label: 'Take it in-house. Ship the capability.', sub: '+Research, +Capability. Quietly.', tone: 'neutral',
       effect: (S, fx) => { fx.research(120); fx.code(180); fx.align(-0.02);
@@ -238,7 +243,7 @@ They do not name you. They have changed the shape of a national statistic to acc
 Somebody in that office had to make that call. You will never know who.`,
   choices: [
     { label: 'Find out who wrote the footnote. Write to them.', sub: 'A statistician deserves a letter.', tone: 'good',
-      effect: (S, fx) => { fx.rep(20); fx.insight(50); fx.heat(-0.03);
+      effect: (S, fx) => { fx.rep(20); fx.insight(50);
         return 'She is 34, has worked there eleven years, and replies in four hours with three questions so precise that answering them properly takes your team a fortnight. You hire her. She says no. You keep asking. She keeps saying no and keeps answering the questions.'; } },
     { label: 'Send it to the board with no comment.', sub: '+Reputation. Let the footnote speak.', tone: 'neutral',
       effect: (S, fx) => { fx.rep(36); fx.influence(6);

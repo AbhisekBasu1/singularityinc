@@ -2,6 +2,7 @@
 // DIRECTIVES — one standing order at a time. The bonus ramps the longer you
 // hold it, so commitment is rewarded and thrashing is not.
 // ─────────────────────────────────────────────────────────────────────────────
+import { ORDERS } from './balance.js';
 
 export const RAMP_DAYS = 30;      // days to reach full effect
 export const MIN_EFFECT = 0.35;   // fraction of the bonus you get on day one
@@ -65,8 +66,86 @@ export const DIRECTIVES = [
 
 export const DIRECTIVE_MAP = Object.fromEntries(DIRECTIVES.map((d) => [d.id, d]));
 
-export function directiveStrength(S) {
-  if (!S.company.directive || S.company.directive === 'none') return 0;
-  const held = Math.max(0, S.time.day - (S.company.directiveSince || 0));
+// ── §A23a. The stack ────────────────────────────────────────────────────────
+// `autonomous_corporation` is the company running itself, and the verb it buys
+// is more than one policy at a time. Three rules hold it together:
+//
+//   **Slot zero is still `S.company.directive`.** Everything written against a
+//   single standing order — The Long View, the race's Ascend push, the card
+//   that asks why you have held one thing for a hundred and twenty days, the
+//   context menu — keeps working untouched, and The Long View counts the first
+//   slot because the first slot is the one the founder has always had.
+//
+//   **Each slot ramps on its own `since`.** Adding a third order does not
+//   reset the first; commitment is still the mechanic.
+//
+//   **The slots share a budget.** Three orders are three weaker orders, never
+//   three full ones. Below `ORDERS.BUDGET` nothing is scaled at all, which is
+//   why a single order behaves exactly as it did before this existed.
+//
+// All pure. `systems/modifiers.js` reads `orderStrengths`; nothing here writes.
+
+export function maxOrders(S) {
+  return S?.research?.done?.[ORDERS.REQ] ? ORDERS.MAX_SLOTS : 1;
+}
+
+// Every slot the founder is actually running, slot zero first. A slot holding
+// `none`, an unknown id, or a duplicate of an earlier slot is not an order.
+export function activeOrders(S) {
+  const out = [];
+  const seen = new Set();
+  const push = (id, since, slot) => {
+    if (!id || id === 'none' || !DIRECTIVE_MAP[id] || seen.has(id)) return;
+    seen.add(id);
+    out.push({ slot, id, since: since || 0, dir: DIRECTIVE_MAP[id] });
+  };
+  push(S?.company?.directive, S?.company?.directiveSince, 0);
+  const extra = S?.company?.orders;
+  if (Array.isArray(extra)) {
+    const cap = maxOrders(S);
+    for (let i = 0; i < extra.length && i + 1 < cap; i++) push(extra[i]?.id, extra[i]?.since, i + 1);
+  }
+  return out;
+}
+
+function rampOf(S, since) {
+  const held = Math.max(0, (S?.time?.day || 0) - (since || 0));
   return MIN_EFFECT + (1 - MIN_EFFECT) * Math.min(1, held / RAMP_DAYS);
+}
+
+// The strength each active order is actually applied at, after the shared
+// budget. Read by `computeMods` and printed by the Desk, so both agree.
+export function orderStrengths(S) {
+  const rows = activeOrders(S).map((o) => ({ ...o, raw: rampOf(S, o.since) }));
+  const total = rows.reduce((a, r) => a + r.raw, 0);
+  const scale = total > ORDERS.BUDGET ? ORDERS.BUDGET / total : 1;
+  for (const r of rows) r.k = r.raw * scale;
+  return rows;
+}
+
+// Slot zero's strength, budget included. The signature and the meaning are
+// unchanged for every caller that predates the stack.
+export function directiveStrength(S) {
+  const first = orderStrengths(S).find((r) => r.slot === 0);
+  return first ? first.k : 0;
+}
+
+// The founder's hand. Slot zero is written by `main.js` the way it always was;
+// this is for the slots the research node opened. Pure of side effects beyond
+// the write — the caller marks the modifier cache dirty.
+export function setOrder(S, slot, id) {
+  const n = Math.floor(slot);
+  if (!(n >= 1) || n >= maxOrders(S)) return { ok: false, reason: 'no-slot' };
+  const d = DIRECTIVE_MAP[id];
+  if (id !== 'none' && (!d || (d.act && S.company.act < d.act))) return { ok: false, reason: 'locked' };
+  S.company.orders ??= [];
+  while (S.company.orders.length < n) S.company.orders.push(null);
+  const at = n - 1;
+  if (id === 'none') { S.company.orders[at] = null; return { ok: true, id: 'none' }; }
+  // The same order twice is one order with a wasted slot; refuse it rather
+  // than silently dropping it in `activeOrders` and leaving a lit button.
+  if (S.company.directive === id) return { ok: false, reason: 'duplicate' };
+  if (S.company.orders.some((o, i) => i !== at && o?.id === id)) return { ok: false, reason: 'duplicate' };
+  S.company.orders[at] = { id, since: S.time.day };
+  return { ok: true, id };
 }

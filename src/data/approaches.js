@@ -91,8 +91,15 @@ export const KIND_TEXT = {
 
 // Skill-shifted probability: high relevant skill moves mass from the bad bands
 // into the good ones without changing the shape of the approach.
-export function shiftedBands(approach, skill) {
-  const k = Math.min(0.55, Math.max(0, (skill - 1)) * 0.045);
+//
+// §A19: `shift` is added to the skill before the move is computed, and it is
+// how sleep reaches the prompt. `sleepShift(S)` in `systems/life.js` is the
+// only caller that passes a non-zero one, and it is negative — a tired founder
+// prompts like somebody three levels less practised. Kept as a number rather
+// than as state so this file stays data and the Desk can print the shifted
+// distribution the founder is actually rolling against.
+export function shiftedBands(approach, skill, shift = 0) {
+  const k = Math.min(0.55, Math.max(0, (skill + shift - 1)) * 0.045);
   const out = approach.bands.map((b) => ({ ...b }));
   let moved = 0;
   for (const b of out) {

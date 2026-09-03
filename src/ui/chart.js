@@ -114,3 +114,24 @@ export function runChart(S) {
     <div class="ch-foot">logarithmic &middot; each pin is a decision you made &middot; hover for what it was</div>
   </div>`;
 }
+
+// ── The shelf's picture ─────────────────────────────────────────────────────
+// A finished timeline's valuation curve, small enough to sit in a row. The arc
+// rides with the book on the shelf (`prestige()` samples it down), so an old
+// run has a shape as well as a text. No axes, no labels, no tooltip: it is a
+// glyph for "this is what that run looked like", and at this size anything
+// else is noise. Returns nothing when there is not enough history to draw.
+export function miniArc(arc, { w = 132, h = 30, color = 'var(--ink-3)' } = {}) {
+  const pts = (arc || []).filter((p) => p && p.d != null);
+  if (pts.length < 3) return '';
+  const dMin = pts[0].d, dMax = Math.max(pts[pts.length - 1].d, dMin + 1);
+  let vMax = 1;
+  for (const p of pts) vMax = Math.max(vMax, p.v || 0);
+  const top = Math.max(1, lg(vMax));
+  const x = (d) => ((d - dMin) / (dMax - dMin)) * (w - 2) + 1;
+  const y = (v) => h - 1 - (lg(v) / top) * (h - 2);
+  const line = pts.map((p) => `${x(p.d).toFixed(1)},${y(p.v || 0).toFixed(1)}`).join(' ');
+  return `<svg class="mini-arc" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true"
+    style="--mc:${color}"><polyline points="${line}" fill="none" stroke="var(--mc)"
+    stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round" opacity=".85"/></svg>`;
+}

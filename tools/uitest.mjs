@@ -118,6 +118,46 @@ for (const e of EVENTS) {
 }
 console.log(`  ${EVENTS.length - evFails}/${EVENTS.length} event cards render`);
 
+// Render every card against every category. §E22 put the player's first
+// decision back into the deck: `cw(S, key)` in src/data/catwords.js reads the
+// active product's row, and `src/data/events16.js` is gated on it. One
+// devtools state proves nothing about the other seven — a missing key prints
+// `undefined` into a card body, and a card only a fintech run can draw was
+// never rendered at all. So: swap the category on every product, render every
+// body, label and sub, and look for the leaks `content sanity` looks for.
+console.log('\n── event deck × category ──');
+{
+  const { CATEGORIES } = await import('../src/data/products.js');
+  const was = s.products.map((p) => p.category);
+  let catFails = 0, rendered = 0;
+  for (const c of CATEGORIES) {
+    s.products.forEach((p) => { p.category = c.id; });
+    for (const e of EVENTS) {
+      const bits = [];
+      try {
+        bits.push(typeof e.body === 'function' ? e.body(s) : e.body);
+        bits.push(typeof e.title === 'function' ? e.title(s) : e.title);
+        for (const ch of e.choices || []) {
+          bits.push(typeof ch.label === 'function' ? ch.label(s) : ch.label);
+          bits.push(typeof ch.sub === 'function' ? ch.sub(s) : ch.sub);
+        }
+        rendered++;
+      } catch (err) { catFails++; console.log(`  ✗ ${c.id}/${e.id}: ${err.message}`); continue; }
+      // Fenced blocks and code spans are deliberate formatting, and one card
+      // prints the word `undefined` inside a stack trace on purpose. Strip them
+      // the way `tools/copylint.mjs` does, replacing with a token rather than a
+      // space so stripping cannot manufacture a gap.
+      const text = bits.filter((x) => typeof x === 'string').join(' ')
+        .replace(/```[\s\S]*?```/g, 'CODEBLOCK').replace(/`[^`]*`/g, 'CODE');
+      const leak = /undefined|\bNaN\b|\[object Object\]/.exec(text);
+      if (leak) { catFails++; console.log(`  ✗ ${c.id}/${e.id}: leaked ${leak[0]}\n     …${text.slice(Math.max(0, leak.index - 80), leak.index + 50).replace(/\s+/g, ' ')}…`); }
+    }
+  }
+  s.products.forEach((p, i) => { p.category = was[i]; });
+  evFails += catFails;
+  console.log(`  ${rendered} card renders across ${CATEGORIES.length} categories · ${catFails} problems`);
+}
+
 // Exercise every choice effect on a scratch state to catch runtime errors
 console.log('\n── event effect check ──');
 let effFails = 0, effRun = 0;

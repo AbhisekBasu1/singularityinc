@@ -277,6 +277,292 @@ html.reduced-motion #screen-frame::after { animation: none; }
 .act-name { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.03em; text-transform: uppercase; }
 .act-goal { font-size: 10px; }
 
+/* ── §I5. Per-act chrome ──────────────────────────────────────────────────
+   One token on `#app`, spent on edges and marks and never on a surface. Act IV
+   must not be Act I with a different photograph, and the honest way to say that
+   is the colour the frame lights rather than a wash over the panels.
+
+   `--act` is declared on `#app.act-N` and inherited, so every `var(--act)`
+   below resolves against the housing rather than against `:root` — the
+   substitution rule that broke `--ch` does not bite here, because nothing
+   declares a custom property *containing* `var(--act)` on an ancestor of the
+   element that uses it.
+
+   A fallback is given at every site: a save loaded before the class lands, and
+   the intro's own screens, must never render an undefined token. */
+#app { --act: var(--green); }
+#app.act-1 { --act: #00e5a0; }
+#app.act-2 { --act: #4dd0e1; }
+#app.act-3 { --act: #f5a623; }
+#app.act-4 { --act: #8b5cf6; }
+#app.act-5 { --act: #e8ecf3; }
+
+/* The frame's corner brackets and the boot sweep take the act's colour; the
+   scanlines stay neutral, because a tinted scanline is a wash. */
+#app.act-2 ~ #screen-frame::before,
+#app.act-3 ~ #screen-frame::before,
+#app.act-4 ~ #screen-frame::before,
+#app.act-5 ~ #screen-frame::before { opacity: 0.85; }
+
+.sl-view { color: var(--act, var(--green)); }
+.sl-ok { color: color-mix(in srgb, var(--act, var(--green)) 46%, transparent); }
+.nav-item.on {
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--act, var(--green)) 14%, transparent),
+    color-mix(in srgb, var(--act, var(--green)) 2%, transparent));
+  border-color: color-mix(in srgb, var(--act, var(--green)) 30%, transparent);
+  box-shadow: inset 0 0 20px -10px var(--act, var(--green));
+}
+.nav-item.on::before { background: var(--act, var(--green)); box-shadow: 0 0 12px var(--act, var(--green)); }
+.nav-item.on .nav-idx { color: var(--act, var(--green)); }
+.act-hero-kicker { color: var(--act, var(--green)); }
+.pill.act-word {
+  color: var(--act, var(--green));
+  border-color: color-mix(in srgb, var(--act, var(--green)) 40%, transparent);
+  font-size: 8.5px; letter-spacing: 0.16em;
+}
+
+/* The boot roll. The status strip carries the modules coming up while the
+   machine comes up, one after another, and the strip goes back to the nominal
+   line the moment `endBoot` runs. */
+.sl-boot { display: flex; align-items: center; gap: 10px; overflow: hidden; }
+.sl-boot-m {
+  color: var(--act, var(--green)); opacity: 0.7;
+  animation: bootMod .34s cubic-bezier(.16,1,.3,1) both;
+  animation-delay: calc(var(--i, 0) * 90ms + 120ms);
+}
+.sl-boot-m::before { content: '·'; margin-right: 8px; color: var(--ink-4); }
+.sl-boot-m:first-child::before { content: none; margin-right: 0; }
+@keyframes bootMod { from { opacity: 0; transform: translateY(3px); } to { opacity: .7; transform: none; } }
+html.reduced-motion .sl-boot-m { animation: none; opacity: .7; }
+
+/* ── §I10. The month, as dots ─────────────────────────────────────────────
+   Thirty cells under the topbar. Today is lit, a day that asked you something
+   is marked, a Sunday is a shade apart, and what is still ahead is hollow. It
+   is a strip of the run's own calendar, not a widget: no border, no plate, one
+   hairline under the bar it hangs from. */
+.daystrip {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+  padding: 5px 16px; min-height: 22px;
+  border-bottom: 1px solid var(--edge);
+  background: rgba(255,255,255,0.012);
+}
+.ds-k { font-size: 8px; letter-spacing: 0.2em; color: var(--ink-5); flex: 0 0 auto; }
+.ds-n { margin-left: auto; font-size: 8px; letter-spacing: 0.12em; color: var(--ink-5); flex: 0 0 auto; }
+.ds-dots { display: flex; gap: 3px; align-items: center; flex: 1 1 auto; min-width: 0; overflow: hidden; }
+.dd {
+  width: 5px; height: 5px; flex: 0 0 5px;
+  background: rgba(255,255,255,0.10);
+  transition: background .15s, transform .15s;
+}
+.dd.sun { background: rgba(255,255,255,0.05); }
+.dd.mark { background: var(--ink-3); }
+.dd.ahead { background: transparent; box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12); }
+.dd.due { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--amber) 55%, transparent); }
+.dd.now {
+  background: var(--act, var(--green)); height: 9px; flex-basis: 5px;
+  box-shadow: 0 0 8px color-mix(in srgb, var(--act, var(--green)) 60%, transparent);
+}
+.dd:hover { background: var(--ink-2); transform: scaleY(1.6); }
+@media (max-width: 900px) { .daystrip { display: none; } }
+
+/* The topbar sheds the way the menu bar does: the two controls that have a key
+   and no count go first, then the post's own door. Nothing becomes
+   unreachable — `M`, `C` and `F` still work, and the Manual lists all three —
+   and `tools/shot.mjs` is the thing that caught the time-block spilling past
+   420px once these were added to it. */
+@media (max-width: 1120px) {
+  .time-block [data-act="open-contacts"], .time-block #tb-focus { display: none; }
+}
+@media (max-width: 760px) { .time-block #tb-post { display: none; } }
+
+/* ── §I10. Focus mode ─────────────────────────────────────────────────────
+   The nav to icons and the Wire away, on one class and one key. It is the
+   console's version of what the workstation gets by closing three windows, and
+   it re-asserts `--nav-w` rather than restyling the nav — the responsive rules
+   at the end of `main.css` already collapse the rail at 1100px and this is the
+   same collapse, asked for on purpose. */
+#app.focus-mode { --nav-w: 60px; }
+#app.focus-mode .nav-item > span:not(.nav-idx):not(.nav-icon) { display: none; }
+#app.focus-mode .nav-item { justify-content: center; padding: 9px 0; }
+#app.focus-mode .nav-idx { display: none; }
+#app.focus-mode .nav-section { text-align: center; font-size: 7px; letter-spacing: 0.1em; }
+#app.focus-mode .act-card { display: none; }
+#app.focus-mode .shell { grid-template-columns: var(--nav-w) minmax(0, 1fr); }
+#app.focus-mode .feed-rail { display: none; }
+#app.focus-mode .daystrip { display: none; }
+#app.focus-mode .tb-said { display: none; }
+/* `.brand` is sized to `--nav-w` so the mark sits over the rail. In focus mode
+   the rail is 60px and the company's name has nowhere to go, so the brand keeps
+   its own width and only the mark lines up with the icons. */
+#app.focus-mode .brand { width: auto; flex: 0 0 auto; padding-right: 14px; }
+#app.focus-mode .brand-text { display: none; }
+#app.focus-mode .brand-day { display: none; }
+
+/* Mail and Contacts, as sheets. The workstation's own renders — `os/mail.js`
+   and `os/contacts.js` are pure string functions and neither imports the window
+   manager — inside a modal, so both housings show the same markup and answer
+   the same delegated actions.
+
+   `styles/os.css` is not loaded on `/` and every rule in it is scoped to
+   `html[data-shell="os"]`, so the two apps arrive here with no styling at all.
+   This is the console's own dressing for them: the same two-pane shape, in the
+   console's language, and nothing that duplicates a rule the workstation has —
+   a copy of `os.css` under a different scope would be two stylesheets to keep
+   in step, which is the failure this is written to avoid. It styles structure
+   only, and leans on `.btn`, `.thread-opt` and `.mono` for everything else. */
+.app-sheet { display: block; height: min(62vh, 520px); min-height: 300px; overflow: hidden; }
+.app-sheet > .ml, .app-sheet > .ct {
+  display: grid; grid-template-columns: 252px minmax(0, 1fr);
+  height: 100%; min-height: 0;
+}
+.app-sheet > .ml-solo, .app-sheet > .ct-solo { grid-template-columns: minmax(0, 1fr); }
+.app-sheet .ml-list, .app-sheet .ct-list {
+  display: flex; flex-direction: column; min-height: 0;
+  border-right: 1px solid var(--edge);
+}
+.app-sheet .ml-read, .app-sheet .ct-read { display: flex; flex-direction: column; min-height: 0; }
+.app-sheet .ml-head, .app-sheet .ct-head {
+  display: flex; align-items: baseline; gap: 8px; padding: 10px 12px 7px; flex: 0 0 auto;
+}
+.app-sheet .ml-k, .app-sheet .ct-k {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.app-sheet .ml-count, .app-sheet .ct-count {
+  margin-left: auto; font-family: var(--mono); font-size: 8px;
+  letter-spacing: 0.12em; color: var(--ink-5);
+}
+.app-sheet .ml-rule, .app-sheet .ct-rule { height: 1px; background: var(--edge); flex: 0 0 auto; }
+.app-sheet .ml-rows, .app-sheet .ct-rows {
+  display: flex; flex-direction: column; overflow-y: auto; min-height: 0; padding-bottom: 10px;
+}
+.app-sheet .ml-row, .app-sheet .ct-row {
+  display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; align-items: center;
+  gap: 8px; padding: 7px 12px; text-align: left; background: transparent;
+  border: 0; border-bottom: 1px solid rgba(255,255,255,0.03); color: inherit;
+}
+.app-sheet .ml-row:hover, .app-sheet .ct-row:hover { background: rgba(255,255,255,0.03); }
+.app-sheet .ml-row.on, .app-sheet .ct-row.on { background: rgba(255,255,255,0.055); }
+.app-sheet .ml-row.quiet { opacity: 0.6; }
+.app-sheet .ml-face, .app-sheet .ct-face {
+  width: 24px; height: 24px; display: grid; place-items: center;
+  background-size: cover; background-position: center;
+  background-color: rgba(255,255,255,0.05); font-size: 10px; color: var(--ink-3);
+}
+.app-sheet .ml-who, .app-sheet .ct-who { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.app-sheet .ml-from, .app-sheet .ct-name {
+  font-size: 11px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.app-sheet .ml-row.unread .ml-from { color: var(--ink); font-weight: 600; }
+.app-sheet .ml-subject, .app-sheet .ct-role {
+  font-size: 10px; color: var(--ink-4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.app-sheet .ml-side { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.app-sheet .ml-day, .app-sheet .ct-rec-d {
+  font-family: var(--mono); font-size: 8px; color: var(--ink-5); letter-spacing: 0.06em;
+}
+.app-sheet .ml-asks {
+  font-family: var(--mono); font-size: 7.5px; letter-spacing: 0.12em; color: var(--amber); white-space: nowrap;
+}
+.app-sheet .ml-filed { font-family: var(--mono); font-size: 7.5px; letter-spacing: 0.12em; color: var(--ink-5); }
+.app-sheet .ml-doc, .app-sheet .ct-doc { overflow-y: auto; min-height: 0; padding: 12px 14px 16px; }
+.app-sheet .ml-letterhead, .app-sheet .ct-plate { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.app-sheet .ml-lh-from, .app-sheet .ct-big { font-size: 13px; font-weight: 620; }
+.app-sheet .ml-lh-role { font-size: 10.5px; color: var(--ink-4); }
+.app-sheet .ml-subject-big { font-size: 14px; font-weight: 620; margin-bottom: 8px; }
+.app-sheet .ml-body, .app-sheet .ct-prose {
+  font-size: 12px; line-height: 1.65; color: var(--ink-2); white-space: pre-wrap;
+}
+.app-sheet .ml-replies, .app-sheet .ml-answered {
+  display: flex; flex-direction: column; gap: 5px; align-items: flex-start;
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--edge);
+}
+.app-sheet .ml-replies-k, .app-sheet .ct-inline-k, .app-sheet .ct-recent-k {
+  font-family: var(--mono); font-size: 8px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--ink-5);
+}
+.app-sheet .ml-chosen { color: var(--cyan); font-size: 11px; }
+.app-sheet .ml-back, .app-sheet .ct-back {
+  width: 20px; height: 20px; padding: 0; border: 0; background: transparent;
+  color: var(--ink-4); font-size: 14px;
+}
+.app-sheet .ml-back:hover, .app-sheet .ct-back:hover { color: var(--ink); }
+.app-sheet .ml-empty, .app-sheet .ct-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 40px 20px; text-align: center;
+}
+.app-sheet .ml-empty-mark, .app-sheet .ct-empty-mark { font-size: 22px; color: var(--ink-5); }
+.app-sheet .ml-empty-k, .app-sheet .ct-empty-k {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.2em; color: var(--ink-4);
+}
+.app-sheet .ml-empty-line, .app-sheet .ct-empty-line {
+  font-size: 11px; color: var(--ink-4); max-width: 34ch; line-height: 1.5;
+}
+.app-sheet .ct-meta { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 10px 0; }
+.app-sheet .ct-mk { font-family: var(--mono); font-size: 8px; letter-spacing: 0.14em; color: var(--ink-5); }
+.app-sheet .ct-mv { font-size: 11px; color: var(--ink-2); }
+.app-sheet .ct-pips { display: inline-flex; gap: 2px; }
+.app-sheet .ct-pips > i { width: 4px; height: 4px; background: rgba(255,255,255,0.14); display: block; }
+.app-sheet .ct-side { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.app-sheet .ct-since {
+  font-family: var(--mono); font-size: 7.5px; letter-spacing: 0.1em; color: var(--ink-5); white-space: nowrap;
+}
+.app-sheet .ct-live { color: var(--green); font-size: 8px; margin-left: 4px; }
+.app-sheet .ct-warm {
+  font-family: var(--mono); font-size: 7.5px; letter-spacing: 0.12em; color: var(--ink-5); white-space: nowrap;
+}
+.app-sheet .ct-warm.warm { color: var(--green); }
+.app-sheet .ct-warm.cold { color: var(--ink-5); }
+/* The dossier's own plate and prose, so a person's file reads as a file. */
+.app-sheet .ct-plate { position: relative; min-height: 0; }
+.app-sheet .ct-plate-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.app-sheet .ct-arc, .app-sheet .ct-note {
+  font-size: 10.5px; color: var(--ink-4); line-height: 1.5; margin-top: 6px;
+}
+.app-sheet .ct-q { font-size: 11.5px; color: var(--ink-2); line-height: 1.6; font-style: italic; }
+.app-sheet .ct-call { margin-top: 12px; }
+.app-sheet .ct-line { display: flex; gap: 8px; font-size: 11px; color: var(--ink-3); }
+.app-sheet .ct-line-who { color: var(--ink-4); flex: 0 0 auto; }
+.app-sheet .ct-recent { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; }
+.app-sheet .ct-rec { display: flex; gap: 8px; align-items: baseline; font-size: 11px; color: var(--ink-3); }
+/* One pane at a time once the sheet is narrower than the split needs. The
+   render already says which pane the selection implies. */
+@media (max-width: 760px) {
+  .app-sheet > .ml, .app-sheet > .ct { grid-template-columns: minmax(0, 1fr); }
+  .app-sheet > .ml[data-pane="read"] .ml-list,
+  .app-sheet > .ct[data-pane="read"] .ct-list { display: none; }
+  .app-sheet > .ml[data-pane="list"] .ml-read,
+  .app-sheet > .ct[data-pane="list"] .ct-read { display: none; }
+}
+
+/* §I9. The notice slot. One line from somebody who works here, between the
+   brand and the numbers, for as long as it takes to read and then gone. It
+   shrinks before the numbers do and disappears entirely on a narrow screen —
+   a sentence is the one thing in the topbar that can be missed, and the
+   readouts beside it are the thing that must never be squeezed. */
+#tb-say { flex: 0 1 auto; min-width: 0; overflow: hidden; }
+.tb-said {
+  display: inline-flex; align-items: baseline; gap: 8px; min-width: 0; max-width: min(40ch, 24vw);
+  padding: 3px 9px; margin-right: 10px;
+  --ch: 6px; clip-path: var(--cut-br);
+  background: rgba(255,255,255,0.035);
+  opacity: 0; transform: translateY(-3px);
+  transition: opacity .3s ease, transform .3s cubic-bezier(.16,1,.3,1);
+}
+.tb-said.in { opacity: 1; transform: none; }
+.tb-said-who {
+  font-size: 8px; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--act, var(--green)); flex: 0 0 auto;
+}
+.tb-said-line {
+  font-size: 11px; color: var(--ink-3); min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+@media (max-width: 1240px) { .tb-said { max-width: 26ch; } }
+@media (max-width: 1000px) { #tb-say { display: none; } }
+html.reduced-motion .tb-said { transition: none; }
+
 /* ── Feed becomes a wire ─────────────────────────────────────────────────── */
 .feed-rail {
   background: linear-gradient(180deg, rgba(8,10,16,0.7), rgba(5,6,10,0.55));
@@ -498,7 +784,9 @@ html.reduced-motion #screen-frame::after { animation: none; }
 .sl-mid { flex: 1; display: flex; align-items: center; gap: 10px; justify-content: center; overflow: hidden; }
 .sl-seg { white-space: nowrap; }
 .sl-view { color: var(--green); }
+.sl-time { color: var(--ink-4); font-variant-numeric: tabular-nums; }
 .sl-paused { color: var(--amber); animation: pulse 2s infinite; }
+.sl-seeking { color: var(--cyan); animation: pulse 2s infinite; }
 .sl-ok { color: rgba(0,229,160,0.42); }
 .sl-alert { white-space: nowrap; padding: 1px 6px; border-radius: 1px; }
 .sl-alert.crit { color: var(--red); background: rgba(255,77,94,0.14); animation: pulse 1.8s infinite; }
@@ -756,6 +1044,9 @@ html.reduced-motion #screen-frame::after { animation: none; }
   grid-column: 2 / -1; font-family: var(--mono); font-size: 9.5px; color: var(--ink-5);
   letter-spacing: 0.04em;
 }
+/* §B11. Whose hand was on it. The roster has been a rack of numbers with Greek
+   names, and nothing the company shipped had anybody's name against it. */
+.ship-by { color: var(--ink-3); }
 
 /* ── The retrospective's numbers, as an instrument readout ────────────────── */
 .stat-tile {
@@ -1530,6 +1821,66 @@ html.reduced-motion .ending-plate { animation: none; opacity: 0.70; }
 .ending-title { filter: drop-shadow(0 2px 3px rgba(3,4,7,0.9)) drop-shadow(0 0 20px rgba(3,4,7,0.8)); }
 .ending-kicker { color: var(--ink-2); }
 
+/* ── The ending screen's later sections ───────────────────────────────────────
+   Everything below the prose is a readout, and the reskin's rules apply: mono
+   uppercase keys, square geometry, a rail or an index rather than a card, and
+   an accent that lights a bracket rather than washing a surface. */
+
+/* What each person says. A portrait, a name, and one line in their own voice.
+   The character's colour closes the frame on all four sides rather than
+   striping one edge: a left rail is the web's idiom for a category, and
+   thirteen of these stacked would read as a list of tags. */
+.verdict {
+  display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 12px; align-items: start;
+  padding: 10px 12px; background: rgba(255,255,255,0.014);
+  border: 1px solid color-mix(in srgb, var(--vc) 26%, var(--line));
+}
+.verdict-face { width: 40px; height: 40px; flex: 0 0 40px; }
+.verdict-glyph { font-size: 19px; width: 40px; text-align: center; display: block; line-height: 40px; }
+.verdict-body { min-width: 0; }
+.verdict-line { font-size: 12.5px; line-height: 1.62; color: var(--ink-2); margin-top: 5px; }
+
+/* The decision ledger: five tones, one row each, the bar in the tone's colour. */
+.ledger { display: flex; flex-direction: column; gap: 5px; }
+.ledger-row { display: grid; grid-template-columns: 66px minmax(0, 1fr) 34px; gap: 10px; align-items: center; }
+.ledger-k { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--lc); }
+.ledger-bar { height: 7px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); position: relative; }
+.ledger-bar i { position: absolute; inset: 0 auto 0 0; background: var(--lc); opacity: .72; }
+.ledger-n { font-size: 11px; color: var(--ink-3); text-align: right; }
+
+/* The road not taken: every other path, and how far this run walked it. */
+.road-row {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+  padding: 8px 10px; border: 1px solid var(--line); opacity: .62;
+}
+.road-row.open { opacity: 1; border-color: var(--line-2); }
+.road-icon { font-size: 14px; color: var(--ink-3); text-align: center; }
+.road-row.open .road-icon { color: var(--end-color); }
+.road-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.road-pips { display: flex; gap: 4px; }
+.road-pips i { width: 7px; height: 7px; border: 1px solid var(--line-2); display: block; }
+.road-pips i.on { background: var(--end-color); border-color: var(--end-color); }
+
+/* This run against the best of the ones before it. Three columns, one rule. */
+.cmp { display: flex; flex-direction: column; }
+.cmp-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 14px; align-items: baseline;
+  padding: 7px 0; border-bottom: 1px solid var(--line);
+}
+.cmp-row:last-child { border-bottom: 0; }
+.cmp-k { font-size: 12px; color: var(--ink-3); }
+.cmp-now { font-family: var(--mono); font-size: 13px; color: var(--ink); }
+.cmp-now.up { color: var(--green); }
+.cmp-now.down { color: var(--ink-3); }
+.cmp-then { font-family: var(--mono); font-size: 11px; color: var(--ink-4); text-align: right; min-width: 92px; }
+.cmp-then i { display: block; font-style: normal; font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-5); }
+
+/* The key back from the Record. The ending overlay steps aside rather than
+   closing, so this is the only thing on screen that belongs to it. */
+.end-return {
+  position: fixed; top: 14px; right: 14px; z-index: 200;
+}
+
 /* ── The path lock: the climax is a choice, and it says so first ──────────── */
 .path-lock {
   display: flex; align-items: baseline; gap: 11px; flex-wrap: wrap;
@@ -1566,6 +1917,113 @@ html.reduced-motion .ending-plate { animation: none; opacity: 0.70; }
   text-transform: uppercase; text-align: center; color: var(--ink-4);
   background: rgba(3,5,9,0.86); border-bottom: 1px solid var(--line); padding: 4px;
 }
+
+/* ── §F2 The Act V clock ───────────────────────────────────────────────────
+   Two readouts, and both of them are things that were always true and were
+   never shown: how long the world will wait, and what each path's own numbers
+   are doing. A closed frame, because a stripe down one side is the web's idiom
+   for a category and this is a panel on a machine. */
+.act5-clock {
+  display: grid; grid-template-columns: auto 1fr; align-items: baseline;
+  column-gap: 12px; row-gap: 3px; margin: 0 0 14px;
+  padding: 9px 12px; border: 1px solid var(--line);
+  background: rgba(255,255,255,0.015);
+}
+.act5-clock.soon { border-color: color-mix(in srgb, var(--amber) 44%, transparent); }
+.a5-k {
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--ink-5);
+}
+.a5-v { font-size: 12.5px; color: var(--ink-2); }
+.a5-v b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.act5-clock.soon .a5-v b { color: var(--amber); }
+.a5-note {
+  grid-column: 2; font-family: var(--mono); font-size: 9px;
+  letter-spacing: 0.08em; color: var(--ink-5);
+}
+.ec-drift {
+  margin-top: 7px; font-family: var(--mono); font-size: 9px;
+  letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-5);
+}
+.ec-drift.closing { color: var(--amber); }
+.ec-drift.opening { color: var(--cyan); }
+.ec-drift.shut { color: var(--red); }
+
+/* ── §A3 What a lab holds ──────────────────────────────────────────────────
+   Under each bar on the race panel: the people, the finished frontier work and
+   the money that buys the compute. A lead should have a reason in it. */
+.race-holds {
+  display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 5px;
+  font-size: 9.5px; letter-spacing: 0.06em;
+}
+.race-holds span::before { content: '·'; margin-right: 6px; color: var(--ink-6, var(--ink-5)); }
+.race-holds span:first-child::before { content: none; }
+
+/* ── §A10 Somebody else is in the bloc ─────────────────────────────────────
+   A closed amber frame on the region card, red once the bloc is exclusive and
+   the only way past them is to buy them out. */
+.region-rival {
+  display: flex; align-items: center; gap: 8px; margin-top: 9px;
+  padding: 5px 8px; border: 1px solid color-mix(in srgb, var(--amber) 34%, transparent);
+  background: color-mix(in srgb, var(--amber) 7%, transparent);
+}
+.region-rival.shut {
+  border-color: color-mix(in srgb, var(--red) 40%, transparent);
+  background: color-mix(in srgb, var(--red) 8%, transparent);
+}
+.rr-mark { color: var(--amber); font-size: 11px; line-height: 1; }
+.region-rival.shut .rr-mark { color: var(--red); }
+.rr-who { font-size: 11.5px; color: var(--ink-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rr-stage {
+  margin-left: auto; font-size: 8.5px; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--ink-5); white-space: nowrap;
+}
+.wm-cold { color: var(--red) !important; }
+.wm-rival {
+  fill: var(--amber); font-family: var(--mono); font-size: 15px;
+  text-anchor: middle; dominant-baseline: middle; opacity: 0.85;
+  pointer-events: none;
+}
+.wm-bloc.contested .wm-shape { stroke-dasharray: 7 3; }
+.wmk-sw.contested {
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; color: var(--amber); font-size: 10px; font-style: normal;
+}
+
+/* ── §A14 The season: what they are trying to do ───────────────────────────
+   A rival drawing from a pool with no objective is weather with a name on it.
+   This is the objective, the telegraph's worth of doubt while Intelligence is
+   not on it, and the record of the seasons that have finished. */
+.nem-season { margin-top: 14px; padding-top: 11px; border-top: 1px solid var(--line); }
+.nem-goal {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 7px 10px; border: 1px solid var(--line);
+  background: rgba(255,255,255,0.016);
+}
+.nem-goal.seen { border-color: color-mix(in srgb, var(--nc) 38%, transparent); }
+.ng-mark { color: var(--ink-5); font-size: 11px; line-height: 1.5; }
+.nem-goal.seen .ng-mark { color: var(--nc); }
+.ng-what { min-width: 0; flex: 1; }
+.ng-name { display: block; font-size: 12.5px; font-weight: 620; color: var(--ink-2); }
+.ng-sub { display: block; font-size: 11px; color: var(--ink-4); line-height: 1.45; margin-top: 2px; }
+.ng-days {
+  font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--ink-5); white-space: nowrap;
+}
+.nem-record { display: flex; flex-direction: column; margin-top: 8px; }
+.nr-row {
+  display: flex; align-items: baseline; gap: 9px;
+  font-size: 11px; padding: 3px 0; border-bottom: 1px solid var(--line);
+}
+.nr-row:last-child { border-bottom: none; }
+.nr-day { font-family: var(--mono); font-size: 9px; color: var(--ink-5); width: 42px; flex: 0 0 42px; }
+.nr-what { color: var(--ink-3); min-width: 0; }
+.nr-out {
+  margin-left: auto; font-family: var(--mono); font-size: 8.5px;
+  letter-spacing: 0.12em; text-transform: uppercase; white-space: nowrap;
+}
+.nr-row.won .nr-out { color: var(--red); }
+.nr-row.lost .nr-out { color: var(--green); }
 
 /* ── Counters: the half of the feud that is yours ─────────────────────────── */
 .nem-counters { margin-top: 14px; padding-top: 11px; border-top: 1px solid var(--line); }
@@ -1642,6 +2100,23 @@ html.reduced-motion .ending-plate { animation: none; opacity: 0.70; }
   -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 64%);
   mask-image: linear-gradient(90deg, transparent 0%, #000 64%);
   opacity: 0.78; z-index: 0; pointer-events: none;
+}
+/* More than one of them in the scene. The primary keeps the plate; the rest of
+   the room is a rail of square chips with the person's accent closed on all
+   four sides, and a mono count, because a strip of faces with no label reads
+   as decoration rather than as a guest list. */
+.event-cast { display: flex; align-items: center; gap: 5px; margin-top: 7px; }
+.ec-face {
+  width: 26px; height: 26px; flex: 0 0 auto;
+  border: 1px solid var(--cc, var(--line-2));
+  background-size: cover; background-position: center top;
+  background-color: color-mix(in srgb, var(--cc, var(--line-2)) 14%, transparent);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.ec-glyph { color: var(--cc, var(--ink-3)); font-size: 13px; line-height: 1; }
+.ec-n {
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--ink-3); margin-left: 3px;
 }
 .modal.has-portrait .modal-top > div:not(.event-plate) { position: relative; z-index: 1; }
 .modal.has-portrait .modal-top::after {
@@ -1784,6 +2259,9 @@ html.reduced-motion .wc-status.live .wc-dot { animation: none; }
 }
 .wc-tally .refused { color: var(--amber); }
 .wc-tally .human { color: var(--green); }
+/* The house style, counted. Dimmer than a refusal because it never stopped
+   anything — it is a note about how the world writes, not about what it did. */
+.wc-tally .voice { color: var(--ink-3); }
 
 /* ── The call log ─────────────────────────────────────────────────────────
    One row per call: index, outcome mark, name, how much of the result budget
@@ -1888,6 +2366,18 @@ html.reduced-motion .wc-status.live .wc-dot { animation: none; }
   transition: border-color .16s, box-shadow .16s, background .16s;
 }
 .own-words-textarea::placeholder { color: var(--ink-5); }
+/* The paste sheet — a save string, a kept deck — is the same field in the
+   machine's own colour rather than the world's violet. */
+.paste-field {
+  display: block; width: 100%; min-height: 96px; max-height: 240px; resize: vertical;
+  padding: 9px 11px; border: 1px solid var(--edge); border-radius: 1px; outline: none;
+  background: rgba(2,4,9,0.72); color: var(--ink); font-family: var(--mono); font-size: 11.5px;
+  line-height: 1.5; caret-color: var(--green); word-break: break-all;
+  transition: border-color .16s, box-shadow .16s;
+}
+.paste-field::placeholder { color: var(--ink-5); }
+.paste-field:focus { border-color: rgba(0,229,160,0.65); box-shadow: 0 0 0 2px rgba(0,229,160,0.10); }
+.paste-err { color: var(--red); font-family: var(--mono); letter-spacing: 0.06em; line-height: 1.5; }
 .own-words-textarea:focus {
   border-color: rgba(139,92,246,0.8); background: rgba(4,6,13,0.92);
   box-shadow: 0 0 0 2px rgba(139,92,246,0.12), 0 0 24px -10px rgba(139,92,246,0.9);
@@ -2051,6 +2541,25 @@ html.reduced-motion .tb-world.live .tbw-dot { animation: none; }
   border-left: 2px solid rgba(139,92,246,0.5); padding: 2px 0 2px 8px; margin-bottom: 6px;
 }
 
+/* ── The resident world ───────────────────────────────────────────────────
+   The same consumption driven by the browser's own model rather than by a
+   list. Solid where the script is dashed, because this one is not a script;
+   everything it says is a mono readout of what it is doing right now. */
+.wc-demo-btn.local { border-style: solid; }
+.wc-local { margin-top: 8px; }
+.wc-local-say, .wc-local-ref, .wc-local-n {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+}
+/* A closed frame rather than the script's left bar, on purpose: an accent
+   lands on all four sides here (CLAUDE.md), and a readout that says what a
+   model is doing right now is not the same thing as a script reading a line. */
+.wc-local-say {
+  color: var(--violet); padding: 3px 8px; margin-bottom: 4px;
+  border: 1px solid rgba(139,92,246,0.4); background: rgba(139,92,246,0.06);
+}
+.wc-local-ref { color: var(--amber); margin-bottom: 4px; letter-spacing: 0.08em; }
+.wc-local-n { color: var(--ink-4); margin-bottom: 2px; font-variant-numeric: tabular-nums; }
+
 /* ── Tools this page did not publish ──────────────────────────────────────
    Aperture Systems registers these on its own origin and shares them with
    this one through `exposedTo`; they arrive here via getTools({fromOrigins})
@@ -2078,3 +2587,322 @@ html.reduced-motion .tb-world.live .tbw-dot { animation: none; }
 
 /* A feed item the game itself flagged. */
 .feed-item.untrusted { box-shadow: inset 2px 0 0 var(--red); }
+
+/* ═══ THE PHONE ═══════════════════════════════════════════════════════════
+   A call is a card from a person that answers back, so it borrows the card's
+   plate: the portrait across the header, the decision down the right. The
+   transcript takes the choices' column; what you can say next takes their
+   place at the foot of it. */
+.call-kind { display: inline-flex; align-items: center; gap: 7px; }
+.call-dot {
+  display: inline-block; width: 7px; height: 7px; border-radius: 0;
+  background: var(--green); box-shadow: 0 0 8px var(--green);
+  animation: callPulse 1.6s ease-in-out infinite;
+}
+.call-dot.off { background: var(--ink-4); box-shadow: none; animation: none; }
+@keyframes callPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+.call-bio { font-size: 13.5px; line-height: 1.6; color: var(--ink-2); padding: 2px 0 12px; }
+.call-dossier {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px 14px;
+  align-items: baseline; padding: 4px 0 8px; border-top: 1px solid rgba(255,255,255,0.07);
+  padding-top: 12px;
+}
+.call-k {
+  font-family: var(--mono); font-size: 8px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--ink-4); white-space: nowrap; padding-top: 3px;
+}
+.call-v { font-size: 12.5px; line-height: 1.55; color: var(--ink-2); }
+.call-v .quote { color: var(--ink-3); font-style: italic; }
+
+.call-choices { gap: 10px; }
+.call-transcript {
+  display: flex; flex-direction: column; gap: 9px;
+  padding: 2px 2px 8px; min-height: 0;
+}
+.call-line {
+  display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 10px;
+  align-items: baseline; font-size: 13px; line-height: 1.6; color: var(--ink-2);
+}
+.call-line .call-who {
+  font-family: var(--mono); font-size: 8px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--ink-4); padding-top: 4px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.call-line.them .call-who { color: var(--char-color, var(--cyan)); }
+.call-line.you { color: var(--ink); }
+.call-line.you .call-who { color: var(--ink-3); }
+.call-line.line { color: var(--ink-4); font-style: italic; }
+.call-line.bye { color: var(--ink-3); }
+.call-line .call-text.typing::after { content: '▍'; opacity: 0.7; }
+.call-deal {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  padding: 9px 12px; border: 1px solid rgba(255,255,255,0.10);
+  font-size: 11.5px; color: var(--ink-2);
+}
+.call-deal-k {
+  font-family: var(--mono); font-size: 8px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--amber);
+}
+.call-controls { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
+.call-hang { margin-top: 2px; }
+.call-note { padding: 4px 2px; }
+.call-form.waiting .own-words-quote { color: var(--ink); }
+.call-modal.ended .call-transcript { opacity: 0.86; }
+
+/* The phone key on a face, in the Story view. */
+.char-call { margin-left: auto; align-self: center; flex: 0 0 auto; }
+.char-call .btn { display: inline-flex; align-items: center; gap: 6px; }
+.char-call-note {
+  font-family: var(--mono); font-size: 7.5px; letter-spacing: 0.14em; color: var(--ink-4);
+}
+.char-call-note:empty { display: none; }
+
+/* ═══ LIFE ════════════════════════════════════════════════════════════════
+   The person. Two meters, and everyone who has heard from you lately on a
+   rail: the name in their own colour, seven pips of warmth, the days since,
+   and one word. */
+.ties { display: flex; flex-direction: column; gap: 5px; }
+.tie-row {
+  display: grid; grid-template-columns: 62px auto 40px minmax(0, 1fr); gap: 10px;
+  align-items: center; font-size: 11.5px; color: var(--ink-3);
+}
+.tie-name { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tie-pips { display: inline-flex; gap: 2px; }
+.tie-pips i { display: inline-block; width: 6px; height: 6px; background: rgba(255,255,255,0.08); }
+.tie-since { font-size: 8.5px; letter-spacing: 0.1em; color: var(--ink-4); text-align: right; font-variant-numeric: tabular-nums; }
+.tie-word { font-family: var(--mono); font-size: 8px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tie-row.warm .tie-word { color: var(--green); }
+.tie-row.cold .tie-word { color: var(--red); opacity: 0.85; }
+.os .ct-warm { font-family: var(--mono); font-size: 7px; letter-spacing: 0.14em; color: var(--ink-5); }
+.os .ct-warm.warm { color: var(--green); }
+.os .ct-warm.cold { color: var(--red); }
+
+/* ═══ KEPT CARDS ══════════════════════════════════════════════════════════ */
+.keep-key { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 8px; }
+.keep-glyph { color: var(--violet); }
+.keep-small { padding: 1px 7px; font-size: 10px; }
+.by-world-tag.kept-tag { color: var(--violet); border-color: color-mix(in srgb, var(--violet) 40%, transparent); }
+/* Violet is the world's hand on the deck. A board motion is an institution
+   voting, not an assistant writing, so it takes the amber every other
+   governing body in this game is drawn in. */
+.by-world-tag.board-tag { color: var(--amber); border-color: color-mix(in srgb, var(--amber) 40%, transparent); }
+.kept-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 7px 10px; border: 1px solid var(--line); border-left: 2px solid var(--kc, var(--ink-3)); }
+.kept-kind { font-family: var(--mono); font-size: 8px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--kc, var(--ink-3)); }
+.kept-title { font-size: 12.5px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kept-meta { font-size: 9px; color: var(--ink-4); white-space: nowrap; }
+.kept-x { padding: 0 6px; }
+.dossier-row { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.dossier-row:last-child { border-bottom: 0; }
+.dossier-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+
+/* ═══ THE CHRONICLE ═══════════════════════════════════════════════════════
+   Long-form prose. Bare typography — this is a book, not a panel — with the
+   act heads in mono and a hairline above each chapter. */
+.chronicle { margin-top: 18px; max-width: 68ch; font-size: 14px; line-height: 1.72; color: var(--ink-2); }
+.chronicle.in-dialog { margin-top: 0; max-height: 64vh; overflow: auto; padding-right: 8px; }
+.chron-title { font-size: 20px; color: var(--ink); letter-spacing: 0.01em; }
+.chron-sub { font-family: var(--mono); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-4); margin: 6px 0 18px; }
+.chron-chapter { padding-top: 14px; margin-top: 14px; border-top: 1px solid var(--line); }
+.chron-h { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--amber); margin-bottom: 10px; }
+.chron-span { color: var(--ink-5); margin-left: 8px; }
+.chronicle p { margin: 0 0 11px; }
+.chron-lead { color: var(--ink-4); font-style: italic; margin-bottom: 4px !important; }
+.chron-q { margin: 0 0 12px; padding: 0 0 0 12px; border-left: 1px solid var(--line-2); color: var(--ink-3); font-style: italic; }
+.chron-nums { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; }
+.chron-k { font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink-5); padding-top: 3px; }
+.chron-v { font-family: var(--mono); font-size: 12px; color: var(--ink-2); }
+.chronicle-text { white-space: pre-wrap; font-family: var(--mono); font-size: 11.5px; line-height: 1.6; color: var(--ink-2); max-height: 64vh; overflow: auto; margin: 0; }
+.shelf-row { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.shelf-row:last-child { border-bottom: 0; }
+.shelf-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+/* The world's own last word on a timeline that had an assistant at the table.
+   Indented under its row, in the game's reading size, with a mono index in
+   front of it — a rail, not a card. */
+.shelf-coda {
+  margin: 2px 0 8px 36px; padding-left: 10px; border-left: 2px solid var(--line);
+  font-size: 11.5px; line-height: 1.65; color: var(--ink-3);
+}
+.shelf-coda-k { display: block; font-size: 8.5px; letter-spacing: .12em; color: var(--ink-5); margin-bottom: 3px; }
+/* The campaign line: one generated sentence about what that timeline was,
+   under the three most recent rows. Same indent and rail as the coda above,
+   dimmer, because it is the game's summary rather than anybody's words. */
+.shelf-frame {
+  margin: 1px 0 7px 36px; padding-left: 10px; border-left: 2px solid var(--line);
+  font-size: 11px; line-height: 1.6; color: var(--ink-4);
+}
+/* The finished run's valuation curve, in the row itself. A glyph, not a chart:
+   no axes, no ticks, nothing to read off it but the shape. */
+.mini-arc { display: block; opacity: .7; }
+.shelf-row:hover .mini-arc { opacity: 1; }
+
+/* ═══ THE ENDINGS GALLERY ═════════════════════════════════════════════════
+   Eight plates on the Legacy view: the ending's own photograph behind a mono
+   nameplate. A sealed plate is dark and desaturated and carries the one line
+   it still needs; a reached one is lit and counts its timelines. Square,
+   framed on four sides, indexed — a rail of prints, not a row of cards. */
+.end-gallery { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.end-plate {
+  position: relative; display: flex; flex-direction: column; justify-content: flex-end;
+  aspect-ratio: 4 / 3; min-height: 96px; padding: 8px 9px; overflow: hidden;
+  border: 1px solid var(--line); color: var(--ink);
+  /* The photograph is written inline as `background-image`, not through a
+     custom property: a relative URL inside a `var()` is resolved against the
+     stylesheet that *uses* it, so `assets/img/…` became `/styles/assets/img/…`
+     and every plate in the gallery 404'd. */
+  background: center / cover no-repeat var(--well);
+}
+.end-plate::after {
+  content: ''; position: absolute; inset: 0; z-index: 0;
+  background: linear-gradient(180deg, rgba(4,6,10,0.05) 30%, rgba(4,6,10,0.88) 100%);
+}
+.end-plate.sealed { filter: grayscale(1) brightness(0.5); }
+.end-plate.reached { border-color: var(--ec, var(--amber)); }
+.end-plate.reached::before {
+  content: ''; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ec, var(--amber)) 35%, transparent);
+}
+.ep-idx { position: absolute; top: 6px; left: 8px; font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.16em; color: var(--ink-4); }
+.ep-count { position: absolute; top: 6px; right: 8px; font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.12em; color: var(--ec, var(--amber)); }
+.ep-name { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink); line-height: 1.3; }
+.ep-req { font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.06em; color: var(--ink-3); margin-top: 3px; line-height: 1.4; }
+.end-plate.reached .ep-req { color: var(--ink-4); }
+@container (max-width: 560px) { .end-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .end-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ═══ APERTURE SYSTEMS ════════════════════════════════════════════════════
+   The company behind the feud: four readouts, what it is researching, where
+   it is pointed, and its week on a rail. */
+.panel.aperture.gone { opacity: 0.6; }
+.ap-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+.ap-cell { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; border: 1px solid var(--line); }
+.ap-k { font-family: var(--mono); font-size: 8px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-5); }
+.ap-v { font-family: var(--mono); font-size: 13px; color: var(--ink); }
+.ap-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; font-size: 12px; color: var(--ink-2); }
+.ap-res { flex: 1; min-width: 0; }
+.ap-focus { display: flex; align-items: baseline; gap: 10px; margin-top: 10px; padding: 8px 10px; border: 1px solid var(--line); font-size: 12px; color: var(--ink); }
+.ap-plays { margin-top: 12px; }
+.ap-play { display: grid; grid-template-columns: 34px 16px minmax(0, 1fr); gap: 8px; align-items: baseline; font-size: 11.5px; line-height: 1.5; color: var(--ink-3); padding: 4px 0; border-bottom: 1px solid var(--line); }
+.ap-play:last-child { border-bottom: 0; }
+.ap-day { font-family: var(--mono); font-size: 8.5px; color: var(--ink-5); padding-top: 3px; }
+.ap-kind { color: var(--red); text-align: center; }
+@container (max-width: 560px) { .ap-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* A topic you have raised with this person before. The phone remembers; so should the plate. */
+.call-again { font-family: var(--mono); font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-4); margin-left: 6px; vertical-align: middle; }
+
+/* A second human: the chair's link, under Aperture's week. */
+.ap-invite { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.ap-invite .ap-k { font-family: var(--mono); font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-4); }
+.ap-invite .ap-link { font-size: 11px; color: var(--cyan); user-select: all; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+
+/* ═══ WHY ═════════════════════════════════════════════════════════════════
+   §B1. The row shape that explains a number — valuation, alignment, heat,
+   approval — sharing the Product view's panel. The head is a button rather
+   than a strip: the whole thing shuts, and a shut panel says what it is.
+   The caret is the only thing that turns, and it turns the way a disclosure
+   turns; the head keeps the etched left tick every `.panel-head` has, so a
+   closed one still reads as part of the rack rather than as a stray key. */
+.why-head { width: 100%; text-align: left; font: inherit; color: inherit; }
+/* Shut, the head *is* the panel, so the divider hairline `hud.css` hangs off
+   `.panel-head::after` would sit a pixel above the plate's own bottom edge.
+   Doubled selector so it out-specifies that rule rather than depending on
+   which sheet loaded last. */
+.why-head.shut::after { display: none; }
+.why-head:hover .panel-title { color: var(--ink-2); }
+.why-head:focus-visible { outline: 1px solid var(--cyan); outline-offset: -1px; }
+.why-caret {
+  font-size: 9px; color: var(--ink-4); display: inline-block;
+  transform: rotate(-90deg); transition: transform 0.16s ease;
+}
+.why-caret.on { transform: rotate(0deg); }
+/* A block per term group. Sized by the panel and not by the viewport: these
+   sit in a half-width column on the Market view and inside a 700px window on
+   the workstation, and a viewport query sees neither. */
+.why-body { container-type: inline-size; }
+.why-grid { display: grid; gap: 18px; }
+.why-cols-1 { grid-template-columns: minmax(0, 1fr); }
+.why-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.why-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* Four blocks read as two-by-two, never as four thin columns: a label and a
+   number in a 180px track is a label with the number under it. */
+.why-cols-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@container (max-width: 620px) { .why-cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@container (max-width: 400px) {
+  .why-cols-2, .why-cols-3, .why-cols-4 { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ═══ THE BAD DIRECTION ═══════════════════════════════════════════════════
+   §B3. Stats flashed on growth alone, so the one movement that ends a run —
+   cash falling, users walking out — was the silent one. Same animation, the
+   other way: a number that drops settles *down* into place and lights red.
+   `.stat-delta` is the seven-day chip; the class and its three colours have
+   been in `main.css` since the beginning with nothing ever writing to them. */
+.tick-down { animation: tickDown 0.5s cubic-bezier(.2,1.6,.4,1); }
+@keyframes tickDown {
+  0% { transform: scale(1); }
+  30% { transform: scale(0.9) translateY(1px); color: var(--red); }
+  100% { transform: scale(1); }
+}
+.stat-delta {
+  letter-spacing: 0.08em; line-height: 1.1; opacity: 0.85;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.stat-delta:empty { display: none; }
+
+/* §B3. A rack of trends. Sized by the panel it is in and not by the viewport:
+   the Standing panel is half a column on a 1440 screen and the whole of a
+   window on the workstation, and a media query sees neither. */
+.trend-wrap { container-type: inline-size; }
+.trend-rack { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.trend-cell { border: 1px solid var(--line); padding: 7px 9px 3px; }
+.trend-cell .spark { height: 26px; opacity: 0.92; }
+@container (max-width: 300px) { .trend-rack { grid-template-columns: minmax(0, 1fr); } }
+
+/* §B4. Today: what moved, and the three largest reasons. The causes are chips
+   on a rail rather than a second table — the row is the news and they are the
+   footnote, and a founder reading down the column should be able to skip them. */
+/* No rule down the left: a stripe on one edge is the web's idiom for
+   "category" and `oneside.mjs` is right to flag it. The rows are separated by
+   the column gap and by the causes rail under each one. */
+.tly-row { display: flex; flex-direction: column; gap: 2px; }
+.tly-causes { display: flex; flex-wrap: wrap; gap: 4px 8px; margin-top: 3px; }
+.tly-cause {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--ink-4); white-space: nowrap;
+}
+.tly-cause b { font-weight: 700; }
+.tly-cause.pos b { color: var(--green); }
+.tly-cause.neg b { color: var(--red); }
+
+/* §B6. The opt-in preview, under a choice. Deliberately quieter than the
+   outcome strip it shares a vocabulary with: this is what *would* happen, and
+   it must not out-shout the sentence the choice is written in. */
+.choice-preview { display: flex; flex-wrap: wrap; gap: 4px 7px; margin-top: 6px; align-items: baseline; }
+/* Doubled, to tie hud.css's own `.eff` on specificity and win on order — the
+   same trick the frame rules use, rather than reaching for !important. */
+.eff.eff-pre { animation: none; font-size: 9.5px; padding: 1.5px 6px; opacity: 0.82; }
+.eff.eff-none { color: var(--ink-4); background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.eff-approx {
+  font-family: var(--mono); font-size: 10px; color: var(--ink-4);
+  border: 1px solid var(--line); padding: 0 4px; line-height: 1.5;
+}
+
+/* §B7. What a bloc wants, what it will not forgive, and which way it is going.
+   Both read as machine labels rather than as tags: mono, uppercase, a hairline
+   box, and the sign carrying the meaning so the colour is not the only channel. */
+.taste-row { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.taste {
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.12em;
+  text-transform: uppercase; padding: 1px 5px; border: 1px solid var(--line);
+  color: var(--ink-4);
+}
+.taste.likes { color: var(--green); border-color: rgba(0,229,160,0.30); }
+.taste.dislikes { color: var(--red); border-color: rgba(255,77,94,0.30); }
+.drift-row {
+  font-family: var(--mono); font-size: 8.5px; letter-spacing: 0.10em;
+  text-transform: uppercase; margin-top: 5px; color: var(--ink-4);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.drift-row.up { color: var(--green); }
+.drift-row.down { color: var(--red); }

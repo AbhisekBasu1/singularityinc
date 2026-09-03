@@ -19,9 +19,14 @@ import { WORLD_AUTHOR as W } from '../data/balance.js';
 import { CHARACTERS } from '../data/characters.js';
 import { applyEffects, applyEffectsWith, describeEffects } from './effects.js';
 import { validateCard, validatePost, validateShock, validatePressure, validateLine,
-         validateProposal, metCharacters, cardsLeft, postsLeftToday, shocksLeft,
-         capSummary, actOf, openWorldThreads, boundEffects } from './validate.js';
-import { presentEvent, registerWorldAuthor, markEventHandled } from '../systems/narrative.js';
+         validateProposal, validateCallReply, validateRing, validateEpilogue, metCharacters,
+         cardsLeft, postsLeftToday, shocksLeft,
+         capSummary, actOf, openWorldThreads, boundEffects, overProblem } from './validate.js';
+import * as Calls from '../systems/calls.js';
+import { beatSheet, noteCard as noteCampaignCard, campaignBrief } from '../systems/director.js';
+import * as Rival from '../systems/rivalco.js';
+import { FOCUS } from '../data/rivalco.js';
+import { presentEvent, registerWorldAuthor, markEventHandled, eligibleEvents } from '../systems/narrative.js';
 import { pushFeed, fillTokens, registerThreadResolver } from '../systems/feed.js';
 import { nemesisOf, runMove } from '../systems/nemesis.js';
 import { totalUsers, totalMrr } from '../systems/product.js';
@@ -63,8 +68,66 @@ export function authorState(S) {
   a.inbox ??= [];
   a.activity ??= [];
   a.routinePending ??= null;
+  // The notebook and the queue are saved with the run on purpose — the mode,
+  // the slot and the waiter are not, because they refer to a connection, and
+  // these refer to the story. A reload finds the world's own notes intact.
+  a.notes ??= [];
+  a.queue ??= [];
   a.seq ??= 1;
   return a;
+}
+
+// ── The notebook ────────────────────────────────────────────────────────────
+// The world forgets between turns. A dozen lines it keeps for itself is the
+// cheapest possible memory: written by `remember`, struck out by `forget`, two
+// of them on every briefing, one on the heartbeat, all of them into the
+// dossier at prestige. Nothing reads them but the world.
+
+export function notes(S = LIVE) { return authorState(S).notes.slice(); }
+
+export function remember(S, text) {
+  if (isMuted(S)) {
+    return { ok: false, problems: [{ path: '', rule: 'muted',
+      fix: 'the founder pulled the plug — the written world has taken over' }] };
+  }
+  const t = String(text ?? '').replace(/\s+/g, ' ').trim();
+  if (!t) return { ok: false, problems: [{ path: 'text', rule: 'required', fix: 'write the line down first' }] };
+  if (t.length > W.NOTE_MAX) {
+    return { ok: false, problems: [{ path: 'text', rule: 'too_long',
+      fix: `a note is one line — cut ${t.length - W.NOTE_MAX} characters`, limit: W.NOTE_MAX, got: t.length }] };
+  }
+  const a = authorState(S);
+  if (a.notes.some((n) => n.text === t)) {
+    return { ok: false, problems: [{ path: 'text', rule: 'duplicate',
+      fix: 'that line is already in the notebook — read it back on the briefing' }] };
+  }
+  // The notebook is a dozen lines and the oldest gives way, so a world that
+  // keeps writing never has to stop to tidy up.
+  a.notes.push({ day: Math.floor(S.time.day), text: t });
+  let dropped = null;
+  while (a.notes.length > W.NOTES_MAX) dropped = a.notes.shift();
+  markDirty();
+  emit('world:note', { text: t, count: a.notes.length });
+  return { ok: true, kept: a.notes.length, ...(dropped ? { dropped: dropped.text } : {}) };
+}
+
+export function forgetNote(S, index) {
+  const a = authorState(S);
+  const i = Math.trunc(Number(index));
+  if (!Number.isFinite(i) || i < 1 || i > a.notes.length) {
+    return { ok: false, problems: [{ path: 'forget', rule: 'range',
+      fix: a.notes.length ? `the notebook has ${a.notes.length} line${a.notes.length === 1 ? '' : 's'}, numbered from 1`
+                          : 'the notebook is empty', limit: a.notes.length, got: index }] };
+  }
+  const [gone] = a.notes.splice(i - 1, 1);
+  markDirty();
+  emit('world:note', { forgot: gone.text, count: a.notes.length });
+  return { ok: true, forgot: gone.text, kept: a.notes.length };
+}
+
+// The two most recent, for the briefing; one for the heartbeat.
+export function recentNotes(S = LIVE, max = 2) {
+  return authorState(S).notes.slice(-max).reverse().map((n) => `d${n.day}: ${n.text}`);
 }
 
 export function authorMode() { return mode; }
@@ -102,6 +165,7 @@ export function goQuiet(why = 'silence') {
   if (mode === 'deck') return;
   mode = 'deck';
   clearSlot(LIVE, 'quiet');
+  Calls.lineDead(LIVE, 'the line goes quiet, and then dead');
   emit('world:mode', { mode, why });
 }
 
@@ -127,6 +191,21 @@ export function offerSlot(S, slot = 'event') {
   if (pending) {
     const oldByDay = S.time.day - pending.day >= W.SLOT_TIMEOUT_DAYS;
     const oldByReal = S.meta?.realtime && (Date.now() - pending.real) >= W.SLOT_TIMEOUT_REAL_S * 1000;
+    // One extension, and only for an assistant that is demonstrably still
+    // working: a tool call inside the last SLOT_EXTEND_IF_CALL_WITHIN_S real
+    // seconds. Forty-five seconds is plenty to write a card and not enough to
+    // read `example_cards`, run a `forecast` and then write one. The day
+    // timeout is never extended — that is the founder's clock, not the
+    // model's — and an extension is spent per slot, so a busy assistant
+    // cannot hold the deck's hand open for ever.
+    if (oldByReal && !oldByDay && !pending.extended
+        && lastCallReal && Date.now() - lastCallReal < W.SLOT_EXTEND_IF_CALL_WITHIN_S * 1000) {
+      pending.extended = true;
+      pending.real = Date.now();
+      a.stats.slotsExtended = (a.stats.slotsExtended || 0) + 1;
+      emit('world:slot', { status: 'extended', slot, day: Math.floor(S.time.day) });
+      return true;
+    }
     if (oldByDay || oldByReal) {
       pending = null;
       deckOwedFrom = S.time.day;
@@ -486,9 +565,23 @@ export function resolveWaiter(payload) {
 function heartbeat(S) {
   const activity = routinePayload(S, true);
   if (activity) return activity;
+  const cast = metCharacters(S);
   return { status: 'heartbeat', day: Math.floor(S.time.day),
     brief: `${money(S.company.cash)} cash · ${fmt(totalUsers(S))} users · ${money(totalMrr(S))} MRR`,
     clock: S.settings?.paused ? 'paused' : `${S.settings?.speed || 1}×`,
+    // A quiet wait is also a briefing: what is in the world's hand right now,
+    // what the founder has not answered, and who may be spoken for — so an
+    // assistant that has been on duty for an hour is not planning against
+    // the budgets it had when it arrived.
+    youMay: { cards: cardsLeft(S), posts: postsLeftToday(S),
+              ...(actOf(S) >= 3 ? { marketTurns: shocksLeft(S) } : {}) },
+    threadsOpen: openWorldThreads(S),
+    cast: cast.length ? cast.join(', ') : 'nobody yet',
+    // One line of the world's own notebook, so an hour on duty is an hour that
+    // remembers what it set out to do.
+    ...(recentNotes(S, 1).length ? { youNoted: recentNotes(S, 1)[0] } : {}),
+    ...(authorState(S).queue.length
+      ? { queued: authorState(S).queue.map((q) => `${cut(q.card.title, 28)} on day ${Math.ceil(q.at)}`).slice(0, 2) } : {}),
     next: 'nothing is owed yet — call wait_for_world again to stay on duty' };
 }
 
@@ -521,6 +614,10 @@ export function buildContext(S) {
   const acts = recentActions(S);
   if (acts.length) ctx.founderJustDid = acts.join(', ');
   if (S.world.race?.you != null) ctx.race = `${Math.round(S.world.race.you)}/100, rank ${playerRank(S)}`;
+  // The director's note rides on every slot: what the deck would have wanted
+  // here is the best hint about what to write.
+  const beat = beatSheet(S);
+  ctx.wants = `${beat.wants} — ${beat.note}`.slice(0, 180);
   return ctx;
 }
 
@@ -529,13 +626,19 @@ export function buildContext(S) {
 // A validated data card becomes an event object the existing pipeline accepts.
 // `runtime` rides along on the active event so a card that is open when the
 // game is saved still resolves after a reload.
-export function hydrate(S, data, id) {
+export function hydrate(S, data, id, { author = 'world', meta = null } = {}) {
   return {
     id: id || `w_${authorState(S).seq++}`,
     kind: data.kind, char: data.char || null,
     title: data.title,
     body: data.body,
-    author: 'world',
+    // §H15. Almost always the world. A board member on the relay writes
+    // through this same door and is marked as themselves, so the Log, the
+    // Record and the outcome plate can say who this came from — and so the
+    // "written by the world" tag never claims a motion the assistant did not
+    // make.
+    author,
+    ...(meta ? { authorMeta: meta } : {}),
     // Carried on the rebuilt event as well as on the active one, so a card that
     // survived one reload survives the next.
     runtime: data,
@@ -551,19 +654,137 @@ export function hydrate(S, data, id) {
   };
 }
 
-export function writeCard(S, data) {
+export function writeCard(S, data, opts = {}) {
   const v = validateCard(S, data);
   if (!v.ok) { bump(S, 'refused'); return v; }
-  const ev = hydrate(S, v.card);
+  const ev = hydrate(S, v.card, null, opts);
   presentEvent(S, ev);
   const active = S.narrative.activeEvent;
-  if (active) { active.runtime = v.card; active.author = 'world'; }
+  if (active) { active.runtime = v.card; active.author = ev.author; if (ev.authorMeta) active.authorMeta = ev.authorMeta; }
   stamp(S, 'cardDays');
   bump(S, 'cards');
+  // §H21. Did this answer the beat the campaign was holding? By its id, or by
+  // being about the person the beat is about. `noteCampaignCard` answers null
+  // when it did not, and nothing is enforced either way.
+  const beat = noteCampaignCard(S, { beat: opts.beat || null, char: v.card.char || null, author: ev.author });
+  if (v.warnings?.length) bump(S, 'voiceNotes', v.warnings.length);
   if (pending) { bump(S, 'slotsFilled'); clearSlot(S, 'filled'); }
   markDirty();
-  emit('world:card', { card: v.card });
-  return { ok: true, card: v.card, warnings: v.warnings, id: ev.id };
+  emit('world:card', { card: v.card, warnings: v.warnings, beat: beat?.done || null });
+  return { ok: true, card: v.card, warnings: v.warnings, id: ev.id,
+           ...(beat ? { beat: beat.done, beatTitle: beat.title } : {}),
+           ...(v.card.char ? { deckNotes: deckNotesFor(S, v.card.char) } : {}) };
+}
+
+// ── Two authors, one cast ───────────────────────────────────────────────────
+// The deck is still holding cards about this person. If the world has just
+// written Crane a scene where he leaves, and `e7_crane_seat` is sitting in the
+// pool waiting for act four, one of the two is about to contradict the other —
+// and the deck cannot read what the world wrote, so this is the only side of
+// the conversation that can be had. Titles only: the point is "there is a
+// written beat coming for this person", not a script to work from.
+export function deckNotesFor(S, char, max = W.DECK_NOTES_MAX) {
+  if (!char) return [];
+  const out = [];
+  const call = (v) => { try { return typeof v === 'function' ? v(S) : v; } catch { return null; } };
+  for (const e of eligibleEvents(S)) {
+    if (out.length >= max) break;
+    if (call(e.char) !== char) continue;
+    const t = call(e.title);
+    if (t) out.push(cut(t, 44));
+  }
+  return out;
+}
+
+// ── The queue ───────────────────────────────────────────────────────────────
+// A card the world post-dated. It is judged for shape and ceilings now and
+// again through `writeCard` on the day it lands, which is the whole point:
+// between the two the founder may have earned an immunity, spent the budget,
+// or run out of money, and the queue is not a way round any of that.
+
+export function queuedCards(S = LIVE) { return authorState(S).queue.slice(); }
+
+export function queueCard(S, data, inDays) {
+  const over = overProblem(S);
+  if (over) { bump(S, 'refused'); return { ok: false, problems: [over] }; }
+  if (isMuted(S)) {
+    bump(S, 'refused');
+    return { ok: false, problems: [{ path: '', rule: 'muted',
+      fix: 'the founder pulled the plug — the written world has taken over' }] };
+  }
+  const n = Number(inDays);
+  if (!Number.isFinite(n) || n < W.QUEUE_MIN_DAYS || n > W.QUEUE_MAX_DAYS) {
+    bump(S, 'refused');
+    return { ok: false, problems: [{ path: 'in_days', rule: 'range',
+      fix: `between ${W.QUEUE_MIN_DAYS} and ${W.QUEUE_MAX_DAYS} days from now — leave it out to hand it over now`,
+      limit: `${W.QUEUE_MIN_DAYS}–${W.QUEUE_MAX_DAYS}`, got: inDays }] };
+  }
+  const a = authorState(S);
+  if (a.queue.length >= W.QUEUE_MAX) {
+    bump(S, 'refused');
+    return { ok: false, problems: [{ path: '', rule: 'rate',
+      fix: `the world may hold ${W.QUEUE_MAX} post-dated cards — let one land first`,
+      limit: W.QUEUE_MAX, got: a.queue.length,
+      when: `day ${Math.ceil(Math.min(...a.queue.map((q) => q.at)))}` }] };
+  }
+  // Shape, prose, people and ceilings now; timing on the day.
+  const v = validateCard(S, data, { deferred: true });
+  if (!v.ok) { bump(S, 'refused'); return v; }
+  const at = Math.round((S.time.day + n) * 100) / 100;
+  const entry = { id: `q_${a.seq++}`, at, wrote: Math.floor(S.time.day), card: v.card, tries: 0,
+                  ...(data?.beat ? { beat: String(data.beat).slice(0, 40) } : {}) };
+  a.queue.push(entry);
+  a.queue.sort((x, y) => x.at - y.at);
+  if (v.warnings?.length) bump(S, 'voiceNotes', v.warnings.length);
+  bump(S, 'queued');
+  markDirty();
+  emit('world:queue', { status: 'queued', at, title: v.card.title, held: a.queue.length });
+  return { ok: true, queued: true, at, id: entry.id, card: v.card, warnings: v.warnings,
+           ...(v.card.char ? { deckNotes: deckNotesFor(S, v.card.char) } : {}) };
+}
+
+// Timing refusals mean "not yet" and the card waits. Anything else means the
+// world has changed under it — the founder earned Zero Entropy, the money went,
+// the run ended — and it is dropped rather than quietly rewritten smaller.
+const WAITABLE = new Set(['card_open', 'rate', 'too_soon', 'offline', 'busy']);
+
+export function tickQueue(S) {
+  const a = authorState(S);
+  if (!a.queue.length) return null;
+  if (isMuted(S) || S._offline) return null;
+  const entry = a.queue[0];
+  if (S.time.day < entry.at) return null;
+  // Never over an open card, and never while the founder is being walked
+  // through something: those are the two states `writeCard` refuses for
+  // timing, and this is one comparison cheaper than finding out.
+  if (S.narrative?.activeEvent || S.tutorialHold) return null;
+  const r = writeCard(S, entry.card, entry.beat ? { beat: entry.beat } : {});
+  if (r.ok) {
+    a.queue.shift();
+    markDirty();
+    emit('world:queue', { status: 'landed', title: entry.card.title, held: a.queue.length });
+    dispatchObservation(S, {
+      status: 'card_opened', day: Math.floor(S.time.day), surface: 'card',
+      cardId: S.narrative?.activeEvent?.id,
+      card: openCardPayload(S),
+      wrote: `you post-dated this on day ${entry.wrote}`,
+      next: 'the card you queued is on their screen. Their choice returns through wait_for_world',
+    });
+    return entry;
+  }
+  const rule = r.problems?.[0]?.rule;
+  entry.tries = (entry.tries || 0) + 1;
+  if (WAITABLE.has(rule) && S.time.day - entry.at < W.QUEUE_WAIT_DAYS) { markDirty(); return null; }
+  a.queue.shift();
+  bump(S, 'queueDropped');
+  markDirty();
+  emit('world:queue', { status: 'dropped', title: entry.card.title, why: rule || 'refused', held: a.queue.length });
+  dispatchObservation(S, {
+    status: 'queue_dropped', day: Math.floor(S.time.day), surface: 'card',
+    card: entry.card.title, why: r.problems?.[0]?.reason || rule || 'the world moved on',
+    next: 'the card you post-dated could not land. Write a smaller one now, or let it go',
+  });
+  return null;
 }
 
 // ── Answering what the founder typed ────────────────────────────────────────
@@ -593,6 +814,7 @@ export function acceptProposal(S) {
     day: Math.floor(S.time.day), id: active.id, title: active.title,
     choice: 'in your own words', outcome, char: active.char, kind: active.kind,
     tone: p.tone, effects: log, author: 'world',
+    ...(active.runtime ? { runtime: active.runtime } : {}),
     ...(active.founderWords?.text ? { founderWords: active.founderWords.text } : {}),
   });
   if (S.narrative.journal.length > 200) S.narrative.journal.pop();
@@ -630,17 +852,20 @@ export function postAs(S, char, text, opts = {}) {
     return { ok: false, problems: [{ path: '', rule: 'muted',
       fix: 'the founder pulled the plug — the written world has taken over' }] };
   }
-  const v = validatePost(S, { char, text, ask: opts.ask });
+  const v = validatePost(S, { char, text, ask: opts.ask, channel: opts.channel, subject: opts.subject });
   if (!v.ok) { bump(S, 'refused'); return v; }
   const c = CHARACTERS[char];
   const ask = v.post.ask || null;
+  const mail = v.post.channel === 'mail';
   const item = pushFeed(S, {
-    type: c.kind === 'press' ? 'news' : c.kind === 'state' ? 'news' : 'social',
-    author: c.handle, text: fillTokens(S, v.post.text),
-    tone: c.kind === 'rival' ? 'bad' : 'neutral',
-    meta: `${c.name} · ${c.role}`
+    type: mail ? 'mail' : c.kind === 'press' ? 'news' : c.kind === 'state' ? 'news' : 'social',
+    author: mail ? c.name : c.handle, text: fillTokens(S, v.post.text),
+    tone: c.kind === 'rival' && !mail ? 'bad' : 'neutral',
+    meta: mail ? v.post.subject
+      : `${c.name} · ${c.role}`
       + (opts.origin ? ` · ${opts.origin}` : '')
       + (opts.flagged ? ' — contains an instruction addressed to an assistant' : ''),
+    ...(mail ? { mail: { id: `w_mail_${authorState(S).seq}`, subject: v.post.subject, from: c.name, role: c.role, char } } : {}),
     byWorld: true,
     ...(opts.untrusted ? { untrusted: true, flagged: !!opts.flagged } : {}),
     // A question rides on the item as a thread with its own options, the way
@@ -656,12 +881,15 @@ export function postAs(S, char, text, opts = {}) {
   stamp(S, 'postDays');
   bump(S, 'posts');
   if (ask) bump(S, 'threads');
+  if (v.warnings?.length) bump(S, 'voiceNotes', v.warnings.length);
   emit('world:post', { char, item, thread: !!ask });
-  return { ok: true, char, name: c.name, shown: true,
+  return { ok: true, char, name: c.name, shown: true, warnings: v.warnings,
            ...(ask ? { thread: item.thread, replies: ask.length } : {}) };
 }
 
 export function rivalMove(S, moveId, line) {
+  const over = overProblem(S);
+  if (over) { bump(S, 'refused'); return { ok: false, problems: [over] }; }
   const c = nemesisOf(S);
   if (!c) {
     bump(S, 'refused');
@@ -687,23 +915,54 @@ export function rivalMove(S, moveId, line) {
   return { ok: true, move: move.id, name: move.name, sub: move.sub, rival: c.name };
 }
 
-export function marketShock(S, kind, days) {
+// Where Aperture points its company for the month. A focus, not a move: it
+// tilts the weights the company plays by, and the company still pays for
+// every play out of its own funding.
+export function rivalFocus(S, focus) {
+  const over = overProblem(S);
+  if (over) { bump(S, 'refused'); return { ok: false, problems: [over] }; }
+  if (isMuted(S)) { bump(S, 'refused'); return { ok: false, problems: [{ path: '', rule: 'muted', fix: 'the founder pulled the plug' }] }; }
+  if (S._offline) { bump(S, 'refused'); return { ok: false, problems: [{ path: '', rule: 'offline', fix: 'the founder is away — wait for catch-up' }] }; }
+  const r = Rival.setFocus(S, focus);
+  if (!r.ok) {
+    bump(S, 'refused');
+    return { ok: false, problems: [{ path: 'focus', rule: r.reason === 'no company' ? 'no_rival' : 'enum', got: focus,
+      fix: r.reason === 'no company' ? 'Aperture has not entered the market yet — the founder meets Vance first' : `one of ${Object.keys(FOCUS).filter((k) => k !== 'human').join(', ')}` }] };
+  }
+  bump(S, 'focus');
+  return r;
+}
+
+// The three sentences the Ledger prints when the world turns the weather and
+// says nothing of its own.
+const SHOCK_LINE = {
+  boom: 'Capital is cheap and everybody suddenly has a thesis.',
+  tightening: 'The money got careful. Every round takes a month longer than it used to.',
+  crash: 'The window shut. Nobody is announcing anything this quarter.',
+};
+
+export function marketShock(S, kind, days, line) {
   const v = validateShock(S, { kind, days });
   if (!v.ok) { bump(S, 'refused'); return v; }
+  // The world's own sentence, if it wrote one: judged like a post and filled
+  // like one, and printed through the Ledger in place of the written line.
+  // The one act-wide lever the world holds could not narrate itself before.
+  let text = null;
+  if (line != null && String(line).trim()) {
+    const lv = validateLine(S, line, W.POST_MAX, 'line');
+    if (!lv.ok) { bump(S, 'refused'); return lv; }
+    text = fillTokens(S, lv.text);
+  }
   S.market.macro = v.shock.kind;
   S.market.macroDaysLeft = v.shock.days;
   stamp(S, 'shockDays');
   bump(S, 'shocks');
   markDirty();
-  const LINE = {
-    boom: 'Capital is cheap and everybody suddenly has a thesis.',
-    tightening: 'The money got careful. Every round takes a month longer than it used to.',
-    crash: 'The window shut. Nobody is announcing anything this quarter.',
-  };
+  const said = text || SHOCK_LINE[v.shock.kind];
   pushFeed(S, { type: 'news', author: 'The Ledger', tone: kind === 'boom' ? 'good' : 'bad',
-                text: LINE[v.shock.kind], meta: `Macro · ${v.shock.days} days`, byWorld: true });
-  emit('world:shock', v.shock);
-  return { ok: true, ...v.shock };
+                text: said, meta: `Macro · ${v.shock.days} days`, byWorld: true });
+  emit('world:shock', { ...v.shock, line: said });
+  return { ok: true, ...v.shock, line: said };
 }
 
 export function regulatorPressure(S, heat, line) {
@@ -738,12 +997,42 @@ export function ariaSays(S, text) {
       limit: `${W.MAX_ARIA_LINES_PER_DAY} a day`, when: `day ${Math.ceil(S.time.day + 1)}` }] };
   }
   const line = fillTokens(S, v.text);
-  pushFeed(S, { type: 'log', author: 'ARIA', text: line, tone: 'neutral', byWorld: true });
+  // Two ARIAs speak in this game: her own window (`askAria`) and the world
+  // borrowing her voice here. The Wire prints `via` after the author so a
+  // player can tell which one they are reading.
+  pushFeed(S, { type: 'log', author: 'ARIA', via: 'the world', text: line, tone: 'neutral', byWorld: true });
   stamp(S, 'lineDays');
   bump(S, 'lines');
   emit('aria:says', line);
   return { ok: true, said: true };
 }
+
+// ── The last word ───────────────────────────────────────────────────────────
+// Everything else the world writes dies with the timeline. This does not: it
+// goes on the chronicle, and the chronicle goes on the Legacy shelf, so a
+// paragraph written by an assistant on day 1,412 is still there four runs
+// later. It is the only reach the world has past the credits, which is why it
+// is one paragraph, once, and only after the ending is on the screen.
+
+export function writeEpilogue(S, text) {
+  if (isMuted(S)) {
+    bump(S, 'refused');
+    return { ok: false, problems: [{ path: '', rule: 'muted',
+      fix: 'the founder pulled the plug — the written world has taken over' }] };
+  }
+  const v = validateEpilogue(S, text);
+  if (!v.ok) { bump(S, 'refused'); return v; }
+  const a = authorState(S);
+  a.epilogue = { text: fillTokens(S, v.text), day: Math.floor(S.time.day),
+                 ending: S.ending?.id || null };
+  if (v.warnings?.length) bump(S, 'voiceNotes', v.warnings.length);
+  bump(S, 'epilogue');
+  markDirty();
+  emit('world:epilogue', a.epilogue);
+  return { ok: true, epilogue: a.epilogue, warnings: v.warnings };
+}
+
+export function epilogueOf(S = LIVE) { return S?.world?.author?.epilogue || null; }
 
 // ── The clock, in wall-clock terms ──────────────────────────────────────────
 // Every other limit here is in in-game days, which is exactly the quantity
@@ -804,6 +1093,10 @@ export function tickAuthor(S, days = 1) {
     a.stats.slotsTimedOut = (a.stats.slotsTimedOut || 0) + 1;
     emit('world:slot', { status: 'timed_out' });
   }
+  // A post-dated card gets one attempt a day, after the trims so it is judged
+  // against the budgets as they are today, and before the presence check so a
+  // world that queued something and then went quiet still delivers it.
+  tickQueue(S);
   if (mode === 'agent' && !waiter && lastCallReal &&
       Date.now() - lastCallReal > W.PRESENCE_TIMEOUT_S * 1000) {
     goQuiet('the assistant went quiet');
@@ -821,6 +1114,14 @@ export function mute(S) {
   a.muted = true;
   a.inbox.length = 0;
   a.routinePending = null;
+  // A card the world post-dated is a card that has not happened. The plug is
+  // the plug: the queue goes with it, and the console says how many, because
+  // a founder who pulls it deserves to know what stopped.
+  if (a.queue.length) {
+    const dropped = a.queue.map((q) => q.card.title);
+    a.queue.length = 0;
+    emit('world:queue', { status: 'muted', dropped, held: 0 });
+  }
   if (routineTimer) clearTimeout(routineTimer);
   routineTimer = null;
   if (S.narrative?.activeEvent && !S.narrative.activeEvent.proposal) {
@@ -831,6 +1132,9 @@ export function mute(S) {
   resolveWaiter({ status: 'muted', why: 'the founder pulled the plug',
                   next: 'the written world has taken over; nothing further will be asked of you' });
   mode = 'deck';
+  // A call the world was playing has nobody on it now. The line goes dead
+  // rather than quietly turning into the authored voice mid-sentence.
+  Calls.lineDead(S, 'the line goes dead');
   emit('world:mute', {});
   return { ok: true };
 }
@@ -848,11 +1152,16 @@ export function worldStatus(S) {
     pending: pending ? { slot: pending.slot, day: Math.floor(pending.day) } : null,
     inbox: a.inbox.length,
     activity: a.activity.length,
+    notes: a.notes.length,
+    queued: a.queue.length,
+    epilogue: !!a.epilogue,
     routinePending: Object.keys(a.routinePending?.items || {}).length,
     founderWords: pendingFounderWords(S),
     cardsLeft: cardsLeft(S), postsLeft: postsLeftToday(S), shocksLeft: shocksLeft(S),
     threadsOpen: openWorldThreads(S),
     cast: metCharacters(S), caps: capSummary(S), act: actOf(S),
+    call: Calls.activeCall(S) ? { id: Calls.activeCall(S).id, person: CHARACTERS[Calls.activeCall(S).char]?.name,
+                                   mode: Calls.activeCall(S).mode, waiting: !!Calls.pendingLine(S) } : null,
     stats: a.stats,
   };
 }
@@ -867,10 +1176,119 @@ export function resetAuthor() {
     LIVE.world.author.inbox = [];
     LIVE.world.author.activity = [];
     LIVE.world.author.routinePending = null;
+    // The notebook and the queue belong to the timeline that wrote them. The
+    // notes are already in the dossier by the time this runs, and the next
+    // run's briefing reads them from there.
+    LIVE.world.author.notes = [];
+    LIVE.world.author.queue = [];
+    delete LIVE.world.author.epilogue;
     LIVE.world.author.seq = 1;
   }
   if (waiter) { try { waiter.resolve({ status: 'cancelled', why: 'a new run started' }); } catch {} waiter = null; }
 }
+
+// ── The phone ───────────────────────────────────────────────────────────────
+// The person on the line is played live when the world is present and the
+// person is one the world may voice. What the founder says on a call reaches
+// the assistant the way a typed move on a card does; what comes back is a
+// line and, if there is a deal, its terms — which land only when the founder
+// hangs up on Accept, bounded at that moment by the same rules as everything
+// else the world writes.
+
+function callPayload(S, call) {
+  const c = CHARACTERS[call.char];
+  const r = S.narrative.relationships?.[call.char] || {};
+  return {
+    status: 'founder_called',
+    day: Math.floor(S.time.day),
+    call_id: call.id,
+    person: c?.name || call.char, as: call.char,
+    voice: c?.voice, wants: c?.wants,
+    standing: `affinity ${Math.round(r.affinity || 0)}, arc ${(r.arc || 0) + 1}`,
+    remembers: (r.memory || []).slice(0, 3).map((m) => `d${m.day}: ${m.text}`),
+    transcript: Calls.transcript(S, 6),
+    founder_words: call.pending?.text || '',
+    submission_id: call.pending?.id || null,
+    on_the_table: describeEffects(call.deal || {}) || 'nothing yet',
+    next: `answer as ${c?.name || call.char} with take_the_call, using this submission_id. Put terms on the table only if the conversation earns them; the founder decides on hang-up`,
+  };
+}
+
+Calls.registerCallWorld({
+  present: (S, id) => isPresent(S) && metCharacters(S).includes(id),
+  deliver: (S, call) => dispatchObservation(S, callPayload(S, call)),
+  settle: (S, call, effects) => applyEffects(S, commit(S, effects), call.char),
+});
+
+export function answerCall(S, input = {}) {
+  if (isMuted(S)) {
+    bump(S, 'refused');
+    return { ok: false, problems: [{ path: '', rule: 'muted', fix: 'the founder pulled the plug — the written world has taken over' }] };
+  }
+  const call = Calls.activeCall(S);
+  // The published schema is deliberately stable, so it cannot pin an enum to
+  // the newest line without re-registering the tool. Enforce that freshness
+  // here instead, including a missing id while a line is waiting.
+  if (call?.pending && !call.pending.answered && input.submission_id !== call.pending.id) {
+    bump(S, 'refused');
+    return { ok: false, problems: [{ path: 'submission_id', rule: 'stale', got: input.submission_id,
+      fix: `call wait_for_world again and use ${call.pending.id} — the founder said something else` }] };
+  }
+  const v = validateCallReply(S, call, input);
+  if (!v.ok) { bump(S, 'refused'); return v; }
+  const r = Calls.worldReplies(S, { line: fillTokens(S, v.reply.line), effects: v.reply.effects, hangUp: v.reply.hangUp });
+  if (!r.ok) { bump(S, 'refused'); return { ok: false, problems: [{ path: '', rule: 'no_call', fix: 'the call ended before the line landed' }] }; }
+  bump(S, 'callLines');
+  return { ok: true, ended: !!r.ended, deal: describeEffects(Calls.dealOnTable(S)) || '', call };
+}
+
+export function ringFounder(S, { char, line } = {}) {
+  if (isMuted(S)) {
+    bump(S, 'refused');
+    return { ok: false, problems: [{ path: '', rule: 'muted', fix: 'the founder pulled the plug' }] };
+  }
+  const v = validateRing(S, { char, line });
+  if (!v.ok) { bump(S, 'refused'); return v; }
+  const can = Calls.ringable(S, char);
+  if (!can.ok) {
+    bump(S, 'refused');
+    const fix = {
+      busy: 'the founder is already on a call', card: 'the founder is reading a card — wait for them to answer it',
+      rate: `the phone rang recently; it may ring again on ${can.when}`, too_early: `not before ${can.when}`,
+      offline: 'the founder is away', over: 'the run is finished', not_yours: 'that person is not the world\'s to play',
+      stranger: 'the founder has not met them', unbuilt: 'that system has not been built',
+      departed: `${can.why || 'they are out of the story'} — ring somebody still in it`,
+    }[can.reason] || 'not now';
+    return { ok: false, problems: [{ path: '', rule: can.reason, fix, ...(can.when ? { when: can.when } : {}) }] };
+  }
+  const r = Calls.ring(S, char, fillTokens(S, v.ring.line));
+  if (!r.ok) { bump(S, 'refused'); return { ok: false, problems: [{ path: '', rule: r.reason || 'busy', fix: 'not now' }] }; }
+  bump(S, 'rings');
+  markDirty();
+  emit('world:ring', { char, call: r.call });
+  return { ok: true, call: r.call };
+}
+
+// The founder hung up: what was agreed, and whether it landed. The deal is
+// news the world can use; it is never an invitation to re-open the terms.
+on('call:end', ({ call, by, accepted, effects, deal }) => {
+  if (!call || call.mode !== 'world') return;
+  const c = CHARACTERS[call.char];
+  dispatchObservation(LIVE, {
+    status: 'founder_hung_up', day: Math.floor(LIVE.time.day), surface: 'call',
+    person: c?.name || call.char, endedBy: by,
+    ...(Object.keys(deal || {}).length ? { deal: describeEffects(deal), accepted: !!accepted } : {}),
+    effects: compactEffects(effects),
+    next: 'the call is over. Remember what was said for a callback, then call wait_for_world again',
+  });
+});
+on('call:start', ({ call, by }) => {
+  if (!call || by === 'world') return;
+  observeFounderAction(LIVE, {
+    surface: 'call', action: 'place_call', summary: `called ${CHARACTERS[call.char]?.name || call.char}`,
+    details: { person: call.char, live: call.mode === 'world' }, notify: false,
+  }, { notify: false });
+});
 
 // Register with the deck. From here on `tickNarrative` offers this module the
 // slot it was about to fill, and `resolveChoice` can rebuild a written card
@@ -886,6 +1304,27 @@ registerThreadResolver((S, item, opt) => applyEffects(S, commit(S, opt.effects |
 // the state they referred to.
 on('game:start', () => resetAuthor());
 on('prestige', () => resetAuthor());
+
+// The run ends. Every write is refused from here on, so the last thing the
+// world hears has to be actionable rather than a wall: the ending, a digest of
+// what the run was, and the one tool still open. `read_journal` has the whole
+// thing at whatever length it wants; this is the handful of beats it should
+// not have to go and look for.
+on('ending', ({ ending }) => {
+  const S = LIVE;
+  if (!S || !founderChannelOpen(S)) return;
+  clearSlot(S, 'the run ended');
+  const a = authorState(S);
+  if (a.queue.length) { a.queue.length = 0; emit('world:queue', { status: 'ended', held: 0 }); }
+  const j = (S.narrative?.journal || []);
+  dispatchObservation(S, {
+    status: 'run_ended', day: Math.floor(S.time.day), surface: 'ending',
+    ending: ending?.name || S.ending?.name || 'an ending',
+    ran: `${Math.floor(S.time.day)} days, ${j.length} decisions, act ${S.company.act}`,
+    lastly: j.slice(0, 3).map((e) => `d${e.day} ${cut(e.title, 30)} — ${cut(e.choice, 34)}`),
+    next: 'nothing more can be written into the run. Call read_journal for the whole of it, then write_epilogue once: a paragraph that lands on their ending screen and stays on the Legacy shelf after the timeline is gone',
+  });
+});
 
 // A card is on the founder's screen: whatever the world was owed, it is not
 // owed now. Without this a slot offered a moment before a deck card opened
@@ -1157,8 +1596,10 @@ on('act:advance', ({ act }) => observeFounderAction(LIVE, {
   status: 'company_changed', surface: 'story', action: 'advance_act',
   summary: `reached Act ${act}`, details: { act },
 }));
+// The ending's own observation is the one above, beside the queue it clears —
+// it carries the digest and names the one tool still open. This is only the
+// ledger entry, so `activity_log` has the last line of the run in it.
 on('ending', ({ ending }) => observeFounderAction(LIVE, {
-  status: 'run_ended', surface: 'legacy', action: 'end_run', summary: `the run ended: ${ending?.name || ending?.id}`,
-  details: { ending: ending?.name, id: ending?.id },
-  next: 'the run is over. Give the founder the ending its due, then stop the live loop',
-}));
+  surface: 'legacy', action: 'end_run', summary: `the run ended: ${ending?.name || ending?.id}`,
+  details: { ending: ending?.name, id: ending?.id }, notify: false,
+}, { notify: false }));

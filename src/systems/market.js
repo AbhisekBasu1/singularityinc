@@ -52,9 +52,20 @@ export const RIVAL_PERSONALITIES = [
     line: 'They poach, litigate, and undercut. Nothing is beneath them.' },
 ];
 
+// A personality may arrive as the object, as its id, or not at all. It used to
+// have to be the object: Aperture was spawned with `personality: 'shark'`, the
+// string was truthy, `pers.id` was undefined and `pers.growth` was NaN — so
+// the rival lab had no personality, no growth, and none of the moves the feud
+// gates on one. An unknown id draws one, the way no id does.
+function personalityOf(p) {
+  if (p && typeof p === 'object' && Number.isFinite(p.growth) && p.id) return p;
+  const id = typeof p === 'string' ? p : p?.id;
+  return RIVAL_PERSONALITIES.find((x) => x.id === id) || pick(RIVAL_PERSONALITIES);
+}
+
 export function spawnCompetitor(S, opts = {}) {
   const cat = opts.category || (S.products[0]?.category) || pick(CATEGORIES).id;
-  const pers = opts.personality || pick(RIVAL_PERSONALITIES);
+  const pers = personalityOf(opts.personality);
   const founder = opts.founder || personName();
   const scale = opts.scale ?? (1 + S.company.act * MARKET.START_SCALE_PER_ACT);
   const c = {
@@ -152,7 +163,11 @@ export function tickMarket(S, days, m = computeMods(S)) {
       * (MARKET.MATURITY_DAYS / (MARKET.MATURITY_DAYS + age)), 0, MARKET.QUALITY_CAP);
     if (c.funding < 0 && c.mrr < MARKET.FAILURE_MRR_CEILING) {
       c.status = 'dead';
-      S.stats.competitorsCrushed++;
+      // A rival that runs dry under Total War died of something you chose; one
+      // that runs dry in ordinary weather was merely outlasted. `pacifist`,
+      // No Casualties and the epilogues read the first ledger, not the second.
+      if (S.company.directive === 'war') S.stats.competitorsCrushed++;
+      else S.stats.competitorsOutlasted = (S.stats.competitorsOutlasted || 0) + 1;
       emit('competitor:died', { competitor: c });
     }
     updateThreat(S, c);

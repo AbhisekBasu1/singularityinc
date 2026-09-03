@@ -2,12 +2,14 @@
 // PRODUCT — features, quality, users, revenue. The growth engine.
 // ─────────────────────────────────────────────────────────────────────────────
 import { CATEGORY_MAP, PRICING_MODELS, FEATURE_KINDS } from '../data/products.js';
-import { PRODUCT, ECON } from '../data/balance.js';
+import { PRODUCT, ECON, WORLD, FLOWS } from '../data/balance.js';
+import { computeSplitFx } from './compute.js';
 import { computeMods, markDirty } from './modifiers.js';
 import { weightedPick, pick, rand, chance, gaussian } from '../engine/rng.js';
 import { clamp, soften } from '../engine/format.js';
 import { emit } from '../engine/bus.js';
 import { siegeMods } from './nemesis.js';
+import { specFx, topContributor } from './agents.js';
 
 let productSeq = 1;
 
@@ -85,6 +87,13 @@ export function shipFeature(S, p, opts = {}) {
     0, PRODUCT.DEBT_QUALITY_PENALTY);
   const mult = fit * debtPenalty * (opts.mult || 1);
 
+  // §B11. Who actually built this. The roster has been a rack of numbers with
+  // Greek names since the beginning: nothing the company shipped had anybody's
+  // hand on it. The top contributor to the build lane on the day it shipped is
+  // read off the tick's own per-agent record — never recomputed, because that
+  // draws — and `null` means the founder wrote it themselves, which is the
+  // truth in Act I and worth saying out loud.
+  const by = opts.by !== undefined ? opts.by : topContributor(S, 'build');
   const f = {
     id: 'f' + (p.features.length + 1),
     name: opts.name || nameFeature(kind, p),
@@ -95,6 +104,7 @@ export function shipFeature(S, p, opts = {}) {
     a: kind.a * mult,
     p: kind.p * mult,
     r: kind.r * mult,
+    ...(by ? { by: by.name, byId: by.id } : {}),
   };
   // Diminishing returns keep the meters meaningful across 150+ features.
   p.features.push(f);
@@ -117,25 +127,41 @@ export function shipFeature(S, p, opts = {}) {
   return f;
 }
 
+// Launch strength before the roll: quality × polish × reputation × hype ×
+// research. Pure, so the Launch panel can print the seed-user range the roll
+// will land in — the one thing a founder about to press the button wants.
+function launchStrength(S, p, m = computeMods(S)) {
+  const rep = 1 + soften(S.resources.reputation, PRODUCT.LAUNCH_REP_SCALE, PRODUCT.LAUNCH_REP_CAP);
+  const hype = PRODUCT.LAUNCH_HYPE_BASE + S.market.hype * PRODUCT.LAUNCH_HYPE_RATE;
+  const pf = portfolioEffects(S);
+  return (PRODUCT.LAUNCH_QUALITY_BASE + p.quality)
+    * (PRODUCT.LAUNCH_POLISH_BASE + p.polish * PRODUCT.LAUNCH_POLISH_RATE)
+    * rep * hype * m.launchPower * pf.launchBoost;
+}
+function seedFor(score, cat) {
+  return Math.floor(score * PRODUCT.LAUNCH_SEED_SCALE
+    * (PRODUCT.LAUNCH_CATEGORY_BASE + cat.hypeSensitivity * PRODUCT.LAUNCH_CATEGORY_RATE));
+}
+export function launchEstimate(S, p, m = computeMods(S)) {
+  const cat = CATEGORY_MAP[p.category] || CATEGORY_MAP.devtools;
+  const strength = launchStrength(S, p, m);
+  const lo = strength * PRODUCT.LAUNCH_ROLL_FLOOR;
+  const hi = strength * (PRODUCT.LAUNCH_ROLL_FLOOR + PRODUCT.LAUNCH_ROLL_RANGE);
+  return { strength, seedLo: seedFor(lo, cat), seedHi: seedFor(hi, cat) };
+}
+
 export function launchProduct(S, p) {
   const m = computeMods(S);
   p.launched = true;
   p.launchDay = S.time.day;
   S.stats.productsLaunched++;
 
-  // Launch strength: quality × polish × reputation × hype × research
-  const rep = 1 + soften(S.resources.reputation, PRODUCT.LAUNCH_REP_SCALE, PRODUCT.LAUNCH_REP_CAP);
-  const hype = PRODUCT.LAUNCH_HYPE_BASE + S.market.hype * PRODUCT.LAUNCH_HYPE_RATE;
-  const pf = portfolioEffects(S);
-  const strength = (PRODUCT.LAUNCH_QUALITY_BASE + p.quality)
-    * (PRODUCT.LAUNCH_POLISH_BASE + p.polish * PRODUCT.LAUNCH_POLISH_RATE)
-    * rep * hype * m.launchPower * pf.launchBoost;
+  const strength = launchStrength(S, p, m);
   const roll = PRODUCT.LAUNCH_ROLL_FLOOR + rand() * PRODUCT.LAUNCH_ROLL_RANGE;
   const score = strength * roll;
 
   const cat = CATEGORY_MAP[p.category];
-  const seed = Math.floor(score * PRODUCT.LAUNCH_SEED_SCALE
-    * (PRODUCT.LAUNCH_CATEGORY_BASE + cat.hypeSensitivity * PRODUCT.LAUNCH_CATEGORY_RATE));
+  const seed = seedFor(score, cat);
   p.awareness += score * PRODUCT.LAUNCH_AWARENESS_SCALE;
   p.users += seed;
   p.momentum += score * PRODUCT.LAUNCH_MOMENTUM_SCALE;
@@ -207,6 +233,10 @@ export function tickProduct(S, p, days, m = computeMods(S)) {
              * tamLeft * cold * compPressure * days;
 
   let newUsers = (compounded + seed) * pf.cannibalize * siege.growthMult;
+  // Sales agents land enterprise contracts: on that pricing model, reach that
+  // the model's own low virality would never have found.
+  const sfx = specFx(S);
+  if (pm.id === 'enterprise' && sfx.salesEnterprise) newUsers *= 1 + sfx.salesEnterprise;
   // Established products lend awareness to newer ones.
   if (pf.awarenessBleed && p.features.length < PRODUCT.PORTFOLIO_AWARENESS_FEATURES) {
     p.awareness += pf.awarenessBleed * PRODUCT.PORTFOLIO_AWARENESS_RATE * days;
@@ -237,7 +267,8 @@ export function tickProduct(S, p, days, m = computeMods(S)) {
   const priceDrag = clamp(1 / (1 + Math.max(0, priceRatio - 1) * PRODUCT.PRICE_DRAG_RATE),
     PRODUCT.PRICE_DRAG_MIN, 1);
   let paidConv = pm.paidConv * (PRODUCT.PAID_APPEAL_BASE + p.appeal * PRODUCT.PAID_APPEAL_RATE)
-    * (PRODUCT.PAID_QUALITY_BASE + p.quality * PRODUCT.PAID_QUALITY_RATE) * priceDrag;
+    * (PRODUCT.PAID_QUALITY_BASE + p.quality * PRODUCT.PAID_QUALITY_RATE) * priceDrag
+    * (1 + sfx.salesConv);   // Sales agents convert users to payers
   paidConv = clamp(paidConv, 0, PRODUCT.PAID_CONVERSION_CAP);
   p.payingUsers = p.users * paidConv;
   const effectivePrice = Math.min(p.price, fairPrice * PRODUCT.EFFECTIVE_PRICE_CAP);
@@ -255,12 +286,20 @@ export function tickProduct(S, p, days, m = computeMods(S)) {
 
   // ── Reliability drifts toward what your debt, quality and ops investment imply.
   // It is an equilibrium, not a leak: fix the inputs and it recovers on its own.
-  const relTarget = clamp(PRODUCT.RELIABILITY_TARGET_BASE
+  // `m.reliability` is Observability, Edge Deployment and One Take — "+10%
+  // reliability" multiplies the equilibrium, and the ceiling still holds.
+  // §A9: what the serving share of the compute split is worth here. Above its
+  // default share the capacity is yours and the system holds under load; below
+  // it, the traffic arrives before the machines do. §A17's infra dial lands in
+  // the same term — both are equilibrium shifts, not patches.
+  const relTarget = clamp((PRODUCT.RELIABILITY_TARGET_BASE
     + p.quality * PRODUCT.RELIABILITY_QUALITY_RATE
     + p.polish * PRODUCT.RELIABILITY_POLISH_RATE
+    + computeSplitFx(S).reliability
+    + (S._infraRelBonus || 0)
     + (S._opsRelBonus || 0)
     - S.resources.techDebt / PRODUCT.RELIABILITY_DEBT_SCALE
-    - Math.log10(1 + p.users) * PRODUCT.RELIABILITY_SCALE_RATE,
+    - Math.log10(1 + p.users) * PRODUCT.RELIABILITY_SCALE_RATE) * (m.reliability || 1),
   PRODUCT.RELIABILITY_TARGET_MIN, PRODUCT.RELIABILITY_MAX);
   p.reliability += (relTarget - p.reliability)
     * (1 - Math.pow(PRODUCT.RELIABILITY_RETENTION_DAILY, days));
@@ -276,8 +315,10 @@ function productDrivers(S, p, m, cat = CATEGORY_MAP[p.category],
     + S.market.hype * cat.hypeSensitivity * PRODUCT.HYPE_GROWTH_RATE;
   const threatSum = S.market.competitors.reduce((a, c) => a
     + (c.status === 'active' ? c.threat : 0), 0);
-  const compPressure = clamp(1 / (1 + threatSum * PRODUCT.COMPETITION_THREAT_RATE),
-    PRODUCT.COMPETITION_FLOOR, 1);
+  // Ruthless agents blunt the drag rivals put on your growth, bounded in
+  // computeLaneOutput so a roster of them cannot switch the market off.
+  const compPressure = clamp(1 / (1 + threatSum * PRODUCT.COMPETITION_THREAT_RATE
+    / (1 + specFx(S).aggression)), PRODUCT.COMPETITION_FLOOR, 1);
   const effTam = effectiveTam(S, cat, m);
   const tamLeft = clamp(1 - p.users / effTam, 0, 1);
   const cold = cat.coldStart && p.users < PRODUCT.COLD_START_USERS ? 1 / cat.coldStart : 1;
@@ -344,6 +385,23 @@ export function portfolioEffects(S) {
 // ── Explainability ──────────────────────────────────────────────────────────
 // Returns the actual multipliers currently driving growth, churn and revenue,
 // so the player can see the model instead of guessing at it.
+// ── §B2 The ceiling nobody was told about ──────────────────────────────────
+// No company can bill more than the world economy contains, so the whole book
+// of revenue is damped toward a share of world GDP every tick. `loop.js`
+// applies it; this is the same constant and the same curve, in one place, so a
+// founder whose MRR has stopped answering to anything can see why.
+export function gdpRevenueCapMonthly(S) {
+  const gdp = WORLD.GDP_2027 * Math.pow(1 + WORLD.GDP_GROWTH, S.time.day / 360);
+  return gdp * FLOWS.GDP_REVENUE_SHARE / 12;
+}
+export function gdpSaturation(S) {
+  const capMonthly = gdpRevenueCapMonthly(S);
+  let total = 0;
+  for (const q of S.products) if (q.launched) total += q.mrr;
+  const damped = total > 0 ? total / (1 + total / capMonthly) : 0;
+  return { capMonthly, total, damped, k: total > 0 ? damped / total : 1 };
+}
+
 export function explainProduct(S, p, m = computeMods(S)) {
   if (!p) return null;
   const cat = CATEGORY_MAP[p.category];
@@ -389,8 +447,19 @@ export function explainProduct(S, p, m = computeMods(S)) {
         ['Paying conversion', p.users > 0 ? p.payingUsers / p.users : 0, `${pm.name} converts at this rate`, 'pct'],
         ['Effective price', Math.min(p.price, fairPrice * PRODUCT.EFFECTIVE_PRICE_CAP),
           `List ${money(p.price)} · fair value ${money(fairPrice)}`, 'money'],
+        // §B2. Two ceilings the game applies and never stated. The first caps
+        // what a list price can ever earn; the second caps the whole book.
+        ['Price ceiling', fairPrice * PRODUCT.EFFECTIVE_PRICE_CAP,
+          p.price > fairPrice * PRODUCT.EFFECTIVE_PRICE_CAP
+            ? `<b>Binding.</b> Nobody pays more than ${PRODUCT.EFFECTIVE_PRICE_CAP}× fair value: the ${money(p.price - fairPrice * PRODUCT.EFFECTIVE_PRICE_CAP)} above this earns nothing and still buys you churn.`
+            : `Nobody pays more than ${PRODUCT.EFFECTIVE_PRICE_CAP}× fair value. You are under it, so your list price is what you earn.`, 'money'],
+        ...(gdpSaturation(S).k < 0.999
+          ? [['World-economy ceiling', gdpSaturation(S).k,
+            `Revenue asymptotes toward ${money(gdpSaturation(S).capMonthly)}/mo — a share of world output. Your book is ${money(gdpSaturation(S).total)}, so this is what the damping takes off.`]]
+          : []),
         ['Model multiplier', pm.arpuMult || 1, pm.name],
         ['Research uplift', m.arpu * m.mrrMult, 'Enterprise motion, platform, annual plans.'],
+        ...(specFx(S).salesConv ? [['Sales agents', 1 + specFx(S).salesConv, 'Paid conversion from the Sales specialty on the Growth lane.']] : []),
         ['Portfolio', portfolioEffects(S).arpuMult, 'Customers who buy two things pay more for both.'],
       ],
     },
@@ -399,6 +468,99 @@ export function explainProduct(S, p, m = computeMods(S)) {
 }
 function fmtPct(x) { return (x * 100).toFixed(1) + '%'; }
 function money(n) { return '$' + Math.round(n).toLocaleString(); }
+
+// ── Serving — §A5 ───────────────────────────────────────────────────────────
+// What a user costs to serve, per day. Anchored on the product's *fair* price
+// — what it is worth, which is quality, appeal and polish — and never on what
+// you charge, so raising the price raises the margin and lowers the reach
+// instead of doing nothing at all. `computeHungry` is the category's ratio and
+// the serving share of the compute split is the multiplier on top: starve it
+// and the same users cost more, because the capacity is rented at the moment
+// the traffic arrives.
+//
+// A raw product still costs something to run, so the anchor has a floor at
+// `SERVE_QUALITY_MIN` of the category's base price. Nothing here draws from the
+// RNG: it is called from `expenseBreakdown`, which the Market view renders.
+export function serveCostPerUser(S, p, m = computeMods(S)) {
+  const cat = CATEGORY_MAP[p.category] || CATEGORY_MAP.devtools;
+  const hungry = cat.computeHungry ?? 1;
+  const fair = Math.max(cat.basePrice * ECON.SERVE_QUALITY_MIN, p.fairPrice || cat.basePrice);
+  // The research that lets you charge enterprise money is the research that
+  // runs a bigger model for every user. Without this term the serving line
+  // collapsed as a share of revenue exactly as the company scaled — measured,
+  // 22% of revenue on day 400 and 2.4% on day 900 — which is the sub-linearity
+  // §A1 exists to remove, wearing a different coat. Sub-linear on purpose:
+  // scale does buy you something, just not everything.
+  //
+  // Only the part of the revenue uplift `fairPrice` does not already carry:
+  // it applies `m.arpu ** FAIR_ARPU_POWER` itself, so multiplying by the whole
+  // of `m.arpu` again charged it at power 1.35 — measured, $31 a head a month
+  // against $7 of revenue on a consumer product at 35 billion users.
+  const residual = Math.pow(Math.max(1, m.arpu || 1), 1 - PRODUCT.FAIR_ARPU_POWER)
+                 * Math.max(1, m.mrrMult || 1);
+  const uplift = Math.pow(residual, ECON.SERVE_UPLIFT_POWER);
+  const split = clamp(computeSplitFx(S).serveCost,
+    ECON.SERVE_SPLIT_COST_MIN, ECON.SERVE_SPLIT_COST_MAX);
+  return (fair / 30) * ECON.SERVE_FAIR_SHARE * hungry * uplift * split * (m.hostingCost || 1);
+}
+
+// Who you are actually billed for. Two clauses, both of them the shape of
+// something already in this file.
+//
+// The first users of each product fit inside the flat cloud bill the `hosting`
+// row already charges — `ECON.SERVE_FREE_USERS`.
+//
+// And past the human ceiling a "user" stops being a person: `effectiveTam`
+// already says so, letting demand past `GLOBAL_USER_CEILING` arrive
+// logarithmically rather than linearly. The bill has to agree with it. Revenue
+// saturates against world GDP in `applyEconomicSaturation` and serving did not,
+// so a consumer product at 35.9 billion users billed $32B a day against $11.4B
+// of revenue — a company that could not stop losing money by doing anything at
+// all, which is not scarcity, it is a wall. Machines are served by the cheapest
+// thing that works.
+export function billableUsers(p) {
+  const u = p.users - ECON.SERVE_FREE_USERS;
+  if (u <= 0) return 0;
+  const ceil = PRODUCT.GLOBAL_USER_CEILING;
+  if (u <= ceil) return u;
+  return ceil * (1 + Math.log2(u / ceil) * ECON.SERVE_POSTHUMAN);
+}
+
+export function servingCostPerDay(S, m = computeMods(S)) {
+  let total = 0;
+  for (const p of S.products) {
+    if (!p.launched || p.sunset) continue;
+    const billable = billableUsers(p);
+    if (billable > 0) total += billable * serveCostPerUser(S, p, m);
+  }
+  // The economy that bounds your revenue bounds your bill. `applyEconomicSaturation`
+  // in loop.js already asymptotes the whole product line toward a share of world
+  // GDP — no company can bill more than the world contains — and the serving
+  // line has to answer to the same ceiling or the late game is a wall rather
+  // than a decision: measured, a consumer product at 35.9 billion users spent
+  // $32B a day against a revenue line the world had already capped at $11.4B,
+  // and no play available to the founder could close that. Same curve, same
+  // constant, one share of it.
+  const gdp = WORLD.GDP_2027 * Math.pow(1 + WORLD.GDP_GROWTH, S.time.day / 360);
+  const cap = gdp * FLOWS.GDP_REVENUE_SHARE / 360 * ECON.SERVE_GDP_SHARE;
+  return cap > 0 ? total / (1 + total / cap) : total;
+}
+
+// Gross margin: what is left of the product line after serving it. Feeds the
+// valuation multiple (a 40%-margin company is not worth what a 90% one is) and
+// the Product view's price panel, which is where the decision is made.
+export function grossMargin(S, m = computeMods(S)) {
+  const rev = totalMrr(S) / 30;
+  if (rev <= 0) return null;
+  return clamp(1 - servingCostPerDay(S, m) / rev, -1, 1);
+}
+
+// What one press of the price buttons costs, so the button can say so — the
+// numbers were in `setPrice` and nowhere a player could read them.
+export const PRICE_CLICK_COST = {
+  sentiment: PRODUCT.PRICE_RAISE_SENTIMENT_LOSS,
+  momentum: PRODUCT.PRICE_RAISE_MOMENTUM_LOSS,
+};
 
 export function totalUsers(S) { return S.products.reduce((a, p) => a + (p.launched ? p.users : 0), 0); }
 export function totalMrr(S) { return S.products.reduce((a, p) => a + (p.launched ? p.mrr : 0), 0); }

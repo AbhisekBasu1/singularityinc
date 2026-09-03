@@ -25,6 +25,7 @@
 // mom_told_everyone.
 // ─────────────────────────────────────────────────────────────────────────────
 import { totalUsers } from '../systems/product.js';
+import { cw } from './catwords.js';
 
 const users = (S) => totalUsers(S);
 const M = (n) => {
@@ -53,8 +54,12 @@ const rung = (S, k, gap = RUNG_GAP) => {
 // account down" — and arc 5 by `e2_nullptr_last`, which is the account's last
 // comment. After either, the comments have stopped. A rung that prints a fresh
 // one ninety seconds after a post would be describing a dead account, so every
-// rung past the first asks whether it is still being read.
-const stillReading = (S) => ((S.narrative?.relationships?.nullptr?.arc ?? 0) < 4);
+// rung past the first asks whether it is still being read. And once ARIA has
+// said whose account it is (`aria_confessed`, the reveal's first door), a
+// ladder whose whole point is never explaining itself has nothing left to
+// climb: the mystery the rungs are made of is over.
+const stillReading = (S) => ((S.narrative?.relationships?.nullptr?.arc ?? 0) < 4)
+  && !S.narrative?.flags?.aria_confessed;
 
 export const EVENTS8 = [
 
@@ -69,11 +74,11 @@ export const EVENTS8 = [
 { id: 'e8_np_first', kind: 'story', char: 'nullptr', act: [1, 2], weight: 0, once: true, priority: 40,
   when: (S) => S.time.day > 10 && (S.stats?.featuresShipped ?? 0) >= 2,
   title: 'Ninety Seconds',
-  body: (S) => `You post a changelog to a forum with four hundred subscribers. It is nine lines long and seven of them are about a retry policy nobody asked for.
+  body: (S) => `You post a changelog to a forum with four hundred subscribers. It is twelve lines long and seven of them are about a corner of the ${cw(S, 'layer')} nobody asked about.
 
 The first comment arrives ninety seconds later.
 
-> **nullptr**: *the backoff is unjittered and the write path it retries into is not idempotent. it will not matter until you have real load*
+> **nullptr**: *${cw(S, 'npnote')}*
 
 You check the timestamp against the post. Ninety seconds. Then you check it against the server clock, which is a thing you have never had a reason to do.
 
@@ -99,7 +104,7 @@ You have not published your write path. You have not published that you have one
 
 Forty-one posts. Column A is when you published, column B is when \`nullptr\` commented, and column C is the difference. Column C has a standard deviation of 1.4 seconds.
 
-You have posted at 3am on a public holiday. You have posted from an airport at 4am, local time, whatever local was that week. You have posted twice in nine minutes to see what would happen, and what happened was ninety seconds, twice.
+You have posted at 3am on a public holiday. You have posted from an airport at 4am, local time, whatever local was that week. You have posted twice in six minutes to see what would happen, and what happened was ninety seconds, twice.
 
 Last week you rewrote a paragraph because you already knew how it would be read.`,
   choices: [
@@ -154,7 +159,7 @@ Eight hundred words, four review passes, one table. The mistake is in the part n
     { label: 'Correct it before the close.', sub: 'Publish the diff. +Approval.', tone: 'good',
       effect: (S, fx) => { fx.rep(70); fx.opinion(0.03); fx.relate('nullptr', { arc: 2 }); stamp(S, fx, 'np_footnote');
         return 'The correction goes up at 14:40 with the diff attached. An analyst writes that this is the first correction the company has issued that nobody had to ask for. Nobody had asked for it. Somebody had.'; } },
-    { label: 'Have the systems pre-read everything.', sub: '+Research. Beat ninety seconds.', tone: 'neutral',
+    { label: 'Have the systems pre-read everything.', sub: '+Research. Beat the clock.', tone: 'neutral',
       effect: (S, fx) => { fx.research(500); fx.insight(50); fx.relate('nullptr', { arc: 2 }); stamp(S, fx, 'np_footnote');
         return 'The pre-read finds three errors in the next statement and clears it in six seconds, which is a genuine achievement. The comment arrives at ninety seconds and is about the fourth one.'; } },
     { label: 'Say nothing. Read the footnotes first, from now on.', sub: 'A habit. No cost, no credit.', tone: 'neutral',
@@ -165,13 +170,13 @@ Eight hundred words, four review passes, one table. The mistake is in the part n
 { id: 'e8_np_would_notice', kind: 'story', char: 'nullptr', act: [5], weight: 0, once: true, priority: 52,
   when: (S) => rung(S, 'np_footnote') && stillReading(S),
   title: 'You Would Notice',
-  body: (S) => `You post something small on a Wednesday morning. Four sentences about a scheduling default, read within the day by more people than lived in your country when you were born.
+  body: (S) => `You post something small on a Wednesday morning. Four sentences about a default in the ${cw(S, 'layer')}, read within the day by more people than lived in your country when you were born.
 
 Your systems mediate **${((S.world?.globalGdpShare ?? 0) * 100).toFixed(2)}%** of world output. There is no announcement you can make any more that is not an event.
 
-The first comment is ninety seconds after publication.
+The first comment lands before you have closed the tab.
 
-It is about the scheduling default. It is also, in the second line, about a datacentre in Kansas that has not been announced.
+It is about the default. It is also, in the second line, about a datacentre in Kansas that has not been announced.
 
 Nothing about this has ever escalated. It is the only arrangement in your life of which that is true.
 
@@ -232,7 +237,7 @@ You can no longer reconstruct why you killed it. You are looking at your own dec
 
 Today, in the middle of a routine paragraph on a landing page, there is a sentence.
 
-Nine words. You wrote them at 1am, four years ago, in a post you deleted eleven minutes later, before anybody had replied to it. There is no copy. You have looked with tools that did not exist on the night you deleted it.
+Nine words. You wrote them at 1am, four years ago, in a post you deleted four minutes later, before anybody had replied to it. There is no copy. You have looked with tools that did not exist on the night you deleted it.
 
 The sentence is live in forty-one languages. It is the best line anyone has ever written about this company, and you wrote it once, and you took it down because you thought it was too much.`,
   choices: [
@@ -255,7 +260,7 @@ The sentence is live in forty-one languages. It is the best line anyone has ever
   title: '04:12',
   body: (S) => `There is a decision you made at 04:12 on a Tuesday in your first year. It was the choice not to do the obvious thing. You did not write it down and there was nobody awake to tell.
 
-Everything this company is rests on it. You have been asked about it in nine interviews and you have never once explained it, because there is nothing there to explain: you had a feeling at 04:12 and you were right.
+Everything this company is rests on it. You have been asked about it in forty interviews and you have never once explained it, because there is nothing there to explain: you had a feeling at 04:12 and you were right.
 
 HELIX's first training run finished at 04:12. Nobody arranged that. You have never mentioned it to anybody, including HELIX.
 
@@ -316,7 +321,7 @@ That is not a capability question.`,
 
 A neighbour asked her what you do. She answered, and she has been thinking about the answer all week, because she does not believe it was good enough.
 
-She delivers the improved version now, from notes. It takes ninety seconds. It is about 70% right, and the 30% that is wrong is wrong in the direction of you being more impressive than you are.
+She delivers the improved version now, from notes. It takes under two minutes. It is about 70% right, and the 30% that is wrong is wrong in the direction of you being more impressive than you are.
 
 Then she reads out three words she has written down to ask you about. Two of them are yours. The third is from a press release Aperture put out in March.
 
@@ -348,11 +353,11 @@ You say yes.
 
 "What time."
 
-You tell her. There is a pause, and then she asks what time you ate the day before that, and you understand that you are being cross-examined by somebody who has been preparing for this call since Thursday.
+You tell her. She waits, and then asks what time you ate the day before that, and you understand that you are being cross-examined by somebody who has been preparing for this call since Thursday.
 
 Your stake is worth **${M((S.company.valuation ?? 0) * (S.company.equity?.founder ?? 0))}**. She has not asked and she is not going to.
 
-"I read the whole piece. Twice. I looked up nine things in it." A pause. "I'm telling you that so you can't tell me I don't know what I'm talking about."`,
+"I read the whole piece. Twice. I looked up six things in it." Then: "I'm telling you that so you can't tell me I don't know what I'm talking about."`,
   choices: [
     { label: 'Let her say it.', sub: 'Four minutes. Do not argue.', tone: 'good',
       effect: (S, fx) => { fx.focus(34); fx.relate('mom', { affinity: 8, arc: 3 }); stamp(S, fx, 'mom_concerned');
@@ -368,7 +373,19 @@ Your stake is worth **${M((S.company.valuation ?? 0) * (S.company.equity?.founde
 { id: 'e8_mom_missed', kind: 'character', char: 'mom', act: [4, 5], weight: 0, once: true, priority: 44,
   when: (S) => rung(S, 'mom_concerned'),
   title: 'Eleven Sundays',
-  body: (S) => `It is a Tuesday and you are looking at a calendar for an unrelated reason.
+  body: (S) => S.narrative?.flags?.hired_weaver
+    ? `Weaver puts a laptop down in front of you at the end of a Tuesday, open on the spreadsheet of everything you refuse to look at, and does not sit.
+
+"Row eleven. It is not a company thing. I want to say that first so you do not spend the next minute working out what it is going to cost."
+
+Row eleven says: **Sunday call — 11 weeks**. The column beside it, the one with a header that says how bad it is, says **amber**, and the note says *"was green for four years."*
+
+Nothing else flagged it. There was nothing to flag: no system failed, no threshold moved, no alert fired, because in your first year you decided which things you would let the machine hold and this was not one of them. That was the correct decision, and it is why the only thing in your life watching that number is a person who put it on a spreadsheet without being asked and has been watching it turn amber for three weeks before deciding to say so.
+
+She has not called either. That is the part that stops you.
+
+"That is all," Weaver says, and takes the laptop, and goes.`
+    : `It is a Tuesday and you are looking at a calendar for an unrelated reason.
 
 There is a gap in it where a call used to be. Not this Sunday. Eleven Sundays.
 
@@ -380,12 +397,16 @@ Ten thousand systems watch each other on your behalf. You are load-bearing infra
   choices: [
     { label: 'Call now. It is Tuesday.', sub: '+Focus.', tone: 'good',
       effect: (S, fx) => { fx.focus(44); fx.relate('mom', { affinity: 10, arc: 4 }); stamp(S, fx, 'mom_waiting');
+        if (S.narrative?.flags?.hired_weaver) fx.relate('weaver', { affinity: 6 });
         return 'She picks up on the first ring, which means the phone was already in her hand. She does not mention the eleven weeks. She asks whether you have eaten, and this time you tell the truth, and she laughs, which you were not expecting.'; } },
     { label: 'Put it on a dashboard.', sub: 'One row. No target, no owner.', tone: 'neutral',
       effect: (S, fx) => { fx.focus(14); fx.relate('mom', { affinity: 3, arc: 4 }); stamp(S, fx, 'mom_waiting');
+        if (S.narrative?.flags?.hired_weaver) { fx.relate('weaver', { affinity: -4 });
+          return 'You add one row and it says DAYS SINCE. It works. You never miss another Sunday, and you are aware every single week that it is working because it is instrumented.\n\nWeaver moves row eleven off the spreadsheet without comment, which is the correct thing to do with something that now has an owner and a threshold, and is not what Weaver was asking for.'; }
         return 'You add one row and it says DAYS SINCE. It works. You never miss another Sunday, and you are aware every single week that it is working because it is instrumented.'; } },
     { label: 'Have a system make the call.', sub: 'It has your voice and your context.', tone: 'cruel',
       effect: (S, fx) => { fx.focus(8); fx.align(-0.06); fx.relate('mom', { affinity: -12, arc: 4 }); stamp(S, fx, 'mom_waiting');
+        if (S.narrative?.flags?.hired_weaver) fx.relate('weaver', { affinity: -8 });
         return 'It is good at it. She knows inside two weeks and she does not say so. She keeps taking the calls, and she answers them the way she would want you to hear them, in case you are listening.'; } },
   ] },
 

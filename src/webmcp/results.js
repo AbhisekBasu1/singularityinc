@@ -49,6 +49,7 @@ function reasonFor(p) {
     case 'offline':      return 'the founder is away and the game is catching up';
     case 'no_rival':     return 'no company has become the rival yet';
     case 'no_card':      return 'no card is open';
+    case 'over':         return 'the run is over';
     default:             return `${where}${p.rule.replace(/_/g, ' ')}`;
   }
 }

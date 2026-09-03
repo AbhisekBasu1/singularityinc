@@ -4,7 +4,15 @@
 // surface you play, and they fill the gaps between focus-expensive actions.
 //
 // text/author are filled by the feed's token system. `opts` effects are tiny.
+// `text` may be a function of S where the thread has to name something that
+// just happened — see the incident pair at the bottom of this file.
 // ─────────────────────────────────────────────────────────────────────────────
+// Deliberately the leaf and not `signals.js`: this file is imported by
+// `feed.js`, and `signals.js` reaches `rivalco.js`, which imports `feed.js`.
+import { incidentVerb } from './incidentverbs.js';
+import { INCIDENTS as INCIDENTS_B } from './balance.js';
+
+const incidentRecently = (S, d) => Math.floor(S.time.day) - (S.stats?.lastIncidentDay ?? -999) <= d;
 
 export const THREADS = [
   { id: 't_complaint', kind: 'social', tone: 'bad', min: 200,
@@ -188,6 +196,22 @@ export const THREADS = [
       { label: 'Ignore it', out: 'It gets four hundred likes.', fx: { opinion: -0.004 } },
     ] },
 
+  // The Refusal's flag, off the die roll: the sovereign question can be
+  // answered in public, once, before or instead of the card that asks it in
+  // private. `when` is the card's own gate plus "not already answered".
+  { id: 't_sovereign_ask', kind: 'news', tone: 'neutral', min: 0, act: 4,
+    when: (S) => (!!S.unlocks?.world_map || S.company.valuation > 5e10)
+      && !S.narrative.flags?.sovereign_deal && !S.narrative.flags?.refused_sovereign,
+    text: 'A minister has said on television that a partnership with {company} is "under discussion". Reporters want to know whether that is true.',
+    opts: [
+      { label: 'Say no, in public, with the reasoning', out: 'Four paragraphs on why no state should run on one company. It is read into three parliaments by Friday. The minister does not call again.',
+        fx: { opinion: 0.03, heat: -5, rep: 20, focus: -2, flag: 'refused_sovereign' } },
+      { label: 'Decline to comment', out: 'The clip runs for a week. Nobody learns anything, including you.',
+        fx: { heat: 2 } },
+      { label: 'Say the door is open', out: 'A delegation is on a plane by the weekend. Whatever they bring, you will have to answer it properly.',
+        fx: { rep: 8, heat: 3, insight: 4 } },
+    ] },
+
   { id: 't_infra_offer', kind: 'log', tone: 'neutral', min: 10000, act: 2,
     text: 'A provider is offering 40% off a two-year commitment on your current spend.',
     opts: [
@@ -197,6 +221,45 @@ export const THREADS = [
         fx: { cash: 1200 } },
       { label: 'Decline and stay portable', out: 'You pay list price for the freedom to leave in a week.',
         fx: { rep: 2 } },
+    ] },
+
+  // ── §A15. The incident asks ────────────────────────────────────────────────
+  // An incident used to be a paragraph in the rail and three numbers moving.
+  // Above `INCIDENTS.THREAD_SEVERITY` it now asks the one question an incident
+  // actually asks, which is what you are going to say about it. `incidents.js`
+  // opens this by name through `maybeThread(S, id)` the moment it fires; the
+  // pool can also draw it in the days after, which is why the `when` is a
+  // window rather than "today". One at a time is enforced by there being one
+  // id: `eligibleThreads` refuses a thread that is already open.
+  //
+  // The text is a function because it has to name what happened —
+  // `incidentVerb` is the same phrasing the phone and the post use, keyed off
+  // the kind `incidents.js` stamps rather than off the incident's title.
+  { id: 't_incident_ask', kind: 'social', tone: 'bad', min: 400,
+    when: (S) => incidentRecently(S, INCIDENTS_B.THREAD_WINDOW_DAYS)
+      && (S.world?.lastIncidentSeverity || 0) >= INCIDENTS_B.THREAD_SEVERITY,
+    text: (S) => `so ${S.stats?.lastIncident ? String(S.stats.lastIncident).toLowerCase() : 'something'} at {product} — it ${incidentVerb(S)} and there is still nothing on the status page. are we getting a write-up or not`,
+    opts: [
+      { label: 'Own it publicly, with the timeline', out: 'You publish the whole thing the same day — what broke, when you knew, what you did, what you are changing. It is read more widely than anything you have ever shipped.',
+        fx: { rep: 18, heat: -3, sentiment: -0.02, focus: -3 } },
+      { label: 'Point at the vendor', out: 'The statement is accurate. It is also, unmistakably, about somebody else, and the vendor reads it too.',
+        fx: { rep: 2, sentiment: 0.01, flag: 'blamed_the_vendor' } },
+      { label: 'Fix it quietly and say nothing', out: 'It is fixed by Thursday and the fix is the kind you make when nobody is going to read the diff.',
+        fx: { debt: 14, rep: -6, heat: 2 } },
+    ] },
+
+  // The bill for the second door. Not a timer: it sits in the pool and arrives
+  // whenever the rail next has room, which is what a vendor's lawyers are like.
+  { id: 't_incident_vendor', kind: 'news', tone: 'bad', min: 400,
+    when: (S) => !!S.narrative?.flags?.blamed_the_vendor && !S.narrative?.flags?.vendor_answered,
+    text: 'Your provider has published a post-mortem of its own. It is polite, it is thorough, and it contains four timestamps from your account.',
+    opts: [
+      { label: 'Correct the record honestly', out: 'You concede the two of the four that are fair. The thread that follows is boring, which is the outcome you wanted.',
+        fx: { rep: 6, focus: -2, flag: 'vendor_answered' } },
+      { label: 'Pay the renegotiated rate and move on', out: 'The renewal arrives twelve percent higher with a paragraph about "reputational alignment" in it.',
+        fx: { cash: -4000, flag: 'vendor_answered' } },
+      { label: 'Say nothing at all', out: 'Their version is the version. It is in the second paragraph of every piece written about your uptime for a year.',
+        fx: { rep: -14, sentiment: -0.02, flag: 'vendor_answered' } },
     ] },
 ];
 

@@ -62,6 +62,19 @@ export const OS = {
 
   // ── Wallpaper ─────────────────────────────────────────────────────────────
   WALL_OPACITY: 0.22,
+
+  // ── The screensaver ───────────────────────────────────────────────────────
+  // §I7. Two and a half minutes without a pointer or a key. Long enough that
+  // it never lands on somebody thinking about a card, short enough that a
+  // founder who walks away comes back to the run drawing itself.
+  //
+  // Idle only, deliberately. It is tempting to show it on a pause as well, and
+  // it would be wrong twice: a pause is usually a founder reading something,
+  // and `tools/shot.mjs` opens every check with `pause=1` — a paused
+  // screensaver would put a full-desktop plate over every screenshot the
+  // project takes. The timer is the whole trigger.
+  SCREENSAVER_S: 150,
+  SAVER_FADE_MS: 900,
 };
 
 // The machine's name. It is `WORKSTATION` until the company is large enough to

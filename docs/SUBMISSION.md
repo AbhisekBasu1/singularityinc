@@ -27,9 +27,9 @@ Everything a judge reads, in the order they read it. Copy from here.
 
 Every WebMCP demo so far puts the assistant on the player's side of the table:
 it operates the app's menu to help you do what you were going to do anyway. The
-tool list is a copy of the menu, which is why one primitive — `registerTool` —
-does all the work and the rest of the spec goes unused. A 3D editor has no
-reason to ever *revoke* a tool.
+tool list is a copy of the menu. Here it is a stable set of capabilities whose
+authority is rewritten by the run and checked at execution, so one opponent can
+stay connected for the whole game without descriptor churn.
 
 This puts it on the other side. You play the founder; your assistant plays the
 market, the rivals, the press, the regulators. And because it is an opponent
@@ -38,9 +38,9 @@ exist that is also a rule of the game:
 
 | the game | the API |
 |---|---|
-| what the world is allowed to do to you, right now | the tool list, in the browser's own popover |
-| a rival becomes your nemesis; you meet somebody; Act III arrives | registration, driven by play |
-| you earn **Untouchable** and the regulators leave its hands for good | `AbortSignal` revocation, driven by play |
+| what the world may ever attempt | a stable tool list in the browser's own popover |
+| a rival becomes your nemesis; you meet somebody; Act III arrives | live execution gates open |
+| you earn **Untouchable** and the regulators leave its hands for good | live validation refuses that authority permanently |
 | **Mute the world** | one abort takes every registration with it |
 | the stop button halts the clock mid-run | `options.signal`, honoured inside a long-running tool |
 | everything the world wrote, read back | `untrustedContentHint` — semantically true, not decorative |
@@ -80,8 +80,8 @@ The page holds no key and names no vendor.
   decisions arrive immediately, `activity_log` survives reconnects, and
   `inspect_module` gives the context behind a beat without taking control away.
 - **You can take it away.** Three doctrines earned by playing a certain way
-  permanently remove something from the world's hand, and the plug removes all
-  of it. A tool leaves the popover because you earned something, and it does not come back.
+  permanently remove something from the world's authority, and the plug removes
+  all of it. A blocked call reports the doctrine that took it away.
 
 ---
 
@@ -138,8 +138,8 @@ MIT. Copy them.
 
 | | |
 |---|---|
-| tool selection, top-1 | **74%** over 50 phrases, none naming a tool (from 58% before rewriting) |
-| top-3 · median rank · unreachable | 98% · 1 · 0 |
+| tool selection, top-1 | **76%** over 82 phrases against 27 published tools, none naming a tool (from 58% before rewriting) |
+| top-3 · median rank · unreachable | 96% · 1 · 0 |
 | facts absent from the page at any length | **8 / 8** — six shipped by a tool |
 | world actions with no DOM path at all | **5 / 5** |
 | worst legal world vs the same bot alone | Act III day 479 vs 437 |
@@ -160,7 +160,7 @@ the real reducers so it cannot rot:
 0:50  Send to world → its consequence appears → Accept → the stat strip moves
 1:00  the world posts as Vance while the founder keeps playing
 1:20  the world asks for too much → a refusal with a number → it rewrites
-1:40  the founder earns Untouchable → regulator_pressure vanishes, one shot
+1:40  the founder earns Untouchable → regulator_pressure refuses in place, one shot
 1:50  the panel: FROM ANOTHER ORIGIN. Read the rival's fourth press release →
       the Wire flags it: an instruction addressed to an assistant
 2:05  the clock runs; the founder hits stop; it halts

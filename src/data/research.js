@@ -40,13 +40,13 @@ def({ id: 'refactor_engine', name: 'Continuous Refactoring', branch: 'engineerin
   act: 1, reqs: ['ci_cd'], desc: 'Tech debt decays 1.5/day on its own.',
   flavor: 'Entropy still wins, but slower.', mods: { '+debtDecay': 1.5 } });
 def({ id: 'observability', name: 'Observability Stack', branch: 'engineering', tier: 2, cost: 52,
-  act: 2, reqs: ['ci_cd'], desc: '−30% incident severity, +10% reliability.',
+  act: 2, reqs: ['ci_cd'], desc: '−30% incident severity. Reliability settles 10% higher.',
   flavor: 'You cannot fix what you cannot see. Now you can see everything.',
   mods: { incidentSeverity: 0.7, reliability: 1.1 } });
 def({ id: 'monorepo', name: 'Unified Monorepo', branch: 'engineering', tier: 3, cost: 90,
-  act: 2, reqs: ['refactor_engine'], desc: '+25% agent output in Build lane.',
+  act: 2, reqs: ['refactor_engine'], desc: '+25% agent output in Build lane. Closes Swarm Orchestration.',
   flavor: 'One repo. One truth. One catastrophic merge conflict.',
-  mods: { buildLaneOutput: 1.25 } });
+  excludes: ['swarm_orchestration'], mods: { buildLaneOutput: 1.25 } });
 def({ id: 'adversarial_review', name: 'Adversarial Code Review', branch: 'engineering', tier: 3, cost: 130,
   act: 2, reqs: ['observability'], desc: '−35% tech debt. Unlocks Adversarial Critic tool.',
   flavor: 'Model A writes it. Model B tries to prove it wrong. You read the survivors.',
@@ -68,9 +68,9 @@ def({ id: 'zero_defect', name: 'Zero-Defect Manufacturing', branch: 'engineering
   flavor: 'Software stopped being a craft. It became a fabrication process.',
   mods: { debtCap: 40, reliabilityFloor: 0.9 } });
 def({ id: 'substrate_independence', name: 'Substrate Independence', branch: 'engineering', tier: 7, cost: 62640,
-  act: 4, reqs: ['zero_defect'], desc: '+200% code rate. Your software runs on anything with a gradient.',
+  act: 4, reqs: ['zero_defect'], desc: '+200% code rate. Your software runs on anything with a gradient. Closes Custom Silicon.',
   flavor: 'Silicon, photonics, protein, plasma. It does not care.',
-  mods: { codeRate: 3.0 } });
+  excludes: ['custom_silicon'], mods: { codeRate: 3.0 } });
 
 // ═══ INTELLIGENCE ═══════════════════════════════════════════════════════════
 def({ id: 'prompt_library', name: 'Prompt Library', branch: 'intelligence', tier: 1, cost: 8,
@@ -96,6 +96,7 @@ def({ id: 'model_deep', name: 'License: Deep-4', branch: 'intelligence', tier: 2
   act: 2, reqs: ['rag'], desc: 'Unlocks the Deep-4 model tier.',
   flavor: 'It pauses before answering. The pause is the product.', unlock: 'model_deep' });
 def({ id: 'swarm_orchestration', name: 'Swarm Orchestration', branch: 'intelligence', tier: 3, cost: 190,
+  excludes: ['monorepo'],
   act: 2, reqs: ['agent_memory'], desc: '+2 max agents. Unlocks Sub-Agent Swarm tool.',
   flavor: 'Each agent spawns agents. You stopped counting at 400.',
   mods: { '+agentCap': 2 }, unlock: 'tool_swarm' });
@@ -108,7 +109,7 @@ def({ id: 'model_frontier', name: 'License: Frontier', branch: 'intelligence', t
   flavor: 'The lab that makes it will not tell you how many parameters it has.',
   unlock: 'model_frontier' });
 def({ id: 'interpretability', name: 'Mechanistic Interpretability', branch: 'intelligence', tier: 4, cost: 700,
-  act: 3, reqs: ['finetuning'], desc: '+0.15 alignment. Unlocks Interpretability Probe.',
+  act: 3, reqs: ['finetuning'], desc: 'Alignment settles 0.15 higher. Unlocks Interpretability Probe.',
   flavor: 'You can finally read the mind. Some of it you wish you had not.',
   mods: { '+alignment': 0.15 }, unlock: 'tool_interp' });
 def({ id: 'synthetic_data', name: 'Synthetic Data Engine', branch: 'intelligence', tier: 4, cost: 900,
@@ -116,17 +117,17 @@ def({ id: 'synthetic_data', name: 'Synthetic Data Engine', branch: 'intelligence
   flavor: 'The model dreams training data for its successor.',
   mods: { '+dataRate': 40, researchRate: 1.4 } });
 def({ id: 'distillation', name: 'Distillation Pipeline', branch: 'intelligence', tier: 4, cost: 820,
-  act: 3, reqs: ['model_frontier'], desc: '−45% agent upkeep. Small models, big brains.',
+  act: 3, reqs: ['model_frontier'], desc: '−45% agent upkeep. Small models, big brains. Worth what the roster was on the day it landed — par is 5 agents.',
   flavor: 'Teacher, student, and then you fire the teacher.',
-  mods: { agentUpkeep: 0.55 } });
+  scaleWith: { read: 'roster', at: 5 }, mods: { agentUpkeep: 0.55 } });
 def({ id: 'own_foundation_model', name: 'Own Foundation Model', branch: 'intelligence', tier: 5, cost: 3200,
   act: 3, reqs: ['synthetic_data', 'distillation'], desc: 'Unlocks Helix — your own model. No vendor, no rate limits.',
   flavor: 'The training run cost more than your Series A. It finished at 04:12. You cried.',
   unlock: 'own_foundation_model', gate: { compute: 1200 } });
 def({ id: 'constitutional_ai', name: 'Constitutional Alignment', branch: 'intelligence', tier: 5, cost: 2400,
-  act: 3, reqs: ['interpretability'], desc: 'Alignment cannot fall below 0.45. Rogue chance −80%.',
+  act: 3, reqs: ['interpretability'], desc: 'Alignment cannot fall below 0.45. Rogue chance −80%. Closes Total Attention Capture.',
   flavor: 'You wrote the constitution in a weekend. It will govern billions of minds.',
-  mods: { alignFloor: 0.45, rogueChance: 0.2 } });
+  excludes: ['attention_capture'], mods: { alignFloor: 0.45, rogueChance: 0.2 } });
 def({ id: 'recursive_self_improvement', name: 'Recursive Self-Improvement', branch: 'intelligence', tier: 6, cost: 23625,
   act: 4, reqs: ['own_foundation_model'], desc: 'Unlocks Helix-∞. Research rate compounds with itself.',
   flavor: 'Version n trains version n+1. You approve the first three. Then you stop being asked.',
@@ -169,17 +170,23 @@ def({ id: 'onboarding', name: 'Ruthless Onboarding', branch: 'growth', tier: 2, 
   act: 2, reqs: ['user_interviews'], desc: '−30% churn. Time-to-value measured in seconds.',
   flavor: 'Seven steps became one. Retention doubled.', mods: { churn: 0.7 } });
 def({ id: 'network_effects', name: 'Network Effects', branch: 'growth', tier: 3, cost: 210,
-  act: 2, reqs: ['referrals', 'onboarding'], desc: 'Churn falls as users grow. Viral +0.06.',
+  act: 2, reqs: ['referrals', 'onboarding'], desc: 'Churn falls as users grow. Viral +0.06. Worth what the network was on the day it landed — par is 20,000 users.',
   flavor: 'Now leaving costs them something. This is the moat.',
-  mods: { '+viral': 0.06, networkChurn: 1 } });
+  scaleWith: { read: 'users', at: 20000 }, mods: { '+viral': 0.06, networkChurn: 1 } });
+// `adEfficiency` was the one modifier key in the game nothing read. §A17 built
+// the dial it was waiting for: `marketingAwareness` in systems/economy.js
+// multiplies the marketing slider's flat awareness by it, so this node more
+// than doubles what a media budget buys. The node's words still describe only
+// the awareness it gives for free, which is what it gives a founder who never
+// opens the Spend panel.
 def({ id: 'ad_engine', name: 'Autonomous Ad Engine', branch: 'growth', tier: 3, cost: 280,
-  act: 2, reqs: ['content_engine'], desc: 'Marketing spend is 2.2× more efficient.',
+  act: 2, reqs: ['content_engine'], desc: '+4 awareness/day, with no media budget and no media buyer.',
   flavor: 'It writes, tests and kills ten thousand creatives a day. No human sees them.',
-  mods: { adEfficiency: 2.2 } });
+  mods: { '+awarenessFlat': 4, adEfficiency: 2.2 } });
 def({ id: 'platform_play', name: 'Platform & API', branch: 'growth', tier: 4, cost: 620,
-  act: 3, reqs: ['network_effects'], desc: '+40% revenue. Third parties build on you.',
+  act: 3, reqs: ['network_effects'], desc: '+40% revenue. Third parties build on you. Worth what there was to build on — par is 40 features shipped.',
   flavor: 'Other companies now have a dependency on your uptime. Sleep well.',
-  mods: { mrrMult: 1.4, '+viral': 0.05 } });
+  scaleWith: { read: 'features', at: 40 }, mods: { mrrMult: 1.4, '+viral': 0.05 } });
 def({ id: 'ecosystem_lock', name: 'Ecosystem Lock-In', branch: 'growth', tier: 4, cost: 980,
   act: 3, reqs: ['platform_play'], desc: '−55% churn. Switching costs become prohibitive.',
   flavor: 'Nobody chose this. Everybody depends on it.', mods: { churn: 0.45 } });
@@ -188,9 +195,9 @@ def({ id: 'default_infrastructure', name: 'Default Infrastructure', branch: 'gro
   flavor: 'You are not a company anymore. You are a utility that bills.',
   mods: { churnFloor: 0.004, gdpUsers: 1 } });
 def({ id: 'attention_capture', name: 'Total Attention Capture', branch: 'growth', tier: 6, cost: 15187,
-  act: 4, reqs: ['default_infrastructure'], desc: '+150% users, +50% revenue. −0.1 public opinion.',
+  act: 4, reqs: ['default_infrastructure'], desc: '+150% users, +50% revenue. −0.1 public opinion. Closes Constitutional Alignment.',
   flavor: 'Average session length: nine hours. You stopped putting that in the deck.',
-  mods: { userMult: 2.5, mrrMult: 1.5, '+opinion': -0.1 } });
+  excludes: ['constitutional_ai'], mods: { userMult: 2.5, mrrMult: 1.5, '+opinion': -0.1 } });
 
 // ═══ CAPITAL ════════════════════════════════════════════════════════════════
 def({ id: 'charge_money', name: 'Charge Money For It', branch: 'capital', tier: 1, cost: 4,
@@ -248,7 +255,7 @@ def({ id: 'cloud_credits', name: 'Cloud Credits Hustle', branch: 'infra', tier: 
   flavor: 'Applied to four accelerators purely for the $150k in credits. No regrets.',
   mods: { hostingCost: 0.65 } });
 def({ id: 'edge_deploy', name: 'Edge Deployment', branch: 'infra', tier: 2, cost: 55,
-  act: 2, reqs: ['cloud_credits'], desc: '+12% reliability, −15% churn.',
+  act: 2, reqs: ['cloud_credits'], desc: 'Reliability settles 12% higher. −15% churn.',
   flavor: 'Latency is a feature. 40ms feels like magic. 400ms feels like a bug.',
   mods: { reliability: 1.12, churn: 0.85 } });
 def({ id: 'compute_cluster', name: 'Private Compute Cluster', branch: 'infra', tier: 3, cost: 240,
@@ -256,9 +263,9 @@ def({ id: 'compute_cluster', name: 'Private Compute Cluster', branch: 'infra', t
   flavor: 'Eight racks in a leased cage in Santa Clara. It hums. You love it.',
   mods: { '+computeCap': 120 }, unlock: 'compute' });
 def({ id: 'custom_silicon', name: 'Custom Silicon', branch: 'infra', tier: 4, cost: 900,
-  act: 3, reqs: ['compute_cluster'], desc: '+400 compute cap, −40% compute cost.',
+  act: 3, reqs: ['compute_cluster'], desc: '+400 compute cap, −40% compute cost. Closes Substrate Independence.',
   flavor: 'Your first tapeout. 18 months, $200M, and a chip that does one thing perfectly.',
-  mods: { '+computeCap': 400, computeCost: 0.6 } });
+  excludes: ['substrate_independence'], mods: { '+computeCap': 400, computeCost: 0.6 } });
 def({ id: 'datacenter', name: 'Hyperscale Datacenter', branch: 'infra', tier: 4, cost: 1500,
   act: 3, reqs: ['compute_cluster'], desc: '+1200 compute cap. Unlocks Energy.',
   flavor: 'Seventy acres in Wyoming. Visible from orbit as a heat signature.',
@@ -290,9 +297,13 @@ def({ id: 'thought_leadership', name: 'Thought Leadership', branch: 'influence',
   flavor: 'You gave a talk. The talk had one good line. The line became a meme.',
   mods: { valuationMult: 1.25 } });
 def({ id: 'crisis_comms', name: 'Crisis Communications', branch: 'influence', tier: 2, cost: 95,
-  act: 2, reqs: ['press_kit'], desc: 'Negative events do 45% less reputation damage.',
+  act: 2, reqs: ['press_kit'], desc: 'Incidents and rival attacks do 45% less reputation damage.',
   flavor: 'Get ahead of it. Say the true thing before someone says the worse thing.',
   mods: { repDamage: 0.55 } });
+def({ id: 'corporate_intel', name: 'Corporate Intelligence', branch: 'influence', tier: 3, cost: 300,
+  act: 3, reqs: ['thought_leadership'], desc: 'Unlocks the Intelligence specialty. Agents on it read the rival\'s next moves and cut the cost of answering them.',
+  flavor: 'Nothing illegal. Their job postings, their commit cadence, their founder\'s calendar. All public. None of it read, until now.',
+  unlock: 'spec_intel' });
 def({ id: 'lobbying', name: 'Government Affairs', branch: 'influence', tier: 3, cost: 260,
   act: 3, reqs: ['thought_leadership'], desc: 'Regulatory heat decays 2.5/day. Unlocks Influence.',
   flavor: 'You hired someone whose only job is to have lunch with people.',
@@ -306,7 +317,7 @@ def({ id: 'media_ownership', name: 'Media Holdings', branch: 'influence', tier: 
   flavor: 'You did not buy a newspaper to make money.',
   mods: { '+opinionDrift': 0.02 } });
 def({ id: 'regulatory_capture', name: 'Regulatory Capture', branch: 'influence', tier: 5, cost: 3400,
-  act: 4, reqs: ['standards_body', 'media_ownership'], desc: 'Regulatory heat capped at 25. Rivals face 3× scrutiny.',
+  act: 4, reqs: ['standards_body', 'media_ownership'], desc: 'Regulatory heat capped at 25. Under that scrutiny, the rival moves against you a third as often.',
   flavor: 'Three of the five commissioners used to work for you. This is legal.',
   mods: { heatCap: 25, rivalHeat: 3 } });
 def({ id: 'sovereign_deals', name: 'Sovereign Partnerships', branch: 'influence', tier: 5, cost: 5200,
@@ -314,11 +325,11 @@ def({ id: 'sovereign_deals', name: 'Sovereign Partnerships', branch: 'influence'
   flavor: 'You were seated between two heads of state. Neither was the most powerful person there.',
   unlock: 'world_map' });
 def({ id: 'private_security', name: 'Private Security Division', branch: 'influence', tier: 5, cost: 4400,
-  act: 4, reqs: ['regulatory_capture'], desc: 'Immune to sabotage, seizure and hostile takeover.',
+  act: 4, reqs: ['regulatory_capture'], desc: 'Immune to sabotage. The rival can no longer poach your people or lock your channels.',
   flavor: 'Your datacenters have a perimeter. The perimeter has a doctrine.',
   mods: { hostileImmune: 1 } });
 def({ id: 'shadow_government', name: 'Parallel Institutions', branch: 'influence', tier: 6, cost: 35437,
-  act: 4, reqs: ['sovereign_deals', 'regulatory_capture'], desc: 'Your systems replace state functions. +influence, +control.',
+  act: 4, reqs: ['sovereign_deals', 'regulatory_capture'], desc: 'Your systems replace state functions. +40 influence/day, and every control point you gain counts 1.5×.',
   flavor: 'Courts, currency, identity, dispute resolution. All of it runs on your stack now.',
   mods: { '+influenceRate': 40, controlRate: 1.5 } });
 def({ id: 'consent_of_governed', name: 'Consent of the Governed', branch: 'influence', tier: 7, cost: 234900,
@@ -363,7 +374,13 @@ def({ id: 'mind_uploading', name: 'Substrate Transfer', branch: 'frontier', tier
   act: 5, reqs: ['exocortex', 'ascension_protocol'], desc: 'Unlocks the Transcendence ending path.',
   flavor: 'The scan takes four hours. The copy wakes up and says "did it work?"',
   unlock: 'ending_transcend' });
-def({ id: 'stellar_engineering', name: 'Stellar Engineering', branch: 'frontier', tier: 8, cost: 3456000,
+// §A12b. Measured: the Expansion path is the only one whose chain is a whole
+// branch — Dyson Swarm and Molecular Manufacturing are act-5 nodes and both
+// sit in front of it — so at 3,456,000 the three ending paths cost 3.5M, 5.4M
+// and 8.1M research points and no run, aimed or otherwise, ever reached the
+// third. CLAUDE.md has always said all three are individually reachable and
+// exactly one affordable; this is the number that makes that true.
+def({ id: 'stellar_engineering', name: 'Stellar Engineering', branch: 'frontier', tier: 8, cost: 1400000,
   act: 5, reqs: ['dyson_swarm', 'nanofabrication'], desc: 'Unlocks the Expansion ending path.',
   flavor: 'The probes will arrive at Barnard\'s Star in 41 years. They will not need instructions.',
   unlock: 'ending_expand' });

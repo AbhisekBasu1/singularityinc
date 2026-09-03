@@ -30,13 +30,29 @@ import * as Save from '../../engine/save.js';
 import { hostedInChat } from '../intro.js';
 import { manualBody, manualTabsHtml, manualClick, setManualTab } from '../manual.js';
 import * as RecordApp from './record.js';
+import * as ContactsApp from './contacts.js';
+import * as MailApp from './mail.js';
+import * as JournalApp from './journal.js';
+import * as CalendarApp from './calendar.js';
+import * as TerminalApp from './terminal.js';
+import * as BrowserApp from './browser.js';
+import * as ListApp from './list.js';
+import * as PlayerApp from './player.js';
+import { runAction } from '../dom.js';
+import { apertureState } from '../../systems/rivalco.js';
+import { markRead, markAllRead } from '../../systems/mail.js';
+import { toggleTodo } from '../../systems/todo.js';
+import { isSunday } from '../../systems/calendar.js';
+import * as Audio from '../audio.js';
+import { setAmbient, setEnabled as setAudio, initAudio, setVolume } from '../audio.js';
 import * as Find from './find.js';
 import * as Ctx from './ctxmenu.js';
 import { menuFor as ctxMenuFor } from '../../data/context.js';
-import { settingsBody, bindSettings } from '../settings.js';
+import { settingsBody, bindSettings, showImportSave, showAbandonRun } from '../settings.js';
 import { ariaBody } from '../dialogs.js';
 import { paintAuthor } from '../author.js';
 import { resetTicks } from '../readouts.js';
+import { applyActChrome, resetActChrome, bootRoll } from '../actchrome.js';
 import { assignLane } from '../../systems/agents.js';
 import { markDirty } from '../../systems/modifiers.js';
 import { LANES } from '../../data/agents.js';
@@ -51,6 +67,7 @@ import * as Dock from './dock.js';
 import * as Desktop from './desktop.js';
 import * as Notify from './notify.js';
 import { chrome as chromeSfx } from './sounds.js';
+import * as Saver from './saver.js';
 
 export const id = 'os';
 
@@ -109,6 +126,7 @@ export function buildShell() {
   const app = el('app');
   if (!app) return;
   resetTicks();
+  resetActChrome();
   built = true;
   app.className = 'os';
   app.classList.remove('booting');
@@ -140,6 +158,12 @@ export function buildShell() {
   Desktop.mount({ wallpaper: el('wallpaper'), widgets: el('widgets') });
   Notify.mount({ toasts: el('toast-root'), center: el('nc'), onCountChange: (n) => MenuBar.setNotificationCount(n) });
   Notify.buildCenter();
+  // §I7. A child of the desktop, never of the document: anything with a fixed
+  // ancestor is what `tools/shot.mjs` calls pinned. It refuses to come up while
+  // anything is asking for the founder.
+  Saver.unmount();
+  Saver.mount(desk, { isBlocked: () => Modal.isModalOpen() || Tutorial.isActive()
+    || !!S?.narrative?.activeEvent || !!S?.calls?.active || booting });
 
   const o = osSettings();
   Desktop.setWallpaper(o.wallpaper);
@@ -241,6 +265,13 @@ export function registerViews(mods) { viewModules = mods; Console.registerViews(
 // the same sentence: a rail has one gesture, which is show or hide, and
 // `WM.minimize` refuses it by name. Sending it through `setView` gives it that
 // one gesture.
+// The Terminal is a prompt: bringing it forward puts the cursor in it, or the
+// first thing typed goes to the game's hotkeys instead.
+function focusPrompt(id) {
+  if (id !== 'terminal') return;
+  setTimeout(() => { try { WM.bodyOf('terminal')?.querySelector?.('.term-input')?.focus?.({ preventScroll: true }); } catch {} }, 0);
+}
+
 export function toggleFromDock(id) {
   if (!id) return;
   // A rail has one gesture. `WM.toggle` would reach `minimize`, which refuses
@@ -251,6 +282,7 @@ export function toggleFromDock(id) {
   WM.toggle(id);
   if (fresh) { dirty.add(id); paintOne(id); }
   paintNav();
+  if (WM.isVisible(id) && WM.focused() === id) focusPrompt(id);
   paintTopbar();
 }
 
@@ -291,6 +323,7 @@ export function setView(nextId) {
   }
   dirty.add(nextId);
   paintOne(nextId);
+  focusPrompt(nextId);
   paintNav();
   paintTopbar();
   if (nextId === 'wire') syncWireClass();
@@ -344,6 +377,11 @@ export function showWorldConsole() {
   return true;
 }
 
+// §I9. The morning line, in the bar's own notice slot. `ariaSpoke` already
+// draws exactly this — a name, a sentence, six seconds — so this is that, with
+// the speaker's name rather than always hers.
+export function say(who, text) { MenuBar.spoke(who, text); return true; }
+
 export function markSaved() { lastSaveAt = Date.now(); }
 function savedAgo() { return lastSaveAt ? Math.round((Date.now() - lastSaveAt) / 1000) : null; }
 
@@ -380,6 +418,9 @@ export function paintNav() {
 
 export function paintStatus() {
   if (!S) return;
+  // §I5. The act, as a class and a token on `#app`. `applyActChrome` is a
+  // no-op unless the act moved, so this costs nothing on the frame loop.
+  applyActChrome(S);
   MenuBar.paint();
   Desktop.paintWidgets({ mode });
 }
@@ -426,9 +467,45 @@ function paintOne(winId) {
   if (winId === 'wire') { Console.paintFeed(); paintAuthor(); return; }
   if (winId === 'uplink') { paintAuthor(); return; }
   if (winId === 'record') { render(body, RecordApp.render(S)); return; }
+  if (winId === 'contacts') { render(body, ContactsApp.render(S)); return; }
+  if (winId === 'mail') { render(body, MailApp.render(S)); return; }
+  if (winId === 'journal') { renderJournal(body); return; }
+  if (winId === 'calendar') { render(body, CalendarApp.render(S)); return; }
+  if (winId === 'todo') { render(body, ListApp.render(S)); return; }
+  if (winId === 'player') { render(body, PlayerApp.render(S)); return; }
+  if (winId === 'terminal') { renderTerminal(body); return; }
+  if (winId === 'browser') {
+    render(body, BrowserApp.render(S));
+    // The framed press office is told what Aperture did this week, so the
+    // page in the founder's browser and the one the tools read say the same.
+    const f = body.querySelector?.('.web-frame');
+    if (f?.contentWindow) { try { f.contentWindow.postMessage({ type: 'aperture:state', payload: apertureState(S) }, '*'); } catch {} }
+    return;
+  }
   if (winId === 'manual') { renderManual(body); return; }
   if (winId === 'settings') { renderSettings(body); return; }
   if (winId === 'aria') { render(body, `<div class="aria-win">${ariaBody()}</div>`); return; }
+}
+
+// The journal's field holds a draft. Patching around it keeps the draft; a
+// wholesale repaint while the founder is mid-sentence would not.
+function renderJournal(body) {
+  const draft = body.querySelector?.('.jn-field')?.value || '';
+  render(body, JournalApp.render(S));
+  const f = body.querySelector?.('.jn-field');
+  if (f && draft && !f.value) f.value = draft;
+}
+
+// The prompt keeps what is being typed, and the scrollback stays at the foot.
+function renderTerminal(body) {
+  const draft = body.querySelector?.('.term-input')?.value || '';
+  const focused = document.activeElement === body.querySelector?.('.term-input');
+  render(body, TerminalApp.render(S));
+  const input = body.querySelector?.('.term-input');
+  if (input && draft && !input.value) input.value = draft;
+  if (input && focused) { try { input.focus({ preventScroll: true }); } catch {} }
+  const sc = body.querySelector?.('#term-scroll');
+  if (sc) sc.scrollTop = sc.scrollHeight;
 }
 
 function renderManual(body) {
@@ -520,7 +597,7 @@ export async function powerDown() {
 
 export function titleDecor(slot) {
   const saved = Save.peek();
-  if (slot === 'accounts') return loginTilesHtml(saved, { legacy: Save.loadLegacy() });
+  if (slot === 'accounts') return loginTilesHtml(Save.slots(), { legacy: Save.loadLegacy() });
   if (slot === 'post') {
     // The machine's own name, typed at the same pace as the cold open beside
     // it. `WORKSTATION` on a fresh machine; the company's from Act III, which
@@ -602,6 +679,109 @@ function wire() {
   onAction('find', () => Find.toggle());
   onAction('record-find', () => Find.open());
 
+  // ── Contacts ──────────────────────────────────────────────────────────────
+  // Selection is state, saved with the layout, like the Record's.
+  const ctSel = () => ((S.ui ??= {}).os ??= {});
+  onAction('contact-select', (d) => {
+    ctSel().contact = d.v || null;
+    setView('contacts');
+    dirty.add('contacts'); paintOne('contacts'); paintTopbar();
+  });
+  onAction('contact-back', () => {
+    ctSel().contact = null;
+    dirty.add('contacts'); paintOne('contacts');
+  });
+
+  // ── Mail ──────────────────────────────────────────────────────────────────
+  onAction('mail-open', (d) => {
+    const id = Number(d.v);
+    ctSel().mail = id;
+    markRead(S, id);
+    setView('mail');
+    dirty.add('mail'); paintOne('mail'); paintNav(); paintTopbar();
+  });
+  onAction('mail-back', () => { ctSel().mail = null; dirty.add('mail'); paintOne('mail'); });
+  // An envelope in the rail opens the app that holds the whole letter. The
+  // console unfolds it in place because it has nowhere else to put it; here
+  // there is a Mail window, so this is `mail-open` under the rail's name.
+  onAction('feed-letter', (d) => {
+    const id = Number(d.v);
+    ctSel().mail = id;
+    markRead(S, id);
+    setView('mail');
+    dirty.add('mail'); paintOne('mail'); paintFeed(); paintNav(); paintTopbar();
+  });
+  onAction('mail-read-all', () => { markAllRead(S); dirty.add('mail'); paintOne('mail'); paintNav(); paintTopbar(); });
+
+  // ── Journal ───────────────────────────────────────────────────────────────
+  onAction('journal-remove', (d) => {
+    if (!JournalApp.removeNote(S, d.v)) return;
+    markDirty();
+    dirty.add('journal'); paintOne('journal'); paintTopbar();
+  });
+  onAction('journal-focus', () => {
+    setView('journal');
+    setTimeout(() => { try { WM.bodyOf('journal')?.querySelector?.('.jn-field')?.focus?.({ preventScroll: true }); } catch {} }, 60);
+  });
+
+  // ── The list ──────────────────────────────────────────────────────────────
+  // The list is generated; only the ticks are state, and they are keyed by the
+  // day so tomorrow starts blank.
+  onAction('todo-tick', (d) => {
+    toggleTodo(S, d.v);
+    dirty.add('todo'); paintOne('todo'); paintMain(); paintTopbar();
+  });
+  onAction('todo-clear', () => {
+    const t = ((S.ui ??= {}).todoDone ??= { day: Math.floor(S.time.day), ids: {} });
+    t.ids = {};
+    dirty.add('todo'); paintOne('todo'); paintMain(); paintTopbar();
+  });
+
+  // ── The Player ────────────────────────────────────────────────────────────
+  // The bed is a session, not a run, so none of this is saved except the two
+  // settings that already were: `sound` and `ambient`.
+  const actOf = () => S?.company?.act || 1;
+  onAction('player-play', () => {
+    if (S.settings.sound === false) { S.settings.sound = true; setAudio(true); initAudio(); }
+    const on = !Audio.ambientState(actOf).playing;
+    S.settings.ambient = on;
+    setAmbient(on, actOf);
+    try { Save.save(S); } catch {}
+    dirty.add('player'); paintOne('player'); paintTopbar();
+  });
+  onAction('player-bells', () => {
+    Audio.setBells(!Audio.bellsOn());
+    dirty.add('player'); paintOne('player'); paintTopbar();
+  });
+  onAction('player-vol', (d) => {
+    const step = d.v === 'down' ? -0.1 : 0.1;
+    const next = Math.max(0, Math.min(1, (S.settings.volume ?? 0.55) + step));
+    S.settings.volume = next;
+    setVolume(next);
+    try { Save.save(S); } catch {}
+    dirty.add('player'); paintOne('player'); paintTopbar();
+  });
+
+  // ── Calendar, terminal, browser ──────────────────────────────────────────
+  onAction('cal-month', (d) => {
+    const os = ((S.ui ??= {}).os ??= {});
+    os.cal = { ...(os.cal || {}), month: Math.max(0, Number(d.v) || 0), day: null };
+    dirty.add('calendar'); paintOne('calendar');
+  });
+  onAction('cal-day', (d) => {
+    const os = ((S.ui ??= {}).os ??= {});
+    const day = Number(d.v);
+    os.cal = { ...(os.cal || {}), day: os.cal?.day === day ? null : day };
+    dirty.add('calendar'); paintOne('calendar');
+  });
+  const termCtx = () => ({
+    runAction: (name, data) => runAction(name, data),
+    addNote: (t) => { JournalApp.addNote(S, t); dirty.add('journal'); },
+  });
+  onAction('term-clear', () => { TerminalApp.termState(S).lines = []; dirty.add('terminal'); paintOne('terminal'); });
+  onAction('term-run', (d) => { TerminalApp.submit(S, d.v, termCtx()); setView('terminal'); dirty.add('terminal'); paintOne('terminal'); });
+  onAction('web-site', (d) => { ((S.ui ??= {}).os ??= {}).web = d.v; dirty.add('browser'); paintOne('browser'); paintTopbar(); });
+
   onAction('help', () => setView('manual'));
   onAction('settings', () => setView('settings'));
   onAction('ask-aria', () => { dirty.add('aria'); setView('aria'); });
@@ -660,16 +840,20 @@ function wire() {
     try { await navigator.clipboard.writeText(str); toast({ icon: '⌗', title: 'Save copied.', kind: 'good' }); }
     catch { toast({ icon: '⚠', title: 'Could not copy the save.', kind: 'bad' }); }
   });
-  onAction('os-save-import', () => {
-    const v = prompt('Paste save string:');
-    if (v && Save.importSave(v)) location.reload();
+  onAction('os-save-import', () => showImportSave());
+  onAction('os-save-download', () => {
+    if (!Save.downloadSave(S)) { toast({ icon: '⚠', title: 'Nothing to write just now.', sub: 'A forecast is running. Try again in a moment.', kind: 'bad' }); return; }
+    toast({ icon: '⌗', title: 'Save written.', sub: Save.saveFileName(S), kind: 'good' });
   });
-  onAction('os-save-reset', () => {
-    Modal.dialog({ title: 'Abandon this run?', centred: true,
-      body: `<div class="small dim" style="line-height:1.7">The company, the cast and everything you decided go away. Legacy points, perks, achievements and unlocked archetypes are kept.<br><br>There is no undo.</div>`,
-      actions: [{ label: 'Keep playing', cls: 'btn-ghost' },
-        { label: 'Abandon it', cls: 'btn-danger', fn: () => { Save.clearSave(); location.reload(); } }] });
+  onAction('os-save-upload', () => {
+    Save.pickSaveFile((ok, reason) => {
+      if (ok) { location.reload(); return; }
+      if (reason) toast({ icon: '⚠', title: reason, kind: 'bad' });
+    });
   });
+  onAction('os-save-reset', () => showAbandonRun());
+  // A record in the Notification Center offers the window it is about.
+  onAction('os-nc-show', (d) => { Notify.toggleCenter(false); if (d.v) setView(d.v); });
 
   // The rail has a chip in the menu bar; this is the same switch, where a
   // founder goes looking for switches.
@@ -737,6 +921,47 @@ function wire() {
     const t = e.target.closest?.('.mb-title');
     if (t) MenuBar.hoverSwitch(t);
   });
+  // The terminal's prompt. Enter runs the line; up and down walk the history.
+  document.addEventListener('submit', (e) => {
+    const f = e.target.closest?.('[data-term-form]');
+    if (!f) return;
+    e.preventDefault();
+    const input = f.querySelector('.term-input');
+    const text = input?.value || '';
+    if (input) input.value = '';
+    TerminalApp.submit(S, text, termCtx());
+    dirty.add('terminal'); paintOne('terminal'); paintTopbar();
+    setTimeout(() => { try { WM.bodyOf('terminal')?.querySelector?.('.term-input')?.focus?.({ preventScroll: true }); } catch {} }, 0);
+  });
+  let histIx = -1;
+  document.addEventListener('keydown', (e) => {
+    const input = e.target.closest?.('.term-input');
+    if (!input) return;
+    const h = TerminalApp.termState(S).history;
+    if (e.key === 'ArrowUp') { e.preventDefault(); histIx = Math.min(h.length - 1, histIx + 1); input.value = h[histIx] || ''; }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); histIx = Math.max(-1, histIx - 1); input.value = histIx < 0 ? '' : (h[histIx] || ''); }
+    else if (e.key === 'Enter') histIx = -1;
+  });
+
+  // The journal's field, delegated the same way: one listener, any repaint.
+  document.addEventListener('submit', (e) => {
+    const f = e.target.closest?.('[data-jn-form]');
+    if (!f) return;
+    e.preventDefault();
+    const field = f.querySelector('.jn-field');
+    const r = JournalApp.addNote(S, field?.value);
+    if (!r.ok) return;
+    if (field) field.value = '';
+    markDirty();
+    try { Save.save(S); } catch {}
+    dirty.add('journal'); paintOne('journal'); paintTopbar();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || !(e.metaKey || e.ctrlKey)) return;
+    const field = e.target.closest?.('.jn-field');
+    if (field) { e.preventDefault(); field.closest('form')?.requestSubmit?.(); }
+  });
+
   // The Manual's own controls, delegated so a repaint can never orphan them.
   document.addEventListener('click', (e) => {
     const b = e.target.closest?.('[data-man]');
@@ -774,14 +999,19 @@ function wire() {
 
   on('act:advance', ({ act }) => {
     // After the act card, not under it: the wallpaper turning while the card is
-    // still up is the machine noticing before the founder does.
-    setTimeout(() => Desktop.paintWallpaper(act), 900);
+    // still up is the machine noticing before the founder does. The accent goes
+    // with it, for the same reason.
+    setTimeout(() => { applyActChrome(S, { force: true }); Desktop.paintWallpaper(act); }, 900);
     setTimeout(() => { lastAppTitle = ''; MenuBar.paint(); }, 900);
   });
   on('feed', (item) => {
     if (!item?.thread || item.resolved) return;
+    // A decision is worth a line in the record whether or not it was banner-ed:
+    // the Center is what a founder opens to find what they missed.
+    if (item.type !== 'mail') Notify.record({ icon: '⌁', title: 'The Wire needs you', sub: item.text, kind: '', show: 'wire' });
     if (WM.isVisible('wire') || el('app')?.classList?.contains('wire-open')) { Dock.attention('wire'); return; }
-    chromeSfx('notify');
+    // No chime here: §I6 gives every source its own cue in `main.js`, and the
+    // chrome's generic `notify` on top of it was two sounds for one arrival.
     Dock.attention('wire');
     Notify.offerThread(item);
   });
@@ -789,11 +1019,55 @@ function wire() {
   on('aria:says', (line) => MenuBar.ariaSpoke(line));
   on('game:start', () => { dirty.clear(); });
   on('research:done', () => dirty.add('research'));
+  on('call:start', () => dirty.add('contacts'));
+  on('mail', (item) => {
+    dirty.add('mail');
+    // A receipt is filed, not announced: no notice, no bounce, no chime.
+    if (item?.mail?.quiet) return;
+    Notify.record({ icon: '✉', title: item?.meta ? `**${item.meta}**` : 'A letter', sub: item?.author || '', kind: '', show: 'mail' });
+    if (WM.isVisible('mail')) return;
+    Dock.attention('mail');
+  });
+  on('thread:resolved', () => dirty.add('mail'));
+  on('day', () => { if (WM.isVisible('calendar')) dirty.add('calendar'); });
+  // §I8. The Sunday ritual. The week has had seven days in it since the
+  // calendar existed and nothing ever noticed one of them. Once per Sunday, and
+  // never over something that is asking for the founder — a journal window
+  // sliding in front of a card is the machine interrupting a decision.
+  on('day', () => {
+    if (!S || S._offline || S._forecast || booting) return;
+    // Only for a Sunday the founder actually watched pass. `?days=N` runs the
+    // day hooks live and offline catch-up runs hundreds in a second — without
+    // this the machine opened the Journal fifty-seven times during a
+    // fast-forward, which is the same guard the day tick already carries.
+    if (!S.meta?.realtime || document.hidden) return;
+    const day = Math.floor(S.time.day);
+    if (!isSunday(day)) return;
+    const os = ((S.ui ??= {}).os ??= {});
+    if (os.sundayAt === day) return;
+    os.sundayAt = day;
+    // And a wall-clock floor on top of the day floor, because at 5× a Sunday
+    // comes round every ten seconds.
+    const now = Date.now();
+    if (now - lastSunday < 60000) return;
+    lastSunday = now;
+    if (Modal.isModalOpen() || Tutorial.isActive() || S.narrative?.activeEvent || S.calls?.active) return;
+    setView('journal');
+    dirty.add('journal'); paintOne('journal');
+    // `preventScroll`, always: `#app` is a clipped box with the Notification
+    // Center parked off its right edge, and a focus that scrolls it takes the
+    // whole machine sideways with nothing to scroll it back.
+    setTimeout(() => { try { WM.bodyOf('journal')?.querySelector?.('.jn-field')?.focus?.({ preventScroll: true }); } catch {} }, 120);
+  });
+  on('call:end', () => { dirty.add('contacts'); dirty.add('story'); paintMain(); });
   on('doctrine', () => dirty.add('legacy'));
   on('achievement', () => dirty.add('legacy'));
 }
 
 let lastAppTitle = '';
+// §I8. The wall clock behind the Sunday ritual, so a fast clock cannot stack up
+// a Journal every ten seconds.
+let lastSunday = 0;
 
 // Two or four windows, in a row, filling the desktop. It is the only automatic
 // arrangement the machine offers and it is the console's own shape.
@@ -842,6 +1116,7 @@ export function extraViews(st) {
 }
 
 export function escape() {
+  if (Saver.wake()) return true;
   if (Find.isOpen()) { Find.close(); return true; }
   if (Ctx.close()) return true;
   if (MenuBar.closeMenu()) return true;

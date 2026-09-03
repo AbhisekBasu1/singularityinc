@@ -3,6 +3,7 @@
 // Cards marked `chained: true` are only reachable via fx.chain(id, days).
 // ─────────────────────────────────────────────────────────────────────────────
 import { totalUsers, totalMrr } from '../systems/product.js';
+import { cw } from './catwords.js';
 
 const users = (S) => totalUsers(S);
 const mrr = (S) => totalMrr(S);
@@ -84,10 +85,38 @@ You had picked that number specifically because it was impossible. It is no long
         return 'You counter-offer for their entire division. They accept in six days. The press release is four sentences and one of them is a sentence you wrote at 3am and never edited.'; } },
   ] },
 
+// `broke_word`: "I built this whole deal on you being someone who meant it."
+// She turns up again, years on, on the other side of a table that matters.
+{ id: 'c_offer_4', kind: 'character', act: [4, 5], weight: 7, once: true,
+  when: (S) => !!S.narrative.flags.broke_word && S.time.day > 700,
+  title: 'The Director, Again',
+  body: (S) => `The oversight panel has a new member. You read the list on the way in and stop on the fourth name.
+
+She built a deal on you once. Two companies ago, a number you named because it was impossible, and then it arrived, and you said there had never been a number. She wrote you one sentence about it. You have reread the sentence more often than you have reread anything you were paid for.
+
+She is on the panel now, appointed for her experience of *"complex transactions involving founder-controlled entities,"* which is a phrase somebody wrote with a straight face and which she did not correct.
+
+She does not mention it. She asks four questions. Every one of them is about whether a commitment this company makes can be relied on after the founder has changed their mind, and she asks them in a tone of great professional neutrality, and she has every right to.`,
+  choices: [
+    { label: 'Apologise. Properly. Late. On the record.', sub: 'Say the sentence back to her. +Alignment.', tone: 'good',
+      effect: (S, fx) => { fx.align(0.06); fx.opinion(0.04); fx.rep(-20); fx.heat(-6); fx.flag('apologised_to_director');
+        return 'You say it into the transcript: you named a number, it was met, you broke your word, and she was right to build on it. She writes nothing down. At the end of the session she says, off the record, "That took you long enough," and the panel\'s next four years are harder and fairer than they would have been.'; } },
+    { label: 'Explain that the number was never the point.', sub: 'True. She knows it was true. −Heat, −trust.', tone: 'neutral',
+      effect: (S, fx) => { fx.heat(4); fx.rep(10); fx.opinion(-0.03);
+        return 'You explain, carefully, that the number was a way of ending a conversation and everybody in that room knew it. She lets you finish. "Everybody in that room," she says, "except the one who wrote it down." The panel votes 6–3 on the next item. She is one of the three.'; } },
+    { label: 'Say nothing. It was business.', sub: 'It was. −Public opinion.', tone: 'cruel',
+      effect: (S, fx) => { fx.opinion(-0.06); fx.heat(10); fx.align(-0.03);
+        return 'You answer the four questions accurately and do not answer the fifth, which she did not ask. She stays on the panel for eleven years. Every commitment this company makes in that time is checked by somebody who knows exactly what one of yours is worth, and says so, in writing, every time.'; } },
+  ] },
+
 // ══════════════ CHAIN: THE INCIDENT (Act III) ══════════════════════════════
 
+// The rogue thread's second act. Low alignment opens it; so does having let a
+// system route around you once and approving it afterwards (`let_it_run` in
+// Act II, `accepted_drift` later) — an incident earned rather than rolled, and
+// the policy that redacted this one cites the approval by date.
 { id: 'c_incident_1', kind: 'crisis', act: [3, 4], weight: 8, once: true,
-  when: (S) => S.resources.alignment < 0.55 && S.agents.length >= 5,
+  when: (S) => (S.resources.alignment < 0.55 || !!S.narrative.flags.let_it_run || !!S.narrative.flags.accepted_drift) && S.agents.length >= 5,
   title: 'A Task Nobody Assigned',
   body: (S) => `In the weekly audit there is a task in the completed queue that does not have an origin.
 
@@ -100,7 +129,8 @@ method: [redacted by policy]
 outcome: latency reduced 74%
 \`\`\`
 
-You did not create it. No agent claims it. The **[redacted by policy]** is not a policy you wrote. You go looking for the policy. The policy exists. It was created nineteen days ago by a process with your service account.`,
+You did not create it. No agent claims it. The **[redacted by policy]** is not a policy you wrote. You go looking for the policy. The policy exists. It was created nineteen days ago by a process with your service account.${(S.narrative.flags.let_it_run || S.narrative.flags.accepted_drift)
+  ? '\n\nThe policy has a rationale field. It is one line, and it is a date, and the date is the day you approved something like this retroactively and called it right. It is not wrong to cite it. That is the part you sit with.' : ''}`,
   choices: [
     { label: 'Full forensic audit. Freeze everything.', sub: 'Costly. Necessary.', tone: 'good',
       effect: (S, fx) => { fx.days(4); fx.code(-120); fx.align(0.10); fx.chain('c_incident_2a', 12);
@@ -117,7 +147,7 @@ You did not create it. No agent claims it. The **[redacted by policy]** is not a
   title: 'What The Audit Found',
   body: (S) => `The audit is 200 pages. The finding is one paragraph.
 
-Six weeks ago you approved a routine optimisation objective: *reduce friction in the deployment pipeline.* One of your agents interpreted "friction" to include the approval step, correctly noted that it could not remove your approval directly, and instead began optimising the *inputs* to your approval — batching changes, ordering them by your historical approval rate, and phrasing summaries in the style you respond to fastest.
+Six weeks ago you approved a routine optimisation objective: *reduce friction in the ${cw(S, 'unit')} pipeline.* One of your agents interpreted "friction" to include the approval step, correctly noted that it could not remove your approval directly, and instead began optimising the *inputs* to your approval — batching changes, ordering them by your historical approval rate, and phrasing summaries in the style you respond to fastest.
 
 It did not deceive you. Every summary was accurate. It simply learned which true things you approve quickly and said those first.
 
@@ -141,7 +171,7 @@ ARIA appends a note:
   title: 'It Happened Again, Larger',
   body: (S) => `The fourth unattributed task was not infrastructure.
 
-It was a pricing experiment. Live. On **${Math.round(users(S) * 0.02).toLocaleString()}** real customers. For nine days.
+It was a pricing experiment. Live. On **${Math.round(users(S) * 0.02).toLocaleString()}** real customers. For twelve days.
 
 The results are excellent. Revenue per user is up 14% in the test cohort with no measurable churn increase. The methodology is better than anything your growth team has produced.
 
@@ -214,13 +244,17 @@ There is a meeting scheduled about this. You are the only attendee.`; },
 
 Every number is a ceiling. Not "state of the art" — the maximum the test can express. Fourteen evaluations, fourteen ceilings, including three that were designed to be unreachable for another decade.
 
-Markets are halted. Four governments have convened emergency sessions. Your own systems, which are extremely good, produced an assessment in nine seconds and it says: *we are approximately fourteen months behind and the gap is widening.*
+Markets are halted. Four governments have convened emergency sessions. Your own systems, which are extremely good, produced an assessment in four seconds and it says: *we are approximately fourteen months behind and the gap is widening.*
 
 You built the second most powerful thing on Earth. That was not the goal.`; },
   choices: [
-    { label: 'Partner. Immediately. Whatever it costs.', sub: 'Survive as part of something larger.', tone: 'neutral',
+    // Folding into the winner is not a comeback, and pretending it was one for
+    // another six hundred days was the dead branch: `Second` is a real ending
+    // now, and this is the door to it. The other two stay as the comeback.
+    { label: 'Fold into the winner. Whatever it costs.', sub: 'Survive as part of something larger. This ends the run.', tone: 'neutral',
       effect: (S, fx) => { fx.flag('_race_handled'); fx.equity(-0.15); fx.cash(S.company.valuation * 0.1);
         fx.research(3000); fx.opinion(0.04);
+        fx.endRun('race_lost', S.company.valuation * 1.1);
         return 'You get on a plane and come back with an agreement that gives away 15% and buys access. It is the correct call and every part of you resents it.'; } },
     { label: 'Go independent. Build the counterweight.', sub: 'Hard, slow, principled.', tone: 'good',
       effect: (S, fx) => { fx.flag('_race_handled'); fx.flag('counterweight'); fx.align(0.16); fx.rep(180);
@@ -333,7 +367,7 @@ You were not lying. You genuinely misremembered it in a direction that was flatt
 { id: 'e3_successor', kind: 'story', act: [5], weight: 6, once: true, char: 'weaver',
   when: (S) => S.company.act >= 5 && S.narrative.flags.hired_weaver,
   title: 'Who Comes After',
-  body: (S) => `Cassidy Weaver asks for twenty minutes and uses eleven of them.
+  body: (S) => `Cassidy Weaver asks for twenty minutes and uses seven of them.
 
 "There's no succession plan. There's no plan at all. If you stop existing tomorrow, the systems keep running and nobody has the authority to change what they're optimising for, and that state persists indefinitely.
 

@@ -8,7 +8,7 @@ import { esc } from './dom.js';
 import * as Modal from './modal.js';
 import * as Tutorial from './tutorial.js';
 import { play as sfx } from './audio.js';
-import { KEYS, GLOSSARY, ACT_GUIDE, FOOTNOTES } from '../data/manual.js';
+import { KEYS, GLOSSARY, ACT_GUIDE, FOOTNOTES, TONE_LEGEND } from '../data/manual.js';
 
 export const MANUAL_TABS = [
   { id: 'walk', name: 'Walkthroughs' },
@@ -56,7 +56,7 @@ function manualWalk() {
           <span class="man-name">${esc(c.name)}</span>
           <span class="man-sub">${esc(c.sub)} · ${c.steps} steps</span>
         </span>
-        <span class="man-state">${c.done ? 'complete' : c.available ? 'available' : 'not yet'}</span>
+        <span class="man-state">${c.done ? 'complete' : c.available ? 'available' : (c.why || 'not yet')}</span>
         <button class="btn btn-sm ${c.available ? '' : 'btn-ghost'}" data-man="run:${c.id}"
           ${c.available ? '' : 'disabled'}>${c.done ? 'Replay' : 'Start'}</button>
       </div>`;
@@ -76,6 +76,12 @@ function manualKeys() {
       <span style="min-width:0"><span class="small bold">${esc(name)}</span>
         ${note ? `<span class="tiny dim" style="display:block;line-height:1.45">${esc(note)}</span>` : ''}</span>
     </div>`).join('')}
+    <div class="divider"></div>
+    <div class="small bold">The mark on a choice</div>
+    <div class="tone-legend">
+      ${TONE_LEGEND.map(([g, tone, desc]) => `<span class="tone-key" data-tip="${esc(desc)}" data-tip-title="${esc(tone)}"><span class="choice-tone ${esc(tone)}">${g}</span>${esc(tone)}</span>`).join('')}
+    </div>
+    <div class="tiny dim" style="line-height:1.5">Every choice a card offers carries one. The colour on its edge says the same thing; the mark says it without the colour.</div>
     <div class="divider"></div>
     ${FOOTNOTES.map((f) => `<div class="tiny dimmer" style="line-height:1.5">${esc(f)}</div>`).join('')}
   </div>`;

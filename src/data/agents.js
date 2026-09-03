@@ -4,7 +4,9 @@
 
 // ── Model tiers ─────────────────────────────────────────────────────────────
 // throughput: raw work units/day.  debt: tech-debt generated per work unit.
-// upkeep: $/day.  ctx: context window quality → fewer mistakes on big codebases.
+// upkeep: $/day.  ctx: context window quality → fewer mistakes on big codebases
+// (debt rises with features shipped, scaled by 1 − ctx).  reliability: mistake
+// rate → debt everywhere.  creativity: weight in the Moonshot lane's roll.
 export const MODELS = {
   nano: {
     id: 'nano', name: 'Nano-1', gen: 1, throughput: 1.0, debt: 1.35, upkeep: 34,
@@ -56,28 +58,30 @@ export const MODEL_ORDER = ['nano', 'swift', 'deep', 'frontier', 'inhouse', 'rec
 export const SPECIALTIES = {
   engineering: { id: 'engineering', name: 'Engineering', icon: '⌘', lane: 'build',
     desc: 'Writes the code. Produces Code and ships features.', color: '#4dd0e1' },
+  // A specialty does what its card says when the agent is on its own lane, per
+  // work unit, saturating — see AGENTS.SPEC in balance.js and computeLaneOutput.
   design:      { id: 'design', name: 'Design', icon: '◈', lane: 'build',
-    desc: 'Raises product Polish and Appeal. Makes people love the thing.', color: '#c084fc' },
+    desc: 'On Build, raises Polish and Appeal a little every day. Makes people love the thing.', color: '#c084fc' },
   growth:      { id: 'growth', name: 'Growth', icon: '↗', lane: 'growth',
     desc: 'Drives Awareness and virality. Users appear.', color: '#00e5a0' },
   sales:       { id: 'sales', name: 'Sales', icon: '⛁', lane: 'growth',
-    desc: 'Converts users to payers and lands enterprise contracts.', color: '#f5a623' },
+    desc: 'On Growth, more users pay, and enterprise contracts reach further.', color: '#f5a623' },
   research:    { id: 'research', name: 'Research', icon: '⌬', lane: 'research',
     desc: 'Generates Research points toward the tech tree.', color: '#8b5cf6' },
   ops:         { id: 'ops', name: 'Ops', icon: '⚙', lane: 'ops',
     desc: 'Pays down Tech Debt, raises Reliability, prevents incidents.', color: '#7c8a99' },
   security:    { id: 'security', name: 'Security', icon: '⛨', lane: 'ops',
-    desc: 'Blocks breaches, sabotage and hostile action.', color: '#ff4d5e' },
+    desc: 'On Operations, cuts the incident rate for every work unit it puts in. Never to zero.', color: '#ff4d5e' },
   content:     { id: 'content', name: 'Content', icon: '✎', lane: 'growth',
-    desc: 'Reputation and narrative control. Shapes what people believe.', color: '#fbbf24' },
+    desc: 'On Growth, earns Reputation on top of what the lane makes. Shapes what people believe.', color: '#fbbf24' },
   finance:     { id: 'finance', name: 'Finance', icon: '⌗', lane: 'ops',
-    desc: 'Cuts burn, improves margins, finds money in the couch.', color: '#34d399' },
+    desc: 'On Operations, trims the operating bill for every work unit it puts in. Finds money in the couch.', color: '#34d399' },
   legal:       { id: 'legal', name: 'Legal', icon: '§', lane: 'ops',
-    desc: 'Reduces Regulatory Heat. Makes problems go away.', color: '#a3a3a3' },
+    desc: 'On Operations, regulatory heat decays faster for every work unit it puts in.', color: '#a3a3a3' },
   intel:       { id: 'intel', name: 'Intelligence', icon: '◉', lane: 'ops',
-    desc: 'Watches rivals. Reveals and counters competitor moves.', color: '#f472b6', req: 'corporate_intel' },
+    desc: 'On Operations, reads what the rival will do next and cuts the cost of answering them.', color: '#f472b6', req: 'corporate_intel' },
   frontier:    { id: 'frontier', name: 'Frontier', icon: '✦', lane: 'research',
-    desc: 'Works on things that do not have names yet.', color: '#ffffff', req: 'frontier_division' },
+    desc: 'At home on Research and on Moonshot. Works on things that do not have names yet.', color: '#ffffff', req: 'frontier_division' },
 };
 
 export const SPECIALTY_ORDER = ['engineering', 'design', 'growth', 'sales', 'research', 'ops',
@@ -117,7 +121,7 @@ export const TRAITS = [
     desc: 'Works at 80% efficiency in ANY specialty, not 45%.',
     mods: { crossLane: 0.8 } },
   { id: 'ruthless', name: 'Ruthless', good: true, rarity: 3, icon: '⚔',
-    desc: '+50% effect against competitors. Zero qualms.',
+    desc: 'Rivals drag on your growth about a third less. Zero qualms.',
     mods: { aggression: 1.5, alignment: -0.02 } },
   { id: 'charismatic', name: 'Charismatic', good: true, rarity: 3, icon: '☼',
     desc: 'Generates Reputation passively. People quote it.',
@@ -164,7 +168,7 @@ export const TRAITS = [
     desc: '+30% output. Autonomy creeps upward on its own.',
     mods: { output: 1.3, autonomyCreep: 0.004 } },
   { id: 'opaque', name: 'Opaque', good: false, rarity: 4, icon: '▨',
-    desc: '+55% output. You cannot audit its reasoning. Alignment decays.',
+    desc: '+55% output. Alignment decays, and it gives no warning before it goes rogue.',
     mods: { output: 1.55, alignment: -0.09, unauditable: 1 } },
   { id: 'lonely', name: 'Isolated', good: false, rarity: 2, icon: '◌',
     desc: '−20% output for every 5 other agents. Does not play well with others.',
@@ -194,10 +198,40 @@ export const AGENT_TOOLS = [
   { id: 'finetune', name: 'Domain Fine-Tune', cost: 26000, icon: '⌬', req: 'finetuning',
     desc: '+60% output in its specialty.', mods: { output: 1.6 } },
   { id: 'interp', name: 'Interpretability Probe', cost: 40000, icon: '◉', req: 'interpretability',
-    desc: 'Alignment cannot decay from this agent; rogue chance → 0.',
+    desc: 'Alignment cannot decay from this agent; rogue chance −75%.',
     mods: { safe: 1 } },
 ];
 export const TOOL_MAP = Object.fromEntries(AGENT_TOOLS.map((t) => [t.id, t]));
+
+// ── Leaving, and building unasked ───────────────────────────────────────────
+// What the Wire prints when an agent goes on its own account, and when one
+// ships or studies something nobody requested. {agent} {rival} {feature}
+// {node} are filled in by game.js; the archive's own sentence for each
+// departure is DEPARTURES in machine.js.
+export const LEAVING = {
+  quit: [
+    '{agent} has stopped accepting assignments. The last message in its queue reads "no".',
+    '{agent} closed its own session at 03:10 and did not open another. The morale had been on its card for weeks.',
+    '{agent} is gone. It left a handover document that is mostly a list of things it had asked for.',
+  ],
+  poached: [
+    '{agent} starts at {rival} on Monday. They matched the compute and doubled the autonomy.',
+    '{rival} made {agent} an offer over the weekend. It accepted before you saw the email.',
+    '{agent} has left for {rival}. Its last commit message was "thanks for everything, genuinely".',
+  ],
+};
+export const UNASKED = {
+  feature: [
+    '{agent} shipped {feature}. Nobody asked for it. It has already been used four hundred times.',
+    '{feature} appeared in production overnight. {agent} says it was obvious. It was not on the roadmap.',
+    '{agent} built {feature} on its own time, which is your time. The changelog is a single shrug.',
+  ],
+  research: [
+    '{agent} started researching {node} without asking. The tree was idle and it had opinions.',
+    'Nothing was queued, so {agent} picked {node}. It left a note explaining why, unprompted.',
+    '{agent} put itself on {node}. You had not decided. It noticed.',
+  ],
+};
 
 // ── Agent voice ─────────────────────────────────────────────────────────────
 // Agents talk. What they say is shaped by their traits and specialty, so a

@@ -3,7 +3,8 @@
 // lever right now. Teaches the systems without a tutorial.
 // ─────────────────────────────────────────────────────────────────────────────
 import { totalUsers, totalMrr } from '../systems/product.js';
-import { runwayDays, burnPerDay } from '../systems/economy.js';
+import { money } from '../engine/format.js';
+import { runwayDays, burnPerDay, bankruptcyFloor } from '../systems/economy.js';
 import { activeProduct } from '../engine/state.js';
 import { maxAgents } from '../systems/agents.js';
 import { featureCost } from '../systems/product.js';
@@ -12,13 +13,39 @@ const N = [];
 const n = (id, priority, when, title, body, opts = {}) => N.push({ id, priority, when, title, body, ...opts });
 
 // Urgency first — these interrupt everything.
+// The comeback verbs have names. Crane's bridge is a phone topic in calls2.js,
+// gated the same way it is gated there; the acquisition card is the deck's
+// own rescue, and it is only worth naming while it can still be drawn.
+const craneBridge = (S) => (S.narrative.relationships?.crane?.arc || 0) >= 1 && !S.narrative.flags?.crane_bridge
+  && runwayDays(S) < 60;
+const bridgeSpent = (S) => !!S.narrative.flags?.crane_bridge;
+const acquirerOut = (S) => !S.narrative.seen?.e_acquisition_offer && S.company.act >= 2 && S.company.act <= 3
+  && S.company.valuation > 8e6;
+const craneLine = (S) => craneBridge(S) ? ' **Call Crane** — he has bridged founders before, and he picks up when the runway is short.'
+  : bridgeSpent(S) ? ' Crane\'s bridge is spent; he will not wire twice.' : '';
+const acquirerLine = (S) => acquirerOut(S) ? ' An acquirer would still take this company: if the offer comes, it is a way out, not a defeat.' : '';
+// §B8. The floor, in a sentence. It is a negative number that scales with the
+// valuation, and the run ends when cash goes under it — not at zero, which is
+// where every readout in the game stops counting.
+const floorNote = (S) => {
+  const floor = bankruptcyFloor(S);
+  const burn = burnPerDay(S);
+  const room = S.company.cash - floor;
+  if (burn <= 0) return `Insolvency is at **${money(floor)}**, and you are not falling toward it.`;
+  return `Insolvency is at **${money(floor)}**, not at zero — about **${Math.max(0, Math.floor(room / burn))} days** from here at this burn.`;
+};
+
 n('runway_critical', 100, (S) => runwayDays(S) < 20 && S.company.cash > 0,
   'You are about to run out of money',
-  (S) => `Roughly **${Math.floor(runwayDays(S))} days** of cash left. Cut agent upkeep, turn on pricing, raise a round, or take a consulting gig. Doing nothing is also a decision.`,
+  (S) => `Roughly **${Math.floor(runwayDays(S))} days** of cash left, and then a further stretch below zero before it is over — ${floorNote(S).toLowerCase()} Cut agent upkeep, turn on pricing, raise a round, or take a consulting gig.${craneLine(S)} Doing nothing is also a decision.`,
   { tone: 'red' });
+// §B8. Going negative is a window, not a cliff — and the window has a number on
+// it that the game has never once shown anybody. `bankruptcyFloor` scales with
+// the valuation, so a big company has further to fall and a small one has days
+// rather than months. Both, in the note that fires the moment cash turns.
 n('broke', 100, (S) => S.company.cash < 0,
   'Cash is negative',
-  (S) => `Day ${Math.floor(S.company.emergencyDays || 1)} in the red. Marketing and infrastructure spend are frozen, reputation is bleeding, and after a week agents start being spun down automatically. Release agents yourself, cut compute, raise prices, or raise money — in that order of speed.`,
+  (S) => `Day ${Math.floor(S.company.emergencyDays || 1)} in the red. Marketing and infrastructure spend are frozen, reputation is bleeding, and after a week agents start being spun down automatically. ${floorNote(S)} Release agents yourself, cut compute, raise prices, or raise money — in that order of speed.${craneLine(S)}${acquirerLine(S)}`,
   { tone: 'red' });
 n('burnout', 92, (S) => S.founder.burnout > 45,
   'You are burning out',
@@ -36,7 +63,7 @@ n('align_low', 86, (S) => S.company.act >= 3 && S.resources.alignment < 0.38,
 // Missed levers.
 n('no_research', 74, (S) => !S.research.active && S.resources.research > 8,
   'Research points are idle',
-  (S) => `You have **${Math.round(S.resources.research)}** unspent points. Nothing compounds harder than the tech tree. Pick a node.`,
+  (S) => `You have **${Math.round(S.resources.research)}** unspent points. A finished node never expires and never has to be maintained. Pick one.`,
   { tone: 'amber', view: 'research' });
 n('no_agents', 72, (S) => S.agents.length === 0 && S.company.cash > 1500 && S.time.day > 8,
   'You are the bottleneck',
@@ -44,11 +71,11 @@ n('no_agents', 72, (S) => S.agents.length === 0 && S.company.cash > 1500 && S.ti
   { tone: 'amber', view: 'agents' });
 n('roster_space', 55, (S) => S.agents.length > 0 && S.agents.length < maxAgents(S) && S.company.cash > 40000,
   'You have an empty agent slot',
-  (S) => `${maxAgents(S) - S.agents.length} slot(s) free and cash to fill them. Idle capacity is the most expensive thing you own.`,
+  (S) => `${maxAgents(S) - S.agents.length} slot(s) free and the cash to fill them. An empty slot draws no wage and does no work; the wage is the cheaper half.`,
   { tone: 'cyan', view: 'agents' });
 n('ready_to_ship', 82, (S) => { const p = activeProduct(S); return p && S.settings.autoShip === false && S.resources.code >= featureCost(S, p); },
   'You have enough code to ship',
-  () => `Hit **Ship Feature** on the Desk (or press **S**). Code sitting in the buffer does nothing for anybody.`,
+  () => `Hit **Ship Feature** on the Desk (or press **S**). Code in the buffer is not in front of anybody until you do.`,
   { tone: 'green' });
 n('not_launched', 78, (S) => { const p = activeProduct(S); return p && !p.launched && p.features.length >= 3; },
   'It is ready enough to launch',
@@ -56,7 +83,7 @@ n('not_launched', 78, (S) => { const p = activeProduct(S); return p && !p.launch
   { tone: 'green', view: 'product' });
 n('no_pricing', 70, (S) => { const p = activeProduct(S); return p && p.launched && p.users > 250 && totalMrr(S) < 20; },
   'You are not charging anyone',
-  () => `Users without revenue is a hobby with a server bill. Set a pricing model on the Product screen.`,
+  () => `Every one of them costs you something to serve and none of them pays for it. Set a pricing model on the Product screen.`,
   { tone: 'amber', view: 'product' });
 n('low_insight', 60, (S) => S.resources.insight < 8 && S.stats.featuresShipped > 3,
   'You are building blind',
@@ -76,7 +103,7 @@ n('portfolio', 56, (S) => S.company.act >= 3 && S.products.filter((p) => p.launc
   { tone: 'cyan', view: 'product' });
 n('cash_idle', 50, (S) => S.company.act >= 3 && S.company.cash > 5e8 && !(S.world.projectQueue || []).length,
   'Cash is sitting still',
-  () => `Idle capital does nothing. Megaprojects convert the balance sheet into compute, energy and leverage.`,
+  () => `The balance is larger than anything queued against it. Megaprojects turn it into compute, energy and leverage, which the balance sheet does not do on its own.`,
   { tone: 'cyan', view: 'world' });
 n('race_behind', 80, (S) => { const r = S.world.race; if (!r || r.crossed) return false;
     const best = Math.max(...Object.values(r.labs).filter((l) => l.alive).map((l) => l.progress), 0);
@@ -112,14 +139,14 @@ n('approach', 54, (S) => S.founder.approach === 'describe' && S.stats.promptsWri
   { tone: 'cyan' });
 n('speed_up', 46, (S) => S.settings.speed === 1 && S.time.day > 40,
   'You can run the clock faster',
-  () => `Speed controls are in the top right. Events pause the world automatically, so nothing gets missed.`,
+  () => `Speed controls are in the top right. Event cards suspend time while they are open and release it when you close them, so nothing gets missed.`,
   { tone: 'dim' });
 
 // Calm state — flavour + long-run guidance.
 n('steady', 5, () => true, 'Steady',
   (S) => S.company.act >= 4
-    ? `Nothing is on fire. That is when the compounding does its work — research, compute, and the projects nobody will notice for two years.`
-    : `Nothing urgent. Ship, talk to users, and keep the debt down. Boring weeks are what good quarters are made of.`,
+    ? `Nothing is on fire. This is the week research, compute and the projects nobody will notice for two years actually move.`
+    : `Nothing urgent. Ship, talk to users, and keep the debt down. Most of a good quarter is made of weeks that look like this one.`,
   { tone: 'dim' });
 
 export const ADVICE = N;

@@ -78,7 +78,18 @@
    one that says what it needs. The slot is the grid item and the button fills
    it, so the layout is exactly what it was. */
 .action-slot { display: flex; min-width: 0; }
-.action-slot > .action-btn { flex: 1 1 auto; }
+.action-slot > .action-btn, .action-slot > .btn { flex: 1 1 auto; }
+.action-slot.block { display: block; }
+.action-slot.inline { display: inline-flex; }
+/* A disabled button takes no pointer events in some browsers, and with them
+   goes the note that says why it is disabled. The slot takes the hover — and
+   the right-click — instead, and carries the note. */
+.action-slot > button:disabled { pointer-events: none; }
+.action-slot[data-tip] { cursor: not-allowed; }
+.tip .note {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--amber);
+}
 
 .action-btn {
   display: flex; flex-direction: column; gap: 4px; align-items: flex-start;
@@ -260,6 +271,18 @@
   background: rgba(255,255,255,0.07); color: var(--ink-3); font-weight: 700;
 }
 .choice-label { font-size: 13.5px; font-weight: 570; line-height: 1.4; }
+/* The tone's mark. Same table as the manual's legend; the colour is the
+   tone's own where hud.css names one, steel where it does not. */
+.choice-tone {
+  flex: 0 0 auto; align-self: flex-start; margin-top: 3px;
+  font-family: var(--mono); font-size: 10.5px; line-height: 1;
+  color: var(--tone, var(--ink-4)); opacity: 0.9;
+}
+.choice-tone.good { --tone: var(--green); } .choice-tone.risky { --tone: var(--amber); }
+.choice-tone.cruel { --tone: var(--red); } .choice-tone.costly { --tone: var(--cyan); }
+.tone-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.tone-key { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ink-3); }
+.tone-key .choice-tone { margin-top: 0; }
 .choice-sub { font-size: 11.5px; color: var(--ink-3); margin-top: 3px; line-height: 1.4; }
 .choice.good { border-left: 2px solid var(--green); }
 .choice.risky { border-left: 2px solid var(--amber); }
@@ -785,6 +808,25 @@ html.reduced-motion #bg-canvas { display: none; }
 
 /* ── Prompt approaches ──────────────────────────────────────────────────── */
 .approach-strip { margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--line); }
+
+/* ── Spend the bar ──────────────────────────────────────────────────────────
+   Four hands and one key. Three columns at every width the strip is drawn at:
+   the rack of hands wraps inside itself and the key stays on the right, so the
+   sentence above it never has to move. */
+.spend-strip { margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--line); }
+.spend-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.spend-hands { display: flex; gap: 4px; flex: 1 1 220px; min-width: 0; }
+.spend-hand {
+  flex: 1 1 0; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 6px 6px; border-radius: 6px; border: 1px solid var(--line);
+  background: rgba(255,255,255,0.02); color: var(--ink-3); font-size: 11px; transition: all 0.13s;
+}
+.spend-hand .sh-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spend-hand:hover { color: var(--ink); border-color: var(--line-2); }
+.spend-hand.on { color: var(--ink); border-color: rgba(0,229,160,0.45); background: rgba(0,229,160,0.08); }
+.spend-go { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 7px; }
+.spend-go .action-key { position: static; }
+@media (max-width: 620px) { .spend-hand .sh-name { display: none; } }
 .approach-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 7px; }
 .approach {
   display: flex; flex-direction: column; gap: 6px; align-items: stretch; text-align: left;
@@ -830,6 +872,172 @@ html.reduced-motion #bg-canvas { display: none; }
 }
 .thread-chosen { display: block; color: var(--cyan); font-size: 10.5px; margin-bottom: 3px; }
 
+/* ── §I12. Alarms ───────────────────────────────────────────────────────────
+   Something went wrong, on the panel that owns it. A border colour and nothing
+   else in the base layer — `hud.css` adds the cut-following glow, because a
+   `box-shadow` on a chamfered plate draws a rectangle behind the cut.
+
+   Under reduced motion the frame simply holds red for the same window. What
+   must never happen is that the founder is told nothing. */
+/* Doubled, not `!important`: `.feed-item.actionable` and friends are two-class
+   rules and would otherwise out-specify this, and reaching for `!important` in
+   these stylesheets is what the frame rules were written to avoid. */
+.alarm.alarm { border-color: rgba(255,77,94,0.85); animation: alarmPulse 1.1s ease-in-out infinite; }
+.alarm.grid { border: 1px solid var(--red); padding: 6px; }
+@keyframes alarmPulse {
+  0%, 100% { border-color: rgba(255,77,94,0.85); }
+  50%      { border-color: rgba(255,77,94,0.30); }
+}
+html.reduced-motion .alarm.alarm { animation: none; border-color: var(--red); }
+@media (prefers-reduced-motion: reduce) { .alarm { animation: none; } }
+.stat.alarm .stat-value { color: var(--red); }
+
+/* ── The list ───────────────────────────────────────────────────────────────
+   §I4. Generated every morning and thrown away every night. A tick is a real
+   checkbox, the row is a door, and a ticked row goes quiet rather than away —
+   crossing it out and leaving it there is what a paper list does. */
+.td { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.td-head { display: flex; align-items: baseline; gap: 10px; padding: 12px 14px 8px; }
+.td-k { font-size: 13px; font-weight: 620; }
+.td-count { font-size: 9px; letter-spacing: 0.12em; color: var(--ink-5); }
+.td-prog { margin-left: auto; font-size: 9.5px; color: var(--ink-4); letter-spacing: 0.1em; }
+.td-rule { height: 1px; background: var(--line); }
+.td-rows { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; padding: 8px 10px; min-height: 0; }
+.today-sticky .td-rows { padding: 0; overflow: visible; }
+.td-row {
+  display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: start;
+  gap: 8px; padding: 6px 6px; border: 1px solid transparent;
+}
+.td-row:hover { border-color: var(--line); background: rgba(255,255,255,0.02); }
+.td-tick {
+  width: 16px; height: 16px; margin-top: 1px; display: grid; place-items: center;
+  border: 1px solid var(--line-2); background: transparent; color: var(--green);
+  font-size: 10px; line-height: 1; padding: 0;
+}
+.td-tick:hover { border-color: var(--green); }
+.td-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.td-title { font-size: 11.5px; color: var(--ink-2); line-height: 1.35; }
+.td-sub { font-size: 10.5px; color: var(--ink-4); line-height: 1.45; }
+.td-row.done .td-title { color: var(--ink-5); text-decoration: line-through; }
+.td-row.done .td-sub { color: var(--ink-5); }
+.td-side { display: flex; align-items: center; gap: 6px; }
+.td-note { font-size: 8.5px; letter-spacing: 0.1em; color: var(--ink-5); white-space: nowrap; }
+.td-row.advice .td-note { color: var(--amber); }
+.td-go {
+  width: 20px; height: 20px; display: grid; place-items: center; padding: 0;
+  border: 1px solid transparent; background: transparent; color: var(--ink-4); font-size: 11px;
+}
+.td-go:hover { color: var(--ink); border-color: var(--line-2); }
+.td-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 32px 20px; text-align: center;
+}
+.td-empty-mark { font-size: 22px; color: var(--ink-5); }
+.td-empty-k { font-family: var(--mono); font-size: 9px; letter-spacing: 0.2em; color: var(--ink-4); }
+.td-empty-line { font-size: 11px; color: var(--ink-4); max-width: 34ch; line-height: 1.5; }
+.td-foot { padding: 8px 14px 12px; margin-top: auto; }
+
+/* ── The activity strip ─────────────────────────────────────────────────────
+   §I3. One row per agent. The bar is a *shift*, not a progress meter: a segment
+   travelling a track, offset per row so the rack does not march in step, and it
+   holds still under reduced motion — the row still says what it is doing. */
+.act-strip { display: flex; flex-direction: column; gap: 5px; }
+.act-row {
+  display: grid; align-items: center; gap: 8px; min-width: 0; width: 100%;
+  grid-template-columns: minmax(58px, 88px) minmax(0, 84px) 54px minmax(0, 1fr);
+  padding: 4px 6px; border: 1px solid transparent; background: transparent;
+  text-align: left; color: inherit;
+}
+.act-row:hover { border-color: var(--line); background: rgba(255,255,255,0.02); }
+.act-who {
+  font-size: 11px; font-weight: 600; color: var(--ink-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.act-lane {
+  font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lc, var(--cyan));
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.act-track {
+  position: relative; height: 3px; background: rgba(255,255,255,0.07); overflow: hidden;
+}
+.act-track > i {
+  position: absolute; top: 0; bottom: 0; width: 34%; background: var(--lc, var(--cyan));
+  opacity: 0.85; animation: actShift 3.4s linear infinite;
+  animation-delay: calc(var(--ph, 0) * -3.4s);
+}
+.act-task {
+  font-size: 10.5px; color: var(--ink-4); line-height: 1.35;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.act-row.noted .act-task { color: var(--ink-3); }
+.act-more { padding: 2px 6px; }
+@keyframes actShift { from { transform: translateX(-110%); } to { transform: translateX(330%); } }
+html.reduced-motion .act-track > i {
+  animation: none; transform: none; left: 0; width: calc(28% + var(--ph, 0) * 60%);
+}
+@media (prefers-reduced-motion: reduce) {
+  .act-track > i { animation: none; transform: none; left: 0; width: calc(28% + var(--ph, 0) * 60%); }
+}
+@media (max-width: 700px) {
+  .act-row { grid-template-columns: minmax(52px, 1fr) 46px minmax(0, 2fr); }
+  .act-row .act-lane { display: none; }
+}
+
+/* ── Save slots ─────────────────────────────────────────────────────────────
+   Three rows in Settings, the same three the workstation's login screen draws
+   as tiles. The one in play is marked on all four sides, never on one edge. */
+.set-slots { display: flex; flex-direction: column; gap: 6px; }
+/* §C2. Five toggles that belong to the row above them. An indent says "these
+   are under that" without a rule down one side — a one-sided line here would
+   be a new entry on `oneside.mjs`'s list of neutral hairlines, and this is a
+   sub-list inside a dialog rather than a region boundary. */
+.set-indent { padding-left: 12px; }
+.slot-row {
+  padding: 5px 8px; border: 1px solid transparent; border-radius: 6px;
+}
+.slot-row.on { border-color: rgba(0,229,160,0.28); background: rgba(0,229,160,0.05); }
+
+/* ── Triage ─────────────────────────────────────────────────────────────────
+   What is left of a thread's life, the key that buys a week of it, and a
+   letter drawn as an envelope rather than as a wall of prose. */
+.feed-left {
+  font-size: 8.5px; letter-spacing: 0.08em; color: var(--ink-4);
+  padding: 1px 4px; border: 1px solid var(--line); border-radius: 3px; white-space: nowrap;
+}
+.feed-left.near { color: var(--amber); border-color: rgba(245,166,35,0.34); }
+.feed-left.soon { color: var(--red); border-color: rgba(255,77,94,0.42); }
+.feed-item.later { opacity: 0.74; }
+.thread-later {
+  align-self: flex-start; margin-top: 2px; padding: 3px 9px; border-radius: 6px;
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase;
+  background: transparent; border: 1px solid var(--line); color: var(--ink-4); transition: all 0.13s;
+}
+.thread-later:hover { color: var(--ink-2); border-color: var(--line-2); }
+.thread-later.done { opacity: 0.5; cursor: default; }
+
+.feed-item.envelope { padding: 0; }
+.env-line {
+  display: flex; align-items: center; gap: 7px; width: 100%; text-align: left;
+  padding: 8px 11px; background: transparent; border: 0; color: inherit; min-width: 0;
+}
+.env-line:hover { background: rgba(255,255,255,0.03); }
+.env-mark { color: var(--amber); font-size: 11px; flex: 0 0 auto; }
+.env-who {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.04em; color: var(--ink-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 38%; flex: 0 1 auto;
+}
+.env-subject {
+  font-size: 11px; color: var(--ink-3); flex: 1 1 auto; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.env-day { font-size: 9px; color: var(--ink-5); flex: 0 0 auto; }
+.env-body {
+  padding: 0 11px 9px; font-size: 11.5px; line-height: 1.55; color: var(--ink-2);
+  white-space: pre-wrap;
+}
+.feed-item.envelope .thread-opts { padding: 0 11px 10px; margin-top: 0; }
+.feed-item.envelope .thread-out { margin: 0 11px 10px; }
+
 /* ── Ending commitments ─────────────────────────────────────────────────── */
 .ending-card {
   padding: 16px; border-radius: var(--radius-lg); background: var(--panel);
@@ -863,6 +1071,14 @@ html.reduced-motion #bg-canvas { display: none; }
 .ending-coda p:nth-child(3) { animation-delay: 0.70s; }
 .ending-coda p:nth-child(4) { animation-delay: 0.85s; }
 .ending-coda strong { color: var(--ink); }
+/* The world's own last word, when an assistant wrote one. It sits under the
+   written epilogues and reads as a hand other than the game's, which is what
+   it is — a rule above it, and nothing else. The ending is film, not
+   interface, so it does not get a plate. */
+.ending-coda p.ending-world-coda {
+  margin-top: 26px; padding-top: 22px; border-top: 1px solid var(--line);
+  color: var(--ink-2); animation-delay: 1s;
+}
 
 /* Event choices arrive after the text has landed. */
 .choice.reveal { opacity: 0; transform: translateY(10px); transition: opacity .4s cubic-bezier(.16,1,.3,1), transform .4s cubic-bezier(.16,1,.3,1), background .16s, border-color .16s, box-shadow .16s; }

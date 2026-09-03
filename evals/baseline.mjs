@@ -124,7 +124,11 @@ const FACTS = [
     what: `the regulator's own limit this act (\u00b1${heatCap})`,
     why: 'no screen states a bound on how hard the world may push',
     domProbe: new RegExp(`\\u00b1\\s*${heatCap}\\b`),
-    toolProbe: new RegExp(`${heatCap}`), viaTool: 'regulator_pressure description' },
+    // Matched against the *briefing*, where a live ceiling belongs — a bare
+    // number tested against the whole payload used to pass on whatever else
+    // happened to contain those digits, and did, until a new line in the
+    // briefing displaced it. The probe names the field now.
+    toolProbe: new RegExp(`\u00b1${heatCap} heat`), viaTool: 'briefing.youMay.regulators' },
 
   { id: 'rate_left',
     what: 'how many cards the world has left in its window',

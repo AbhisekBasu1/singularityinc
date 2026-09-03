@@ -2,7 +2,7 @@
 // NARRATIVE — draws cards from the deck, applies consequences, tracks arcs.
 // ─────────────────────────────────────────────────────────────────────────────
 import { EVENTS, EVENT_MAP } from '../data/events.js';
-import { EVENTS as EB } from '../data/balance.js';
+import { EVENTS as EB, TIME } from '../data/balance.js';
 import { CHARACTERS } from '../data/characters.js';
 import { computeMods, markDirty } from './modifiers.js';
 import { rel, setFlag } from '../engine/state.js';
@@ -11,6 +11,9 @@ import { clamp } from '../engine/format.js';
 import { emit } from '../engine/bus.js';
 import { fireAgent } from './agents.js';
 import { totalUsers } from './product.js';
+import { keptEvents } from './keep.js';
+import { measure, steer } from './director.js';
+import { tired } from './life.js';
 
 // ── The world-author seam ───────────────────────────────────────────────────
 // An assistant, when one is present, gets first refusal on the slot the deck is
@@ -24,7 +27,9 @@ export function registerWorldAuthor({ offerSlot, hydrate } = {}) {
   hydrateFn = hydrate || null;
 }
 
-export function makeFx(S) {
+// `card` is the event whose choice is spending this collector, when there is
+// one. `relate` reads its `char` to decide whether a nudge is an introduction.
+export function makeFx(S, card = null) {
   const fx = {
     _log: [],
     cash: (n) => { S.company.cash += n; fx._log.push(['cash', n]); },
@@ -45,7 +50,7 @@ export function makeFx(S) {
     // Granted capacity. The loop rebuilds `computeCap` from modifiers every
     // frame, so a grant has to land here rather than on the cap itself.
     compute: (n) => { S.resources.computeGranted = Math.max(0, (S.resources.computeGranted || 0) + n); fx._log.push(['compute', n]); },
-    control: (n) => { S.world.controlPoints = (S.world.controlPoints || 0) + n; fx._log.push(['control', n]); },
+    control: (n) => { S.world.controlPoints = (S.world.controlPoints || 0) + n * computeMods(S).controlRate; fx._log.push(['control', n]); },
     users: (n) => {
       const p = S.products.find((x) => x.id === S.activeProductId) || S.products.find((x) => x.launched);
       if (p) { p.users = Math.max(0, p.users + n); fx._log.push(['users', n]); }
@@ -61,16 +66,23 @@ export function makeFx(S) {
     unlock: (k) => { S.unlocks[k] = true; markDirty(); },
     achieve: (k) => emit('achieve', k),
     chance: (p) => chance(p),
+    // A nudge is not an introduction. `met` is what puts a person in Contacts
+    // and makes them callable, and it used to be set by every relate — so a
+    // milestone that warmed three people the founder had never spoken to put
+    // all three on the phone, and Crane's pass could arrive for a meeting that
+    // never happened. It is set only when this is that person's own scene
+    // (the card's `char`), or when the call says so by name.
     relate: (id, delta) => {
       const r = rel(id, S);
       if (delta.met !== undefined) r.met = delta.met;
+      else if (card && card.char === id) r.met = true;
       if (delta.affinity) r.affinity += delta.affinity;
       if (delta.respect) r.respect += delta.respect;
       if (delta.fear) r.fear += delta.fear;
       if (delta.arc !== undefined) r.arc = Math.max(r.arc, delta.arc);
-      r.met = true;
       fx._log.push(['rel:' + id, delta.affinity || 0]);
     },
+    meet: (id) => fx.relate(id, { met: true }),
     competitorHit: (frac) => {
       for (const c of S.market.competitors) {
         if (c.status !== 'active') continue;
@@ -135,7 +147,10 @@ function drawCap(e) {
 // preconditions are false, is never legal at any level.
 export function eligibleEvents(S, relax = 0) {
   const out = [];
-  for (const e of EVENTS) {
+  // The written deck, and the cards the founder kept from a world that wrote
+  // them. A kept card is `once`, act-gated, and faced only if that person has
+  // been met this timeline — all of which the loop below already enforces.
+  for (const e of EVENTS.concat(keptEvents(S))) {
     if (e.chained) continue;          // only reachable via fx.chain()
     if (e.once && S.narrative.seen[e.id]) continue;
     if (e.act && !e.act.includes(S.company.act)) continue;
@@ -229,6 +244,9 @@ export function drawEvent(S, force) {
   if (prio.length) return prio[0];
   if (force) return pick(pool);
   const m = computeMods(S);
+  // The director reads the last few cards once per draw and leans on the
+  // weights: a run of crises eases, a long silence favours a face.
+  const beat = measure(S);
   const weights = pool.map((e) => {
     let w = e.weight || 1;
     // Fatigue. Each previous firing of this exact card halves its odds, so a
@@ -237,6 +255,7 @@ export function drawEvent(S, force) {
     w *= Math.pow(EB.FATIGUE, drawCount(S, e.id));
     if (m.luck && (e.kind === 'opportunity' || e.kind === 'milestone')) w *= 1 + m.luck;
     if (m.luck && e.kind === 'crisis') w *= Math.max(0.3, 1 - m.luck * 0.5);
+    w *= steer(S, e, beat);
     return w;
   });
   return weightedPick(pool, weights);
@@ -251,15 +270,32 @@ export function presentEvent(S, e) {
     title: safeCall(e.title, S, '', n),
     kind: e.kind,
     char: e.char,
+    // A scene with more than one of the cast in it. `char` stays the primary
+    // and keeps the portrait plate; `chars` is the small strip beside it, and
+    // it may be a function because a dinner's guest list is a read of the run.
+    ...(e.chars ? { chars: safeCall(e.chars, S, []) } : {}),
     body: safeCall(e.body, S, '', n),
+    // A kept card resolves through the world's own hydrate, bounded at
+    // landing; `runtime` is the door `resolveChoice` already knows.
+    ...(e.kept ? { runtime: e.runtime, kept: true, author: 'kept' } : {}),
     // `oi` is the choice's index in the authored card. The legal list is
     // re-derived at resolve time, and an assistant's tool call can move the
     // world while the card is open; without the identity, button 2 could
     // resolve as choice 3 if a `req` flipped in between.
+    // `req` receives the showing count too, so an escalating card can stop
+    // offering a door on its final rung. Everything that only wanted `S`
+    // ignores the second argument.
     choices: (e.choices || []).map((c, oi) => ({ c, oi }))
-      .filter(({ c }) => !c.req || safeCall(c.req, S, false))
+      .filter(({ c }) => !c.req || safeCall(c.req, S, false, n))
+      // §A19. `sub` is the line under a choice that says what it costs. Below
+      // `LIFE.SLEEP_JUDGEMENT` the founder does not get it — the plate shows
+      // the doors and not the prices. Nothing about the choice changes; what
+      // changes is whether you can read it. The Life panel says `SUBS HIDDEN ·
+      // SLEEP` so it is legible that legibility is what has gone, rather than
+      // looking like a bug.
       .map(({ c, oi }, i) => ({
-        i, oi, label: safeCall(c.label, S, '', n), sub: safeCall(c.sub, S, '', n), tone: c.tone || 'neutral',
+        i, oi, label: safeCall(c.label, S, '', n),
+        sub: tired(S) ? '' : safeCall(c.sub, S, '', n), tone: c.tone || 'neutral',
       })),
     outcome: null,
   };
@@ -275,23 +311,28 @@ export function resolveChoice(S, index) {
   if (!e) { S.narrative.activeEvent = null; return null; }
   // What was offered is what resolves — by identity where the card carries it,
   // by position only for a save that predates the field.
-  const offered = active.choices?.[index];
-  const choice = offered && Number.isInteger(offered.oi)
-    ? (e.choices || [])[offered.oi]
-    : (e.choices || []).filter((c) => !c.req || safeCall(c.req, S, false))[index];
-  if (!choice) return null;
-
-  const fx = makeFx(S);
   // Read before `markEventHandled` bumps it: an effect asking "how many times
   // has this happened" means the showings *before* this one, which is the same
   // number the body was rendered with.
   const n = drawCount(S, e.id);
+  const offered = active.choices?.[index];
+  const choice = offered && Number.isInteger(offered.oi)
+    ? (e.choices || [])[offered.oi]
+    : (e.choices || []).filter((c) => !c.req || safeCall(c.req, S, false, n))[index];
+  if (!choice) return null;
+
+  const fx = makeFx(S, e);
   let outcome = '';
   try { outcome = choice.effect ? (choice.effect(S, fx, n) || '') : ''; }
   catch (err) { console.error('[event effect]', e.id, err); }
 
-  const written = !!active.runtime;
+  const written = !!active.runtime && !active.kept;
   markEventHandled(S, active);
+  // A kept card is once per timeline, and the only proof it was dealt is here.
+  if (active.kept) {
+    S.narrative.seen[active.id] = true;
+    (S.narrative.count ??= {})[active.id] = (S.narrative.count[active.id] || 0) + 1;
+  }
   S.narrative.choicesMade++;
   S.stats.eventsResolved++;
   const choiceLabel = typeof choice.label === 'function' ? choice.label(S, n) : choice.label;
@@ -299,7 +340,9 @@ export function resolveChoice(S, index) {
     day: Math.floor(S.time.day), id: e.id, title: active.title || safeCall(e.title, S, '', n),
     choice: choiceLabel,
     outcome, char: e.char, kind: e.kind, tone: choice.tone || 'neutral',
-    effects: fx._log.slice(), ...(written ? { author: 'world' } : {}),
+    effects: fx._log.slice(),
+    // A world card keeps its data on the entry, so it can be kept from the Log.
+    ...(written ? { author: active.author || 'world', runtime: active.runtime } : active.kept ? { author: 'kept' } : {}),
   });
   trimJournal(S);
 
@@ -337,13 +380,24 @@ export function scheduleNext(S) {
   S.narrative.nextEventDay = S.time.day + base * jitter;
 }
 
+// §A22. The real-time floor exists so a fast clock is not a slideshow of
+// modals. It was a flat 26 seconds, which at 5× is about eighteen game days
+// between cards against the four the deck is written for — measured, a player
+// at 5× met roughly 40% of the deck a player at 1× met, and the whole pacing
+// pass was done at headless speed where this gate does not exist at all. It
+// scales with the speed now, so the density per *game day* is the same at every
+// speed, with an absolute floor underneath so two cards can never land in the
+// same breath. The auto-throttle in `ui/transport.js` is the other half: a card
+// that opens at 5× drops the clock to 1× while it is on the table.
 function realGateOk(S, priority) {
   if (!S.meta?.realtime) return true;   // headless simulation / offline catch-up
   if (S._agentDriven) return true;      // days the assistant is running, not the clock
   const now = Date.now();
   const last = S.narrative.lastEventReal || 0;
-  const floor = (priority ? EB.MIN_REAL_SECONDS_PRIORITY : EB.MIN_REAL_SECONDS) * 1000;
-  return now - last >= floor;
+  const speed = TIME.SPEEDS[clamp((S.settings?.speed || 1) - 1, 0, TIME.SPEEDS.length - 1)] || 1;
+  const base = priority ? EB.MIN_REAL_SECONDS_PRIORITY : EB.MIN_REAL_SECONDS;
+  const hard = priority ? EB.MIN_REAL_SECONDS_PRIORITY_FLOOR : EB.MIN_REAL_SECONDS_FLOOR;
+  return now - last >= Math.max(hard, base / speed) * 1000;
 }
 
 export function tickNarrative(S) {

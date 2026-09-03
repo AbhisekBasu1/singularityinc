@@ -150,12 +150,12 @@ await stop();
 
 // ── 3. the numbers ─────────────────────────────────────────────────────────
 const ROWS = [
-  ['TOOL SELECTION · TOP-1', '74%', 'green'],
+  ['TOOL SELECTION · TOP-1', '76%', 'green'],
   ['PHRASES THAT REACH NO TOOL', '0', 'green'],
   ['FACTS NO DOM AGENT CAN REACH', '8 / 8', 'green'],
   ['WORLD ACTIONS WITH NO DOM PATH', '5 / 5', 'green'],
   ['WORST LEGAL WORLD vs CONTROL', 'ACT III · D479 vs D437', 'ink'],
-  ['AUTHORED CHOICES BEHIND THE CEILINGS', '3,575 EXECUTIONS', 'ink'],
+  ['AUTHORED CHOICES BEHIND THE CEILINGS', '8,340 EXECUTIONS', 'ink'],
 ];
 await page.setContent(SHELL(`
   <div class="mono" style="font-size:12px;color:var(--green);margin-bottom:30px">EVALS · EVERY GATE FAILS THE BUILD</div>

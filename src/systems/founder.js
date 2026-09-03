@@ -1,13 +1,15 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // FOUNDER — your finite, precious attention. The core Act I resource.
 // ─────────────────────────────────────────────────────────────────────────────
-import { FOUNDER, CODE } from '../data/balance.js';
+import { FOUNDER, CODE, LIFE } from '../data/balance.js';
 import { computeMods, markDirty } from './modifiers.js';
+import { tickLife, healthMult, sleepShift, tired } from './life.js';
 import { clamp, soften } from '../engine/format.js';
 import { rand, chance } from '../engine/rng.js';
 import { emit } from '../engine/bus.js';
 import { APPROACHES, APPROACH_MAP, shiftedBands } from '../data/approaches.js';
-import { computeLaneOutput } from './agents.js';   // agents.js does not import this file
+import { computeLaneOutput, reviewLoad } from './agents.js';   // agents.js does not import this file
+import { hangUp } from './calls.js';   // nothing calls.js reaches imports this file
 
 export const ALLOCATIONS = [
   { id: 'build', name: 'Build', icon: '⌘', color: '#4dd0e1',
@@ -21,6 +23,13 @@ export const ALLOCATIONS = [
   { id: 'rest', name: 'Rest', icon: '☾', color: '#7c8a99',
     desc: 'Sleep, eat, see a person. Restores Focus. You will resent every hour of it.' },
 ];
+
+// The Handover's second commitment takes your hands off the company for ninety
+// days. Every direct action refuses while the hold runs — the company keeps
+// building, the agents keep working, and the only thing that stops is you.
+export function steppedBack(S) {
+  return !!S?.narrative?.flags?.founder_stepped_back && !S?.ending;
+}
 
 export function focusMultiplier(S) {
   const f = S.founder.focus / Math.max(1, S.founder.focusMax);
@@ -54,6 +63,12 @@ export function setAllocation(S, key, value) {
 // Per-day founder contribution
 export function founderOutput(S, m = computeMods(S)) {
   const a = S.founder.allocation;
+  // §A4. The review line, paid out of the day's regeneration before anything
+  // else. `reviewLoad` is pure — this function is rendered seven times a second
+  // by the Desk — and `paid` is never more than the regeneration itself, so
+  // the delta can be worsened by the roster but never turned into a second
+  // drain on top of the work of the day.
+  const review = reviewLoad(S, m);
   const fm = focusMultiplier(S);
   const sk = S.founder.skills;
   const hours = FOUNDER.MAX_HOURS;
@@ -68,20 +83,35 @@ export function founderOutput(S, m = computeMods(S)) {
     reputation: a.growth * hours * (FOUNDER.REP_HOUR_BASE
       + sk.vision * FOUNDER.REP_VISION_RATE) * m.repRate * fm,
     research: 0, // handled in research system via allocation
-    focusDelta: (a.rest * FOUNDER.FOCUS_REGEN_PER_DAY * FOUNDER.REST_REGEN_MULT * m.focusRegen)
+    // Health is the floor under the regeneration term and only that term: a
+    // worn founder still spends the day, they just get less of it back.
+    focusDelta: (a.rest * FOUNDER.FOCUS_REGEN_PER_DAY * FOUNDER.REST_REGEN_MULT * m.focusRegen * healthMult(S))
+              - review.paid
               - ((1 - a.rest) * FOUNDER.WORK_FOCUS_DRAIN
                 * (1 + S.company.act * FOUNDER.ACT_FOCUS_DRAIN_GROWTH)),
+    review,
   };
 }
 
 export function tickFounder(S, days, m = computeMods(S)) {
   const o = founderOutput(S, m);
+  // §A4. The day's reading, for the two views that print it and the two bots
+  // that budget against it. Transient — `save.js` strips it beside `_specFx`,
+  // and `reviewState` recomputes it purely when it is not there.
+  // `ids` is an array rather than the Set `reviewLoad` works in: the state is
+  // deep-copied by `forecast` and `preview`, and a JSON copy turns a Set into
+  // an empty object with no `has` on it.
+  S._review = { need: o.review.need, paid: o.review.paid, budget: o.review.budget,
+                covered: o.review.covered, total: o.review.total,
+                ids: [...o.review.uncovered] };
   S.founder.focusMax = FOUNDER.START_FOCUS + m['+focusMax'];
   S.founder.focus = clamp(S.founder.focus + o.focusDelta * days, 0, S.founder.focusMax);
+  const life = tickLife(S, days, o);
 
   if (!m.noBurnout) {
     if (S.founder.focus < FOUNDER.BURNOUT_THRESHOLD) {
-      S.founder.burnout = clamp(S.founder.burnout + FOUNDER.BURNOUT_GAIN_PER_DAY * days, 0, 100);
+      const worn = 1 + (LIFE.BURNOUT_HEALTH_MULT - 1) * (1 - clamp(life.health, 0, 1));
+      S.founder.burnout = clamp(S.founder.burnout + FOUNDER.BURNOUT_GAIN_PER_DAY * worn * days, 0, 100);
       if (S.founder.burnout > FOUNDER.BURNOUT_EVENT_THRESHOLD
           && chance(FOUNDER.BURNOUT_EVENT_CHANCE * days)) emit('founder:burnout', {});
     } else {
@@ -94,6 +124,7 @@ export function tickFounder(S, days, m = computeMods(S)) {
       S.founder.allocation = { build: FOUNDER.RECOVERY_BUILD_SHARE,
         users: FOUNDER.RECOVERY_USERS_SHARE, growth: FOUNDER.RECOVERY_GROWTH_SHARE,
         learn: FOUNDER.RECOVERY_LEARN_SHARE, rest: FOUNDER.RECOVERY_REST_SHARE };
+      collapse(S);
       markDirty();
       emit('founder:collapse', {});
     }
@@ -106,6 +137,42 @@ export function tickFounder(S, days, m = computeMods(S)) {
     }
   } else { S.founder.burnout = 0; S.founder.recovering = false; }
   return o;
+}
+
+// §A19. What a collapse actually costs, beyond a reorganised schedule.
+//
+// Three things, and the second and third are the point: the days are the
+// obvious cost, but what a founder loses by going down is *continuity* — the
+// call they were going to take, and every doctrine streak that was measured in
+// consecutive days. `held` counters in `S.doctrines.streak` go back to zero;
+// doctrines already **earned** are untouched, because a lapse is a different
+// mechanic with its own clock (`tickDoctrines`) and a collapse is not a
+// character judgement about whether you are still Relentless.
+//
+// Guarded by `!S._offline` for the same reason the emergency spin-down is:
+// offline catch-up runs hundreds of these rolls in a second, and coming back
+// to a fortnight taken out of the calendar you did not watch happen is a
+// punishment for closing a tab. Everything else about the recovery still runs.
+function collapse(S) {
+  if (S._offline) return null;
+  const lost = [];
+  S.time.day += LIFE.COLLAPSE_DAYS;
+  // A ring is a call somebody made that nobody picked up. It does not get to
+  // hold the clock through four days in bed — and it goes through `hangUp`
+  // rather than nulling `S.calls.active`, because that is the one path that
+  // writes the call into the log, stamps `lastCallDay` and emits `call:end`,
+  // which is what closes the plate and releases the transport. A cleared
+  // pointer would leave a modal on screen with nothing behind it.
+  const call = S.calls?.active;
+  if (call && !call.done && call.by !== 'founder') {
+    (call.rounds ||= []).push({ who: 'line', text: 'Nobody picks up.', day: Math.floor(S.time.day) });
+    try { hangUp(S, { accept: false }); } catch (e) { S.calls.active = null; }
+    lost.push('call');
+  }
+  // Every streak that was counting consecutive days is counting again.
+  const streak = S.doctrines?.streak;
+  if (streak) for (const k of Object.keys(streak)) { if (streak[k] > 0) { streak[k] = 0; lost.push(k); } }
+  return { days: LIFE.COLLAPSE_DAYS, lost };
 }
 
 export function gainXp(S, amount) {
@@ -148,6 +215,7 @@ function directFloor(S, m, focusSpent) {
 }
 
 export function actionWriteCode(S, m = computeMods(S)) {
+  if (steppedBack(S)) return { ok: false, reason: 'stepped-back' };
   if (S.founder.focus < CODE.MANUAL_FOCUS_COST) return { ok: false, reason: 'focus' };
   const raw = CODE.MANUAL_PER_CLICK * (FOUNDER.MANUAL_BASE
     + S.founder.skills.engineering * FOUNDER.MANUAL_ENGINEERING_RATE)
@@ -184,6 +252,7 @@ export function promptCost(S, m = computeMods(S), approach = currentApproach(S))
 }
 
 export function actionPromptAI(S, m = computeMods(S)) {
+  if (steppedBack(S)) return { ok: false, reason: 'stepped-back' };
   const approach = currentApproach(S);
   const c = promptCost(S, m, approach);
   if (S.founder.focus < c.focus) return { ok: false, reason: 'focus' };
@@ -196,8 +265,11 @@ export function actionPromptAI(S, m = computeMods(S)) {
   const skill = S.founder.skills[approach.scales] || 1;
   const base = CODE.PROMPT_BASE_OUTPUT * m.promptOutput * m.codeRate;
 
-  // Draw a band from the approach's distribution, shifted by the relevant skill.
-  const bands = shiftedBands(approach, skill);
+  // Draw a band from the approach's distribution, shifted by the relevant skill
+  // — and, §A19, by how long it has been since the founder slept. The shift is
+  // negative and small: the same prompt, from somebody who has stopped being
+  // able to tell a good one from a plausible one.
+  const bands = shiftedBands(approach, skill, sleepShift(S));
   let r = rand(), band = bands[bands.length - 1];
   for (const b of bands) { if (r < b.p) { band = b; break; } r -= b.p; }
 
@@ -248,6 +320,7 @@ export function setApproach(S, id) {
 }
 
 export function actionTalkToUsers(S, m = computeMods(S)) {
+  if (steppedBack(S)) return { ok: false, reason: 'stepped-back' };
   const cost = FOUNDER.TALK_FOCUS_COST;
   if (S.founder.focus < cost) return { ok: false, reason: 'focus' };
   S.founder.focus -= cost;
@@ -263,6 +336,7 @@ export function actionTalkToUsers(S, m = computeMods(S)) {
 }
 
 export function actionPost(S, m = computeMods(S)) {
+  if (steppedBack(S)) return { ok: false, reason: 'stepped-back' };
   const cost = FOUNDER.POST_FOCUS_COST;
   if (S.founder.focus < cost) return { ok: false, reason: 'focus' };
   S.founder.focus -= cost;

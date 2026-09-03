@@ -48,6 +48,9 @@ import { activeProduct } from '../engine/state.js';
 import { threadOptions } from '../systems/feed.js';
 import { STATS } from '../ui/readouts.js';
 import { APP_MAP, isLocked, menuFor as appMenuFor } from '../ui/os/apps.js';
+import { CHARACTERS } from './characters.js';
+import { canCall } from '../systems/calls.js';
+import { todo } from '../systems/todo.js';
 
 // The research queue's own ceiling, mirrored from the `queue` handler in
 // `src/main.js`. It is chrome rather than balance — the note has to name the
@@ -554,12 +557,89 @@ function recordFileMenu(S, data) {
   ];
 }
 
+// ── Contacts ────────────────────────────────────────────────────────────────
+// A person. Call them, read their file, and one line about who they are — the
+// Call row says what it needs when it cannot, in the same words the app does.
+function contactMenu(S, data) {
+  const id = data.id || data.v || data.contact;
+  const c = CHARACTERS[id];
+  if (!c) return contactsMenu(S);
+  const can = safe(() => canCall(S, id), { ok: false, note: 'NOT NOW' });
+  return [
+    { head: up(c.name) },
+    { label: `Call ${c.name.split(' ')[0]}`, act: 'call', v: id, disabled: !can.ok, note: can.ok ? can.note : can.note },
+    { label: 'Open the dossier', act: 'contact-select', v: id },
+    { label: 'Find them in the Record', act: 'record-folder', v: 'people' },
+    { sep: true },
+    { label: clip(c.wants || c.bio || ''), quiet: true, disabled: true },
+    ...loreItems('contact'),
+  ];
+}
+function mailMenu(S) {
+  return [
+    { label: 'Mark everything read', act: 'mail-read-all' },
+    { label: 'Back to the inbox', act: 'mail-back' },
+    { sep: true },
+    ...loreItems('mail'),
+    ...windowMenu(S, { win: 'mail' }),
+  ];
+}
+function journalMenu(S) {
+  return [
+    { label: 'Write something', act: 'journal-focus' },
+    { sep: true },
+    ...loreItems('journal'),
+    ...windowMenu(S, { win: 'journal' }),
+  ];
+}
+function journalNoteMenu(S, data) {
+  const i = Number(data.i ?? data.v);
+  const n = Array.isArray(S.notes) ? S.notes[i] : null;
+  if (!n) return journalMenu(S);
+  return [
+    { head: `DAY ${n.day}` },
+    { label: clip(n.text), quiet: true, disabled: true },
+    { label: 'Tear this page out', act: 'journal-remove', v: String(i), danger: true },
+    { sep: true },
+    ...loreItems('journal'),
+  ];
+}
+function contactsMenu(S) {
+  return [
+    { label: 'Everyone with a number', act: 'contact-back' },
+    { sep: true },
+    ...windowMenu(S, { win: 'contacts' }),
+  ];
+}
+
+// §I4. The list. The rows are doors, so the menu is the doors — plus the
+// one verb the list itself has, which is to clear this morning's ticks.
+function todoMenu(S) {
+  const rows = safe(() => todo(S), []) || [];
+  const out = [{ label: 'Clear today\'s ticks', act: 'todo-clear',
+    disabled: !rows.some((r) => r.done), note: rows.some((r) => r.done) ? undefined : 'NOTHING TICKED' }];
+  const left = rows.filter((r) => !r.done && r.view).slice(0, 5);
+  if (left.length) {
+    out.push({ sep: true }, { head: 'STILL ASKING' });
+    for (const r of left) out.push({ label: clip(r.text), act: 'view', v: r.view, note: r.note || undefined });
+  }
+  out.push({ sep: true }, ...loreItems('todo'), ...windowMenu(S, { win: 'todo' }));
+  return out;
+}
+
 // ── The registry ────────────────────────────────────────────────────────────
 const BUILDERS = {
   desktop: desktopMenu, window: windowMenu, dock: dockMenu, agent: agentMenu,
   node: nodeMenu, feed: feedMenu, action: actionMenu, stat: statMenu,
   directive: directiveMenu, project: projectMenu,
   record: recordMenu, 'record-folder': recordFolderMenu, 'record-file': recordFileMenu,
+  contacts: contactsMenu, contact: contactMenu,
+  mail: mailMenu, journal: journalMenu, 'journal-note': journalNoteMenu,
+  calendar: (S) => [...loreItems('calendar'), ...windowMenu(S, { win: 'calendar' })],
+  todo: todoMenu,
+  player: (S) => [...appMenuFor(S, 'player'), { sep: true }, ...loreItems('player'), ...windowMenu(S, { win: 'player' })],
+  terminal: (S) => [{ label: 'Clear the screen', act: 'term-clear' }, { sep: true }, ...loreItems('terminal'), ...windowMenu(S, { win: 'terminal' })],
+  browser: (S) => [...loreItems('browser'), ...windowMenu(S, { win: 'browser' })],
 };
 
 // Every kind `ctxmenu.js` may be handed. A `data-ctx` outside this list gets an

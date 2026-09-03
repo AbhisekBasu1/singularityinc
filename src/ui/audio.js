@@ -158,12 +158,58 @@ export const SFX = {
                    tone({ freq: 430, type: 'triangle', peak: 0.045, a: 0.001, d: 0.07, glide: 0.6 }); },
   notify:  () => { tone({ freq: NOTE.G5, type: 'sine', peak: 0.06, a: 0.004, d: 0.08 });
                    tone({ freq: NOTE.D5, type: 'sine', peak: 0.055, a: 0.004, d: 0.11, t: 0.045 }); },
+
+  // ── §I6. Four sources, four cues ─────────────────────────────────────────
+  // Everything that arrived used to arrive as `notify`, so a letter, a thread,
+  // an agent finishing something and the press all sounded identical and none
+  // of them told you where to look. Each is the same family — quiet, two
+  // partials, under 200ms — and each is recognisably itself:
+  //
+  //   mail    a paper sound: a soft noise brush and one low note
+  //   thread  two rising notes, because somebody is waiting on an answer
+  //   agent   a flat machine report, no interval, no rise
+  //   press   bright and wide, the only one with a third above it
+  //
+  // None of them may be louder than `event`, which is the card. The chrome
+  // must never sound as important as the game.
+  cueMail:   () => { noise({ peak: 0.030, d: 0.09, freq: 2400, type: 'bandpass', q: 0.8 });
+                     tone({ freq: NOTE.D4, type: 'sine', peak: 0.055, a: 0.006, d: 0.14, t: 0.02 }); },
+  cueThread: () => { tone({ freq: NOTE.D5, type: 'sine', peak: 0.055, a: 0.004, d: 0.08 });
+                     tone({ freq: NOTE.A5, type: 'sine', peak: 0.05, a: 0.004, d: 0.12, t: 0.055 }); },
+  cueAgent:  () => { tone({ freq: NOTE.E4, type: 'square', peak: 0.030, a: 0.001, d: 0.05,
+                            filter: { freq: 1100, q: 3 } });
+                     tone({ freq: NOTE.E4, type: 'square', peak: 0.024, a: 0.001, d: 0.05, t: 0.075,
+                            filter: { freq: 1100, q: 3 } }); },
+  cuePress:  () => { chord([NOTE.G4, NOTE.B4, NOTE.D5], { type: 'triangle', peak: 0.055, d: 0.16, spread: 0.03 });
+                     noise({ peak: 0.022, d: 0.10, freq: 4600, type: 'highpass' }); },
+
+  // The account goes under. A pad rather than an alarm: `bad` already exists
+  // for a thing that went wrong, and this is not an event — it is a state the
+  // company has entered, so it swells and sits rather than hitting once.
+  underwater: () => { tone({ freq: 55, type: 'sawtooth', peak: 0.13, a: 0.5, d: 1.5, s: 0.55, r: 1.4,
+                             filter: { freq: 220, q: 1.4 } });
+                      tone({ freq: 82.41, type: 'sine', peak: 0.075, a: 0.7, d: 1.7, s: 0.5, r: 1.6 });
+                      tone({ freq: 58.27, type: 'sine', peak: 0.06, a: 0.9, d: 1.9, s: 0.45, r: 1.8, t: 0.3 }); },
 };
 
 // ── Ambient bed ────────────────────────────────────────────────────────────
 // A slow generative drone that changes character with the act. Very quiet by
 // design: you should notice it only when it stops.
 let amb = null;
+
+// §I6. The bed has always had five states and never had a name for any of
+// them. These are the names, in the register of a thing somebody recorded
+// rather than a thing a synthesiser generated — because the Player app is
+// diegetic: it is what is running on the founder's machine, not a settings
+// panel with a volume slider in it.
+export const ACT_TRACKS = [
+  null,
+  { name: 'Four Six A.M.', sub: 'one room, one fan, one machine' },
+  { name: 'Headcount', sub: 'the room stops being a room you know' },
+  { name: 'Escape Velocity', sub: 'the graph nobody in the building can read out loud' },
+  { name: 'Recursive', sub: 'it is improving itself while this plays' },
+  { name: 'After', sub: 'for whatever is started next' },
+];
 
 const ACT_TONES = [
   null,
@@ -218,8 +264,10 @@ export function startAmbient(actGetter) {
       amb.lfo.frequency.setValueAtTime(0.02 + t.wobble * 0.2, now);
       amb.lfoGain.gain.setValueAtTime(60 + t.filter * 0.18, now);
     }
-    // Occasional distant bell.
-    if (Math.random() < (t.bellRate * 14)) {
+    // Occasional distant bell. The Player can silence these on their own: they
+    // are the one part of the bed that is an event rather than a texture, and
+    // somebody working with the pad on and the bells off is a real preference.
+    if (!bellsOff && Math.random() < (t.bellRate * 14)) {
       const f = t.bells[Math.floor(Math.random() * t.bells.length)];
       tone({ freq: f, type: 'sine', peak: 0.022, a: 0.6, d: 4.5 });
       tone({ freq: f * 1.5, type: 'sine', peak: 0.010, a: 0.9, d: 5.0, t: 0.4 });
@@ -243,6 +291,33 @@ export function stopAmbient() {
 export function setAmbient(on, actGetter) {
   if (on) startAmbient(actGetter); else stopAmbient();
 }
+
+// ── §I6. The Player ─────────────────────────────────────────────────────────
+// What the workstation's Player app reads and writes. The bed is generated, so
+// there is nothing to seek and nothing to skip: what a player can actually do
+// is stop it, change how loud it is, and silence the bells — which is exactly
+// what the app offers and nothing more. `bellsOff` is module memory rather than
+// a setting on `S`, because it describes this sitting rather than this run.
+let bellsOff = false;
+export function setBells(on) { bellsOff = !on; return !bellsOff; }
+export function bellsOn() { return !bellsOff; }
+
+/** Whether the bed is actually running right now, act and all. */
+export function ambientState(actGetter) {
+  const act = Math.max(1, Math.min(5, (typeof actGetter === 'function' ? actGetter() : actGetter) || 1));
+  const t = ACT_TRACKS[act] || ACT_TRACKS[1];
+  return {
+    playing: !!amb && enabled,
+    act,
+    name: t.name,
+    sub: t.sub,
+    bells: !bellsOff,
+    volume: master ? Math.min(1, master.gain.value / 0.4) : 0,
+    ready: !!ctx,
+  };
+}
+
+export function volume() { return master ? Math.min(1, master.gain.value / 0.4) : 0; }
 
 export function play(name) {
   if (!enabled) return;

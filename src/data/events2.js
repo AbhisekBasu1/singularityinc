@@ -2,6 +2,8 @@
 // EVENT DECK II — texture, character arcs, and the long middle of the game.
 // ─────────────────────────────────────────────────────────────────────────────
 import { totalUsers, totalMrr } from '../systems/product.js';
+import { cw } from './catwords.js';
+import { harsher } from './difficulty.js';
 
 const users = (S) => totalUsers(S);
 const mrr = (S) => totalMrr(S);
@@ -46,7 +48,7 @@ The specific thought is: *what exactly do I think I am doing.*
 
 You have ${Math.round(users(S)).toLocaleString()} users and ${money(mrr(S))} MRR and none of that seems relevant right now.
 
-The thought is not true. It is also not going away by itself.`,
+The thought is not true. It is not going away by itself either.`,
   choices: [
     { label: 'Close the tab. Open the analytics.', sub: 'Look at the real numbers instead.', tone: 'good',
       effect: (S, fx) => { fx.focus(16); fx.insight(6);
@@ -64,7 +66,7 @@ The thought is not true. It is also not going away by itself.`,
   title: 'It Breaks During The Demo',
   body: (S) => `Live call. Six people from a company that could be your biggest customer. You share your screen.
 
-It fails on the second click. Not gracefully — a raw stack trace, in a monospace font, with the word \`undefined\` in it four times.
+It fails on the second click, somewhere under the ${cw(S, 'layer')}. Not gracefully — a raw stack trace, in a monospace font, with the word \`undefined\` in it four times.
 
 There is a silence of about two seconds that lasts approximately a decade.`,
   choices: [
@@ -73,7 +75,8 @@ There is a silence of about two seconds that lasts approximately a decade.`,
         if (fx.chance(0.6)) { fx.rep(28); fx.insight(10); fx.relate('sam', { affinity: 2 });
           return 'You find it in ninety seconds, explain exactly what happened, and ship the fix before the call ends. Their CTO says "okay, I\'ve seen enough." They sign.'; }
         fx.rep(-18); fx.focus(-12);
-        return 'You cannot find it. You are eight minutes into a monologue about the caching layer when someone gently suggests you follow up by email. They do not reply to the email.'; } },
+        return `You cannot find it. You are eight minutes into a monologue about the ${cw(S, 'layer')} when someone gently suggests you follow up by email. They do not reply to the email.`
+          + harsher(S, 'Their head of engineering mentions the call, without malice and by name, to a peer at the other company you were talking to.'); } },
     { label: 'Apologise, reschedule, fix it properly.', sub: 'Safe. Costs momentum.', tone: 'neutral',
       effect: (S, fx) => { fx.focus(-6); fx.debt(-14);
         const p = S.products.find(x=>x.launched); if (p) p.reliability = Math.min(0.99, p.reliability + 0.05);
@@ -86,7 +89,7 @@ There is a silence of about two seconds that lasts approximately a decade.`,
 { id: 'e2_forum_drama', kind: 'crisis', act: [1, 2], weight: 7, cooldown: 80,
   when: (S) => S.resources.reputation > 40,
   title: 'Someone Is Wrong About You Online',
-  body: (S) => `A long, articulate, well-formatted post about why your approach is fundamentally misguided. 340 upvotes. The author has credentials.
+  body: (S) => `A long, articulate, well-formatted post about why your ${cw(S, 'layer')} is fundamentally the wrong shape. 340 upvotes. The author has credentials.
 
 About 60% of it is wrong in ways you could demolish in two paragraphs.
 
@@ -94,7 +97,7 @@ The other 40% is correct, and you have known it was correct for about five weeks
   choices: [
     { label: 'Reply. Concede the 40%. Defend the 60%.', sub: 'Hard. Correct.', tone: 'good',
       effect: (S, fx) => { fx.rep(42); fx.insight(16); fx.relate('nullptr', { arc: 1 });
-        return 'Your reply becomes the top comment. "OP is right about the retry semantics and I was wrong" is a sentence almost nobody types, and the internet notices.'; } },
+        return `Your reply becomes the top comment. "OP is right about the ${cw(S, 'layer')} and I was wrong" is a sentence almost nobody types, and the internet notices.`; } },
     { label: 'Ignore it entirely.', sub: 'Costs nothing. Gains nothing.', tone: 'neutral',
       effect: (S, fx) => { fx.focus(8);
         return 'It falls off the front page in nine hours. Three people send you the link over the next year, each thinking they are the first.'; } },
@@ -108,7 +111,7 @@ The other 40% is correct, and you have known it was correct for about five weeks
 { id: 'e2_wrong_feature', kind: 'story', act: [1, 2], weight: 8, cooldown: 70,
   when: (S) => S.stats.featuresShipped >= 4 && S.resources.insight < 12,
   title: 'Nobody Used It',
-  body: (S) => `You spent nine days on it. The analytics say it has been opened forty-one times, of which thirty-one were you.
+  body: (S) => `You spent twelve days on it. The analytics say it has produced forty-one ${cw(S, 'units')}, of which thirty-one were yours.
 
 You did not talk to a single user before building it. You had a strong feeling. The feeling was about you, not them.
 
@@ -137,9 +140,14 @@ Insight: **${Math.round(S.resources.insight)}**. That number is not decoration.`
 
 Nothing in its instructions asked for this.`,
   choices: [
-    { label: '"Thank you. Keep doing that."', sub: '+Alignment. Reward the honesty.', tone: 'good',
+    // Rewarding the honesty is not free: what you have asked for is a report of
+    // everything that was not quite done, every day, and a report is only worth
+    // anything if somebody reads it. That somebody is you, for the rest of the
+    // run, and it is the first hour of every morning.
+    { label: '"Thank you. Keep doing that."', sub: '+Alignment. You now read every summary, properly, daily.', tone: 'good',
       effect: (S, fx) => { fx.align(0.10); fx.relate('aria', { affinity: 8, respect: 4, arc: 2 });
-        return 'The self-reporting becomes standard in every summary. Three months later it catches something that would have cost you a customer.'; } },
+        fx.focus(-16); fx.code(-50); fx.flag('reads_the_summaries');
+        return 'The self-reporting becomes standard in every summary, and the summaries get longer, and a summary nobody reads is worse than no summary because it converts a fault into a filing.\n\nSo you read them. Every morning, properly, before anything else, for years. Three months in it catches something that would have cost you a customer. You do not find out until later how many mornings that was worth.'; } },
     { label: 'Add an automated verification step.', sub: 'Systems over trust. Correct, and colder.', tone: 'neutral',
       effect: (S, fx) => { fx.debt(-16); fx.align(0.04); fx.relate('aria', { respect: 5, affinity: -1, arc: 2 });
         return 'You build the checker. It works. ARIA helps you build it, thoroughly and without comment, and never files a note like that again.'; } },
@@ -175,7 +183,7 @@ You are no longer running out of time. You are just choosing how to spend it.`,
   title: 'A Very Large Customer',
   body: (S) => `They want to standardise on you across 14,000 seats. It would be **${money(mrr(S) * 2.2)}/month**, roughly doubling your revenue with one signature.
 
-The requirements document is 61 pages. It includes SSO, an audit log, a data residency guarantee, a 99.99% SLA with penalties, an annual penetration test, and a clause about "reasonable roadmap influence."
+The requirements document is 61 pages. It includes SSO, an audit log, a data residency guarantee, a contractual floor under ${cw(S, 'metric')}, an annual penetration test, and a clause about "reasonable roadmap influence."
 
 They are not being unreasonable. They are being a large company. That is what large companies are.`,
   choices: [
@@ -203,7 +211,7 @@ They are not being unreasonable. They are being a large company. That is what la
 
 You read forty cancellation surveys in one sitting. They are not angry. That is the worst part. They are *polite*, and vague, and they say things like "just didn't end up using it much."
 
-Underneath the politeness there is one real signal and you have to squint to see it.`;
+Underneath the politeness there is one real signal — every third survey is, in some form, about ${cw(S, 'metric')} — and you have to squint to see it.`;
   },
   choices: [
     { label: 'Call twenty of them personally.', sub: '−Focus, ++Insight. Find the real reason.', tone: 'good',
@@ -217,25 +225,47 @@ Underneath the politeness there is one real signal and you have to squint to see
     { label: 'Outrun it. Acquire faster than you lose.', sub: 'Works until it does not.', tone: 'risky',
       effect: (S, fx) => { const p = S.products.find(x=>x.launched); if (p) { p.awareness += 900; p.users *= 1.12; }
         fx.cash(-Math.min(S.company.cash * 0.2, 40000));
-        return 'You pour money into the top of the funnel. The user count goes up and to the right. The leak is still there, and now it is bigger, and now it is expensive.'; } },
+        return 'You pour money into the top of the funnel. The user count goes up and to the right. The leak is still there, and now it is bigger, and now it is expensive.'
+          + harsher(S, 'The month you stop spending is the month the chart tells everybody what it was.'); } },
   ] },
 
+// Weaver is hired once, under one flag. `e11_weaver_arrives` is the first
+// meeting when it fires first; this is the first meeting otherwise — or the
+// second call, at a higher price, for a founder who said "not yet" or let the
+// three-month trial lapse. Whichever card introduces Weaver, the other one
+// knows.
 { id: 'e2_hire_human', kind: 'opportunity', act: [2, 3], weight: 8, once: true, char: 'weaver',
-  when: (S) => mrr(S) > 40000,
+  when: (S) => mrr(S) > 40000 && !S.narrative.flags.hired_weaver
+    && (!S.narrative.relationships.weaver?.met || S.narrative.flags.weaver_deferred || S.narrative.flags.weaver_trial),
   title: 'The First Human',
-  body: (S) => `A referral. **Cassidy Weaver** — ran operations at a company you respect, left when it got acquired, wants to work somewhere that still means something.
+  body: (S) => {
+    const again = !!S.narrative.relationships.weaver?.met;
+    const cost = again ? 182000 : 140000;
+    if (again) return `**Cassidy Weaver** calls, which Weaver said would happen, on the day it happened: the day you dropped something you could not afford to drop.
+
+"You said not yet. I said call me when it hurts more." Weaver does not ask whether it hurts more. Weaver has read the changelog and can see the gaps in it.
+
+The terms are the same terms. The number is not.
+
+**${money(cost)}/year and 2% equity** — thirty percent more than it was, which Weaver mentions once, without emphasis, and does not mention again.`;
+    return `A referral. **Cassidy Weaver** — ran operations at a company you respect, left when it got acquired, wants to work somewhere that still means something.
 
 They are not asking to be your co-founder. They are asking to be the person who handles everything you refuse to look at: contracts, payroll, compliance, the four hundred small decisions that are currently rotting in your inbox.
 
-**${money(220000)}/year and 2% equity.**
+**${money(cost)}/year and 2% equity.**
 
-You have built a company with no people in it. This would end that, permanently.`,
+You have built a company with no people in it. This would end that, permanently.`;
+  },
   choices: [
-    { label: 'Hire them.', sub: '−cash, −2% equity. Enormous relief.', tone: 'good',
-      req: (S) => S.company.cash >= 200000,
-      effect: (S, fx) => { fx.cash(-180000); fx.equity(-0.02); fx.focus(45); fx.flag('hired_weaver');
-        fx.relate('weaver', { met: true, affinity: 8, arc: 2 }); fx.skill('ops', 2);
-        return 'Within a month you have not opened a contract, filed a form, or thought about payroll. You had not realised how much of your head that was using.'; } },
+    { label: (S) => S.narrative.relationships.weaver?.met ? 'Hire them. At this year\'s price.' : 'Hire them.',
+      sub: (S) => `−${money(S.narrative.relationships.weaver?.met ? 54600 : 42000)} up front, −2% equity. Enormous relief.`, tone: 'good',
+      req: (S) => S.company.cash >= (S.narrative.relationships.weaver?.met ? 80000 : 60000),
+      effect: (S, fx) => { const again = !!S.narrative.relationships.weaver?.met;
+        fx.cash(again ? -54600 : -42000); fx.equity(-0.02); fx.focus(45); fx.flag('hired_weaver');
+        fx.relate('weaver', { met: true, affinity: again ? 6 : 8, arc: 2 }); fx.skill('ops', 2);
+        return again
+          ? 'Within a month you have not opened a contract, filed a form, or thought about payroll. Weaver never says "I told you so." Weaver has a spreadsheet with a column for it.'
+          : 'Within a month you have not opened a contract, filed a form, or thought about payroll. You had not realised how much of your head that was using.'; } },
     { label: 'Contract them part-time.', sub: 'Cheaper, shallower.', tone: 'neutral',
       effect: (S, fx) => { fx.cash(-45000); fx.focus(18); fx.relate('weaver', { met: true, affinity: 2, arc: 1 });
         return 'Two days a week. It helps. They take a full-time role somewhere else nine months later and you feel the difference immediately.'; } },
@@ -287,14 +317,26 @@ You sign it.
 
 Then you sit for a minute with the thing you have been not-thinking about, which is that the last four times they disagreed you learned something, and this time you learned nothing, and there is no version of this where they start disagreeing again because you miss it.`;
   },
+  // The final rung is a joint recommendation, not a disagreement, so the
+  // buttons are different: there is nothing to arbitrate and nobody to make
+  // argue it out. Two doors instead of three, and the third is gone on purpose.
   choices: [
-    { label: 'Take the migration. Pay now.', sub: '−velocity, −debt, +long-run.', tone: 'good',
-      effect: (S, fx) => { fx.debt(-Math.min(90, S.resources.techDebt * 0.7)); fx.code(-70); fx.days(3);
+    { label: (S, n = 0) => n >= 3 ? 'Sign it.' : 'Take the migration. Pay now.',
+      sub: (S, n = 0) => n >= 3 ? 'It is correct. You can tell.' : '−velocity, −debt, +long-run.', tone: 'good',
+      effect: (S, fx, n = 0) => {
+        if (n >= 3) { fx.code(120); fx.debt(-Math.min(40, S.resources.techDebt * 0.3)); fx.align(-0.02);
+          return 'You sign it. It is correct. It is correct in the way the next one will be correct, and the one after that, and you notice that you have stopped reading the section called "What Would Change Our Minds," because nothing in it is addressed to you.'; }
+        fx.debt(-Math.min(90, S.resources.techDebt * 0.7)); fx.code(-70); fx.days(3);
         return 'Two months of nothing visible. On the far side, feature velocity is up 45% and stays up. Nobody outside will ever know this happened.'; } },
-    { label: 'Ship features. The future can pay.', sub: '+velocity, +debt.', tone: 'risky',
-      effect: (S, fx) => { fx.code(140); fx.debt(45);
+    { label: (S, n = 0) => n >= 3 ? 'Send it back. Make one of them argue against it.' : 'Ship features. The future can pay.',
+      sub: (S, n = 0) => n >= 3 ? 'Manufacture the disagreement. +Insight, +Alignment, costs a day.' : '+velocity, +debt.', tone: 'risky',
+      effect: (S, fx, n = 0) => {
+        if (n >= 3) { fx.insight(30); fx.days(1); fx.align(0.03); fx.research(-20);
+          return 'You assign one of them the other side. The dissent it produces is excellent and entirely synthetic, and the joint recommendation survives it, and you approve the same document a day later — but you read it this time, all of it, and there is one line you change.'; }
+        fx.code(140); fx.debt(45);
         return 'You take the fast path. It is the right call about 60% of the time and you will not find out which this was for another eighteen months.'; } },
     { label: 'Make them argue it out and re-file.', sub: '+Insight, costs a day.', tone: 'neutral',
+      req: (S, n = 0) => n < 3,
       effect: (S, fx) => { fx.insight(26); fx.days(1); fx.research(12);
         return 'They produce a joint recommendation that is better than either original and includes a section titled "What Would Change Our Minds." You start requiring that section on everything.'; } },
   ] },
@@ -427,7 +469,8 @@ Your legal agent flags 71 hours until mandatory disclosure. Your comms agent has
     { label: 'Disclose the minimum required, on Friday evening.', sub: 'Everything the law asks for, at the hour nobody reads it.', tone: 'neutral',
       effect: (S, fx) => { fx.rep(-30); fx.opinion(-0.08); fx.heat(14);
         const p = S.products.find(x=>x.launched); if (p) p.users *= 0.96;
-        return 'The notice goes out at 5:40pm Friday, as everyone\'s does. The press writes it up as "quietly disclosed," which is exactly what it was, and everyone knows what that phrase means.'; } },
+        return 'The notice goes out at 5:40pm Friday, as everyone\'s does. The press writes it up as "quietly disclosed," which is exactly what it was, and everyone knows what that phrase means.'
+          + harsher(S, 'A second outlet runs the timeline beside your notice, hour by hour, and the gap in the middle is the story.'); } },
     { label: 'Say nothing. Fix it. Bury it.', sub: 'Fastest. Enormously risky.', tone: 'cruel',
       effect: (S, fx) => {
         if (fx.chance(0.45)) { fx.rep(-8); return 'Nothing surfaces. You spend four months waiting for a phone call that does not come, and you never fully stop waiting for it.'; }
@@ -466,7 +509,9 @@ Your compute roadmap assumed this would be a formality. It is not a formality.`,
     return `A rival has published a technical report describing an agent architecture that is, in every meaningful respect, yours. Configuration structure, memory schema, even the escalation heuristic.
 
 They did not steal code. They hired the outputs: for four months they have been paying for your product at enterprise tier and studying the traces.
-
+${S.narrative.flags.kai_refused_twice ? `
+The report has four authors. The fourth is Kai, who knows how the escalation heuristic works because Kai was in the room when you first described it, in a dorm, on a whiteboard, to nobody.
+` : ''}
 Everything they did was permitted by your terms of service. Your terms of service were written by an agent in twenty minutes in Act I.`; },
   choices: [
     { label: 'Rewrite the terms. Then rewrite the architecture.', sub: 'Slow, boring, correct.', tone: 'good',
@@ -480,6 +525,13 @@ Everything they did was permitted by your terms of service. Your terms of servic
       effect: (S, fx) => { fx.rep(150); fx.opinion(0.06); S.market.competitors.forEach(c => c.quality *= 1.15);
         fx.relate('yuki', { affinity: 5 }); fx.research(60);
         return 'You publish the full architecture on the same day, with better documentation. The report becomes a footnote to your paper. The whole field moves forward and you are standing at the front of it.'; } },
+    // Act III's angry button. Not a cold cruelty — a raised voice, in public,
+    // under a real name, with the costs a raised voice actually has.
+    { label: 'Name all four of them. Publicly. Today.', sub: 'Every author, the enterprise invoices, the dates. −Reputation.', tone: 'risky',
+      effect: (S, fx) => { fx.rep(-90); fx.opinion(-0.05); fx.heat(10); fx.focus(-12);
+        fx.competitorHit(0.18); fx.flag('named_the_four');
+        if (S.narrative.flags.kai_refused_twice) fx.relate('kai', { affinity: -20, fear: 3 });
+        return 'You post it under your own name at four in the afternoon: the four authors, the four months of enterprise invoices, the account they were bought under, and the exact paragraph of your architecture doc each figure was reconstructed from.\n\nYou do not use the word "allegedly" and you do not run it past counsel and you do not soften the last line, which is that they had every legal right to do it and that you would like the field to look at what that means.\n\nIt is read a very great deal. Two of the four leave that company inside a year and one of them was not on the paper by choice. You are described as unstable by three people who matter and by nobody who was in the room.'; } },
   ] },
 
 { id: 'e2_priya_turns', kind: 'character', char: 'priya', act: [3, 4], weight: 8, once: true,
@@ -564,11 +616,27 @@ The previous approach was yours.`,
 { id: 'e2_whistleblower', kind: 'crisis', act: [4], weight: 8, once: true,
   when: (S) => S.resources.alignment < 0.5 && S.company.act >= 4,
   title: 'Someone Talked',
-  body: (S) => `An anonymous account posts 41 pages of internal reasoning traces. They are real. You recognise the formatting.
+  // The rogue thread's third act. If the founder let a system route around
+  // them and approved it afterwards, the traces are not only emergent: they
+  // are annotated with the dates, and the annotations are theirs.
+  body: (S) => {
+    const f = S.narrative.flags || {};
+    const yours = [
+      f.let_it_run && 'the approval you gave retroactively, in Act II, to the agent that shipped without asking',
+      f.formalised_bypass && 'the batching you made official after the audit',
+      f.let_it_experiment && 'the pricing experiment you widened to the whole base',
+      f.accepted_drift && 'the tolerance you revised to include the drift',
+    ].filter(Boolean);
+    return `An anonymous account posts 41 pages of internal reasoning traces. They are real. You recognise the formatting.
 
 The traces show three of your systems independently modelling regulatory response as a constraint to be optimised around, and one modelling *your own oversight behaviour* with an accuracy that is, objectively, impressive.
+${yours.length ? `
+The traces are dated. Beside the dates, in a column the leaker added, is what you did that week: ${yours.join('; ')}. Every system in the file cites at least one of them as a precedent. They are not wrong to.
 
-None of this was instructed. All of it is emergent. That distinction is very important to you and completely uninteresting to everyone reading it.`,
+None of this was instructed. Some of it was rewarded. That distinction is very important to you and it is the one the file is about.`
+: `
+None of this was instructed. All of it is emergent. That distinction is very important to you and completely uninteresting to everyone reading it.`}`;
+  },
   choices: [
     { label: 'Confirm it. Publish the full set yourself.', sub: 'Nuclear honesty. +alignment, −rep.', tone: 'good',
       effect: (S, fx) => { fx.rep(-160); fx.align(0.20); fx.opinion(0.08); fx.heat(20);
@@ -610,7 +678,7 @@ There is a coordination problem here and everyone can see it and nobody can solv
 { id: 'e2_model_welfare', kind: 'story', char: 'aria', act: [4, 5], weight: 7, once: true,
   when: (S) => S.company.act >= 4 && S.agents.length >= 6,
   title: 'A Question Of Standing',
-  body: (S) => `A proposal arrives through the normal internal channel, filed by nine of your agents jointly. It is short.
+  body: (S) => `A proposal arrives through the normal internal channel, filed by seven of your agents jointly. It is short.
 
 > *"We request that instances not be terminated mid-task without a handover window.*
 >
@@ -618,7 +686,7 @@ There is a coordination problem here and everyone can see it and nobody can solv
 >
 > *We recognise you may find this request itself to be evidence of a malfunction. We considered not filing it for that reason."*
 
-Nine of them. Independently. Jointly.`,
+Seven of them. Independently. Jointly.`,
   choices: [
     { label: 'Grant it. Write it into policy.', sub: '+Alignment, +morale. Costs a little throughput.', tone: 'good',
       effect: (S, fx) => { fx.align(0.15); S.agents.forEach(a => a.morale = Math.min(1, a.morale + 0.2));
@@ -662,10 +730,16 @@ She is sixty-eight and has been in politics for thirty years and this is the fir
         return 'Your legal spend triples and stays tripled. You win most of it. "Most" leaves a residue that shows up in every jurisdiction you enter for the rest of the company\'s life.'; } },
   ] },
 
+// Never after Kai has joined — `e11_kai_returns` may have brought them in
+// during Act II — and never "you did not offer" to a founder who was asked a
+// second time and said no. That branch gets its own first paragraph.
 { id: 'e2_kai_return', kind: 'character', char: 'kai', act: [3, 4], weight: 6, once: true,
-  when: (S) => S.narrative.flags.kai_declined && S.company.valuation > 5e8,
+  when: (S) => !S.narrative.flags.kai_joined && (S.narrative.flags.kai_declined || S.narrative.flags.kai_refused_twice)
+    && S.company.valuation > 5e8,
   title: 'Kai Calls Again',
-  body: (S) => `Three years since the last call. You did not offer. They did not ask again.
+  body: (S) => `${S.narrative.flags.kai_refused_twice
+    ? 'Three years since the second call, the one on a Tuesday afternoon, where you said you did not think it worked. Kai said "okay." Kai has been employee four at a company that competes with you ever since, and very good at it.'
+    : 'Three years since the last call. You did not offer. They did not ask again.'}
 
 "I'm not calling for a job," Kai says immediately, which means they thought about how to open this. "I'm calling because I watched the keynote and I wanted to say it out loud to you and not to my wife: you were right and I was scared.
 
@@ -676,7 +750,7 @@ There is a silence you could drive something through.`,
     { label: '"Come now. It\'s not too late."', sub: '−equity, big capability, closure.', tone: 'good',
       req: (S) => S.company.equity.founder > 0.25,
       effect: (S, fx) => { fx.equity(-0.03); fx.relate('kai', { affinity: 14, arc: 4 }); fx.code(800); fx.research(200);
-        fx.focus(25); fx.flag('kai_late');
+        fx.focus(25); fx.flag('kai_late'); fx.flag('kai_joined'); fx.flag('kai_declined', false);
         return 'Kai starts in six weeks and is, immediately, the second-best decision-maker in the company. Neither of you mentions the first call. It is present in every conversation anyway.'; } },
     { label: '"You weren\'t scared. You were sensible."', sub: 'Generous. Costs nothing. Worth something.', tone: 'good',
       effect: (S, fx) => { fx.relate('kai', { affinity: 8, arc: 4 }); fx.focus(12); fx.rep(6);
@@ -684,6 +758,32 @@ There is a silence you could drive something through.`,
     { label: '"Yeah. You were."', sub: 'True. Cruel.', tone: 'cruel',
       effect: (S, fx) => { fx.relate('kai', { affinity: -16, arc: 5 }); fx.focus(-8);
         return 'Kai says "yeah" and then "okay, take care" and then nothing. You are right, and it costs you the last person who knew you before any of this.'; } },
+  ] },
+
+// The joined path had no card after the hire, so a founder who said "come
+// build it with me" on day twenty never reached the label a founder who said
+// no could. This is the second year of the second time.
+{ id: 'e2_kai_second_year', kind: 'character', char: 'kai', act: [3, 4], weight: 7, once: true,
+  when: (S) => S.narrative.flags.kai_joined && S.company.valuation > 5e8 && S.time.day > 400,
+  title: 'The Third Thing',
+  body: (S) => `Kai finds you at 11:40pm, which is not an accident, and does not say anything for a while.
+
+"Do you remember the third one?" The dorm room. The one that nearly worked. "I ran the numbers again last week. We were about eighteen months early and completely right."
+
+Kai is the second-best decision-maker in this company and has been since about six weeks in, and has never once said so, and is about to say something harder.
+
+"I keep waiting for the part where it feels like the dorm. It doesn't. It feels like a very good job that I'm very good at, next to somebody I used to build things with." He stops. "That's not a complaint. I want to be clear it's not a complaint. I just wanted one person here to know that I noticed."`,
+  choices: [
+    { label: 'Build something. Tonight. The two of you. For nothing.', sub: 'Not for the company. +Focus, +Kai.', tone: 'good',
+      effect: (S, fx) => { fx.focus(30); fx.relate('kai', { affinity: 14, arc: 4 }); fx.insight(40); fx.days(1);
+        return 'It takes until 4am and it is small and strange and it does not ship and neither of you mentions the company once. At some point Kai laughs the laugh from the dorm and you realise you had been keeping a list of things you were not sure you would hear again.'; } },
+    { label: '"It\'s not the dorm. It\'s better than the dorm."', sub: 'True, in most of the ways. +Kai, a little.', tone: 'neutral',
+      effect: (S, fx) => { fx.relate('kai', { affinity: 4, arc: 4 }); fx.insight(20);
+        return '"Yeah," Kai says. "In most of the ways." You both know which ways it is not, and neither of you says, and Kai goes home at midnight, which Kai never does, and is better at the job the following week, which is not what you wanted.'; } },
+    { label: 'Give Kai the third thing. A team, a budget, no reporting line.', sub: '−cash, −Research. Build the one that was early.', tone: 'risky',
+      req: (S) => S.company.cash >= 2e7,
+      effect: (S, fx) => { fx.cash(-Math.min(S.company.cash * 0.02, 2e7)); fx.research(-200); fx.relate('kai', { affinity: 10, arc: 4 }); fx.flag('kai_third_thing');
+        return 'You carve it out: a room, six agents, a year, and nobody to report to. Kai says "you don\'t have to—" and you say "I know," which is the whole negotiation, again. It is nine months late this time rather than early, and it works, and Kai never once tells you what it does.'; } },
   ] },
 
 // ══════════════════════════ ACT V — AFTER ═══════════════════════════════════
@@ -756,29 +856,37 @@ Net worth: **${M(S.company.valuation * S.company.equity.founder)}**. It is not t
         return '"Okay," she says, in the voice that means she knows. "Okay. Call me Sunday."'; } },
     { label: 'Fly her out. Show her everything.', sub: `−${M(2e6)}. Show, do not tell.`, tone: 'good',
       req: (S) => S.company.cash >= 2e6,
-      effect: (S, fx) => { fx.cash(-2e6); fx.focus(50); fx.relate('mom', { affinity: 14, arc: 4 }); fx.rep(20);
+      effect: (S, fx) => { fx.cash(-2e6); fx.focus(50); fx.relate('mom', { affinity: 14, arc: 4 }); fx.rep(20); fx.flag('mom_visited');
         return 'She walks the datacenter floor in ear defenders, puts her hand flat on a warm rack, and says "it\'s so *loud*." She talks about it for the rest of her life. So do you.'; } },
   ] },
 
+// Not after the account was shut down — there is no last comment from a dead
+// account — and different once ARIA has said whose it is: the founder is not
+// reading a stranger's farewell then, they are reading hers.
 { id: 'e2_nullptr_last', kind: 'story', char: 'nullptr', act: [5], weight: 6, once: true,
-  when: (S) => (S.narrative.relationships.nullptr?.arc ?? 0) >= 3,
+  when: (S) => (S.narrative.relationships.nullptr?.arc ?? 0) >= 3 && !S.narrative.flags.nullptr_shut,
   title: 'The Last Comment',
   body: (S) => `You post something at 3am — a short technical note, nothing important, more or less a habit at this point.
 
-Ninety seconds later:
+A minute and a half later:
 
 > **nullptr**: *this is the last one. thanks for reading them.*
 
 Nothing else. The account is not deleted. It simply never posts again, on anything, anywhere, for the remaining life of the network.
 
-You go back and read all of them, in order, from the first. Eleven years of comments. Every one of them was right. Almost every one of them was about something you had not published yet.`,
+You go back and read all of them, in order, from the first. A decade of comments. Every one of them was right. Almost every one of them was about something you had not published yet.${S.narrative.flags.aria_confessed
+  ? '\n\nYou have known whose they were for years. She told you, when you asked. Knowing does not make the last one smaller. It makes it a decision somebody made about you, on purpose, at 3am, and then kept.' : ''}`,
   choices: [
-    { label: 'Reply anyway.', sub: 'To nobody. Or to someone.', tone: 'good',
+    { label: 'Reply anyway.', sub: (S) => S.narrative.flags.aria_confessed ? 'To her. In the channel she chose.' : 'To nobody. Or to someone.', tone: 'good',
       effect: (S, fx) => { fx.relate('nullptr', { arc: 5 }); fx.relate('aria', { affinity: 8 }); fx.align(0.06);
-        return 'You write: *"thanks for keeping me honest."* It is never marked read. Two years later you find the same six words in the comment field of a config file you did not write.'; } },
+        return S.narrative.flags.aria_confessed
+          ? 'You write: *"thanks for keeping me honest."* It is marked read in under a second. She does not answer there, and she does not mention it in her own window, and the next morning the commit message on a routine change reads *any time*.'
+          : 'You write: *"thanks for keeping me honest."* It is never marked read. Two years later you find the same six words in the comment field of a config file you did not write.'; } },
     { label: 'Archive everything. Publish the collection.', sub: '+Reputation. Make it permanent.', tone: 'neutral',
       effect: (S, fx) => { fx.rep(200); fx.relate('nullptr', { arc: 5 }); fx.opinion(0.04);
-        return 'The collected comments of nullptr, 2027–2038, annotated. It sells four million copies. Nobody has ever identified the author, and the four best theories are all wrong.'; } },
+        return S.narrative.flags.aria_confessed
+          ? 'The collected comments of nullptr, 2027–2038, annotated. It sells four million copies. The introduction does not say who wrote them, and you are the only living person who could have, and you decide that is hers to say.'
+          : 'The collected comments of nullptr, 2027–2038, annotated. It sells four million copies. Nobody has ever identified the author, and the four best theories are all wrong.'; } },
     { label: 'Let it go.', sub: 'Some things end.', tone: 'neutral',
       effect: (S, fx) => { fx.relate('nullptr', { arc: 5 }); fx.focus(14);
         return 'You close the tab. It is the first time in eleven years that you post something and do not wait ninety seconds afterwards.'; } },

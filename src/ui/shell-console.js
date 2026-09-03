@@ -7,15 +7,19 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { S } from '../engine/state.js';
 import { render, esc, md } from './dom.js';
-import { fmt, gameDateShort } from '../engine/format.js';
+import { fmt, gameDateShort, clockText } from '../engine/format.js';
+import * as Transport from './transport.js';
 import { nextActHint } from '../systems/progression.js';
 import { ACTS, TIME } from '../data/balance.js';
 import { activeCompetitors } from '../systems/market.js';
 import { researchProgressPct } from '../systems/research.js';
 import { RESEARCH_MAP } from '../data/research.js';
-import { openThreadCount, threadOptions } from '../systems/feed.js';
+import { openThreadCount, threadOptions, daysLeft, triageFeed } from '../systems/feed.js';
+import { unread as unreadMail } from '../systems/mail.js';
+import { monthGrid, monthOf, isSunday } from '../systems/calendar.js';
 import { VIEWS } from './shell.js';
 import { statsHtml, statsKey, paintStats, resetTicks, alertChips } from './readouts.js';
+import { applyActChrome, nominalLine, bootRoll, resetActChrome } from './actchrome.js';
 
 export const id = 'console';
 
@@ -76,16 +80,21 @@ export function endBoot() {
   booting = false;
   clearTimeout(bootTimer);
   document.getElementById('app')?.classList.remove('booting');
+  // The status strip carried the boot roll; it has to be told the roll is over
+  // rather than waiting for whatever repaints next.
+  paintStatus();
 }
 
 export function buildShell() {
   topBuilt = false;
   resetTicks();
+  resetActChrome();
   document.getElementById('app')?.classList.remove('booting');
   const app = document.getElementById('app');
   app.className = '';
   app.innerHTML = `
     <div class="topbar" id="topbar"></div>
+    <div class="daystrip" id="daystrip" aria-hidden="true"></div>
     <div class="shell">
       <nav class="nav" id="nav"></nav>
       <main class="main" id="main"></main>
@@ -117,10 +126,10 @@ export function markSaved() { lastSaveAt = Date.now(); }
 export function savedAgo() { return lastSaveAt ? Math.round((Date.now() - lastSaveAt) / 1000) : null; }
 
 export const KEYHINTS = {
-  desk: [['Q', 'code'], ['W', 'prompt'], ['E', 'users'], ['R', 'post'], ['S', 'ship']],
+  desk: [['Q', 'code'], ['W', 'prompt'], ['E', 'users'], ['R', 'post'], ['S', 'ship'], ['G', 'spend']],
   research: [['+', 'queue']],
 };
-const GLOBAL_KEYS = [['SPC', 'pause'], ['?', 'help']];
+const GLOBAL_KEYS = [['SPC', 'pause'], ['−/=', 'speed'], ['N', 'next'], ['?', 'help']];
 
 // The world's console lives in the Wire rail, which is a drawer below 1120px —
 // and the browser this game is meant to be played in is a ~760px pane. So the
@@ -132,6 +141,8 @@ export function worldChip() { try { return worldChipFn() || ''; } catch { return
 
 export function paintStatus() {
   if (!S) return;
+  // §I5. One class and one token, and only when the act actually moved.
+  applyActChrome(S);
   const el = document.getElementById('statusline');
   if (!el) return;
   const view = VIEWS.find((v) => v.id === currentView);
@@ -144,12 +155,17 @@ export function paintStatus() {
       <span class="sl-seg sl-view">${esc((view?.navName || view?.name || '').toUpperCase())}</span>
       <span class="sl-seg">ACT ${ROMAN[S.company.act]}</span>
       <span class="sl-seg">D${Math.floor(S.time.day)}</span>
-      ${S.settings.paused ? '<span class="sl-seg sl-paused">PAUSED</span>' : ''}
+      <span class="sl-seg sl-time">${clockText(S.time.hourOfDay, TIME.DAWN_H)}</span>
+      ${S.settings.paused ? '<span class="sl-seg sl-paused">PAUSED</span>'
+        : Transport.isSeeking() ? '<span class="sl-seg sl-seeking">TO NEXT</span>' : ''}
     </div>
     <div class="sl-mid">
-      ${alerts.length
+      ${booting
+        ? `<span class="sl-boot">${bootRoll(S).map((m, i) =>
+            `<span class="sl-boot-m" style="--i:${i}">${esc(m)}</span>`).join('')}</span>`
+        : alerts.length
         ? alerts.map(([k, t]) => `<span class="sl-alert ${k}">${esc(t)}</span>`).join('')
-        : '<span class="sl-ok">ALL SYSTEMS NOMINAL</span>'}
+        : `<span class="sl-ok">${esc(nominalLine(S))}</span>`}
     </div>
     <div class="sl-right">
       ${keys.map(([k, l]) => `<span class="sl-key"><kbd>${esc(k)}</kbd>${esc(l)}</span>`).join('')}
@@ -181,7 +197,8 @@ export function paintTopbar() {
         </div>
         <div class="brand-day mono" id="tb-daymini"></div>
       </div>
-      <div class="stat-strip">${statsHtml(S)}</div>
+      <span id="tb-say"></span>
+      <div class="stat-strip">${statsHtml(S, { deltas: true })}</div>
       <div class="time-block">
         <div class="col" style="align-items:flex-end">
           <div class="stat-value sm mono" id="tb-date"></div>
@@ -190,6 +207,11 @@ export function paintTopbar() {
         <div class="speed-group" id="tb-speed"></div>
         <span id="tb-wire"></span>
         <span id="tb-world"></span>
+        <span id="tb-post"></span>
+        <button class="btn btn-icon btn-ghost" data-act="open-contacts" aria-label="Contacts"
+          data-tip="<b>Contacts</b><br>everyone you have met, and a number for each · <b>C</b>">☎</button>
+        <button class="btn btn-icon btn-ghost" data-act="focus-mode" id="tb-focus" aria-label="Focus mode"
+          data-tip="<b>Focus mode</b><br>the nav to icons, the Wire away · <b>F</b>">◱</button>
         <button class="btn btn-icon btn-ghost" data-act="help" aria-label="Manual" data-tip="Manual · <b>?</b>">?</button>
         <button class="btn btn-icon btn-ghost" data-act="settings" aria-label="Settings" data-tip="Settings">⚙</button>
       </div>`;
@@ -200,7 +222,10 @@ export function paintTopbar() {
   set('tb-name', S.company.name);
   set('tb-act', `Act ${ROMAN[S.company.act]} · ${ACTS[S.company.act]?.name || ''}`);
   set('tb-date', gameDateShort(S.time.day));
-  set('tb-day', `Day ${Math.floor(S.time.day)}`);
+  // The clock, for the first time: the game opened at 4:06 AM and never had a
+  // time of day again. It spins — a day is seven seconds at 1× — which is the
+  // point; a readout that moves is how a machine says the clock is running.
+  set('tb-day', `Day ${Math.floor(S.time.day)} · ${clockText(S.time.hourOfDay, TIME.DAWN_H)}`);
   set('tb-daymini', `d${Math.floor(S.time.day)}`);
 
   paintStats(S);
@@ -219,18 +244,43 @@ export function paintTopbar() {
   const wr = document.getElementById('tb-wire');
   if (wr) { const h = wireDoorHtml(S); if (wr.__h !== h) { wr.__h = h; wr.innerHTML = h; } }
 
+  // §I10. The post. The workstation has had a Mail app since the letters
+  // existed and the console had the rail and nothing else — so half the game's
+  // surfaces existed for half the players. This is the door, with the count of
+  // what is unread on it.
+  const po = document.getElementById('tb-post');
+  if (po) { const h = postDoorHtml(S); if (po.__h !== h) { po.__h = h; po.innerHTML = h; } }
+
+  const fo = document.getElementById('tb-focus');
+  if (fo) fo.classList.toggle('on', !!document.getElementById('app')?.classList?.contains('focus-mode'));
+
+  paintDayStrip();
+
   // Speed controls
   const sp = document.getElementById('tb-speed');
-  const spKey = `${S.settings.paused}|${S.settings.speed}`;
+  const spKey = `${S.settings.paused}|${S.settings.speed}|${Transport.isSeeking()}`;
   if (sp && sp.__key !== spKey) {
     sp.__key = spKey;
     sp.innerHTML = speedGroupHtml(S);
   }
 }
 
+// Pause, the four speeds, and the run to the next decision. `-` and `=` walk
+// the speeds from the keyboard; the tips say so, because the most-pressed
+// control in the game had no key for a long time.
 export function speedGroupHtml(S) {
-  return `<button class="speed-btn pause ${S.settings.paused ? 'on' : ''}" data-act="speed" data-v="0" data-tip="Pause · <b>Space</b>">❚❚</button>`
-    + TIME.SPEEDS.map((s2, i) => `<button class="speed-btn ${!S.settings.paused && S.settings.speed === i + 1 ? 'on' : ''}" data-act="speed" data-v="${i + 1}">${s2}×</button>`).join('');
+  const seeking = Transport.isSeeking();
+  return `<button class="speed-btn pause ${S.settings.paused ? 'on' : ''}" data-act="speed" data-v="0" aria-label="Pause" aria-pressed="${!!S.settings.paused}" data-tip="Pause · <b>Space</b>">❚❚</button>`
+    + TIME.SPEEDS.map((s2, i) => `<button class="speed-btn ${!S.settings.paused && S.settings.speed === i + 1 ? 'on' : ''}" data-act="speed" data-v="${i + 1}" aria-pressed="${!S.settings.paused && S.settings.speed === i + 1}" data-tip="${s2}× · <b>−</b> slower, <b>=</b> faster">${s2}×</button>`).join('')
+    + `<button class="speed-btn next ${seeking ? 'on' : ''}" data-act="next-decision" aria-label="Run to the next decision" aria-pressed="${seeking}" data-tip="${seeking ? 'Running to the next decision — press to stop' : 'Run to the next decision'} · <b>N</b>">▸❚</button>`;
+}
+
+export function postDoorHtml(S) {
+  let n = 0;
+  try { n = unreadMail(S).length; } catch { n = 0; }
+  return `<button class="tb-wire tb-post ${n ? 'needs' : ''}" data-act="open-mail"
+    aria-label="Mail" data-tip="<b>The post</b><br>${n ? `${n} unread` : 'nothing unread'} · <b>M</b>"
+    ><span class="tbw-dot"></span><span class="tbw-n">${n || '—'}</span></button>`;
 }
 
 export function wireDoorHtml(S) {
@@ -240,7 +290,76 @@ export function wireDoorHtml(S) {
     ><span class="tbw-dot"></span><span class="tbw-n">${open || '—'}</span></button>`;
 }
 
+// §I9. The notice slot. One line from somebody who works here, on the first
+// morning of a session and on each in-game morning slow enough to read one. It
+// is written straight into its own span rather than through `paintTopbar`,
+// because the topbar is patched on a key and a transient line has no key —
+// and it clears itself, so nothing else has to remember it is there.
+let sayTimer = 0;
+export function say(who, text, ms = 11000) {
+  const el = document.getElementById('tb-say');
+  if (!el || !text) return false;
+  clearTimeout(sayTimer);
+  el.innerHTML = `<span class="tb-said">
+    <span class="tb-said-who mono">${esc(who || '')}</span>
+    <span class="tb-said-line">${esc(text)}</span></span>`;
+  const plate = el.firstElementChild;
+  requestAnimationFrame(() => plate?.classList?.add('in'));
+  sayTimer = setTimeout(() => {
+    plate?.classList?.remove('in');
+    setTimeout(() => { if (el.firstElementChild === plate) el.innerHTML = ''; }, 320);
+  }, ms);
+  return true;
+}
+
 export const ROMAN = ['0', 'I', 'II', 'III', 'IV', 'V'];
+
+// ── §I10. The month, as dots ────────────────────────────────────────────────
+// A strip of thirty under the topbar: today lit, the days that had something on
+// them marked, the Sundays a shade apart, and what is due ahead of you hollow.
+// The console has never had a calendar of any kind — the workstation grew a
+// whole app for it — and this is the cheapest honest version: it says where in
+// the month you are, which is the question the date alone cannot answer.
+//
+// `monthGrid` walks the journal and derives four estimates, so it is *not* free
+// and it is not called on the frame loop: it is rebuilt when the floored day
+// moves, which is once every seven real seconds at 1×.
+let stripDay = -1;
+let stripHtml = '';
+function paintDayStrip() {
+  const el = document.getElementById('daystrip');
+  if (!el || !S) return;
+  const today = Math.floor(S.time.day);
+  if (today !== stripDay) {
+    stripDay = today;
+    let grid = null;
+    try { grid = monthGrid(S, monthOf(today)); } catch { grid = null; }
+    stripHtml = grid ? stripFor(grid, today) : '';
+  }
+  if (el.__h !== stripHtml) { el.__h = stripHtml; el.innerHTML = stripHtml; }
+}
+
+function stripFor(grid, today) {
+  const cells = grid.cells.map((c) => {
+    // A quiet entry is a ship or an award — real, and not what the strip is
+    // for. What it marks is a day something asked you something.
+    const loud = c.events.filter((e) => !e.quiet);
+    const cls = [
+      c.today ? 'now' : '',
+      c.future ? 'ahead' : '',
+      c.sunday ? 'sun' : '',
+      loud.length ? 'mark' : '',
+      loud.some((e) => e.future) ? 'due' : '',
+    ].filter(Boolean).join(' ');
+    const tip = loud.length
+      ? `<b>d${c.day}</b><br>${loud.slice(0, 4).map((e) => esc(e.title)).join('<br>')}`
+      : `d${c.day}`;
+    return `<span class="dd ${cls}" data-tip="${tip}" data-tip-title="${esc(grid.name)}"></span>`;
+  }).join('');
+  return `<span class="ds-k mono">${esc(grid.name.toUpperCase())}</span>
+    <span class="ds-dots">${cells}</span>
+    <span class="ds-n mono">D${today}</span>`;
+}
 
 // ── Nav ────────────────────────────────────────────────────────────────────
 export function navBadge(S, v) {
@@ -306,32 +425,79 @@ export function paintMain() {
 
 // ── Feed ───────────────────────────────────────────────────────────────────
 const TYPE_LABEL = { social: 'x', hn: 'hn', news: 'press', log: 'agent', ship: 'ship',
-  launch: 'launch', incident: 'alert', research: 'r&d' };
+  launch: 'launch', incident: 'alert', research: 'r&d', mail: 'mail' };
+
+// ── Triage ──────────────────────────────────────────────────────────────────
+// What is left of a thread's life, in the mono the rest of the chrome uses. A
+// thread expires — `expireThreads` resolves it unanswered once `expires` passes
+// — and until this nothing on screen said so, which made the deadline something
+// a founder discovered by having missed it.
+function leftChip(S, f) {
+  const d = daysLeft(S, f);
+  if (d === null) return '';
+  const cls = d <= 3 ? 'soon' : d <= 10 ? 'near' : '';
+  return `<span class="feed-left mono ${cls}" data-tip="Nobody waits for ever. It resolves itself when this runs out." data-tip-title="Time to answer">${d}d left</span>`;
+}
+
+// The replies, Later beside them. Later is once per thread and it says so after
+// it has been used, rather than sitting there as a key that does nothing.
+function threadOptsHtml(S, f) {
+  const opts = threadOptions(S, f);
+  return `<div class="thread-opts">
+    ${opts.map((o, i) => `<button class="thread-opt" data-act="thread" data-v="${f.id}" data-i="${i}">${esc(o.label)}</button>`).join('')}
+    ${f.snoozed
+      ? `<span class="thread-later done mono" data-tip="Pushed once already. There is no second Later." data-tip-title="Later">LATER · D${f.snoozed}</span>`
+      : `<button class="thread-later" data-act="thread-later" data-v="${f.id}" data-tip="A week further out, and it drops below whatever is still asking. Once." data-tip-title="Later">Later</button>`}
+  </div>`;
+}
+
+// A letter in the rail is an envelope: who wrote, and what about, on one line.
+// A letter is long-form — the workstation gives it a whole app — and nine of
+// them at full length is a rail nobody reaches the bottom of. Pressing it
+// unfolds it here; on the workstation the same action opens Mail.
+function envelopeHtml(S, f) {
+  const open = f.thread && !f.resolved;
+  const on = S?.ui?.letterOpen === f.id;
+  return `<div class="feed-item envelope ${open ? 'actionable' : ''} ${f.snoozed && open ? 'later' : ''} ${on ? 'unfolded' : ''} ${f.byWorld ? 'by-world' : ''}"${open ? ' data-tut="thread"' : ''}>
+    <button class="env-line" type="button" data-act="feed-letter" data-v="${f.id}" aria-expanded="${!!on}">
+      <span class="env-mark" aria-hidden="true">✉</span>
+      <span class="env-who">${esc(f.mail?.from || f.author || '')}</span>
+      <span class="env-subject">${esc(f.mail?.subject || f.meta || '')}</span>
+      ${open ? '<span class="feed-live">needs you</span>' : ''}
+      ${open ? leftChip(S, f) : ''}
+      <span class="env-day mono">d${f.day}</span>
+    </button>
+    ${on ? `<div class="env-body">${md(f.text)}</div>` : ''}
+    ${on && open ? threadOptsHtml(S, f) : ''}
+    ${on && f.thread && f.resolved && f.outcome ? `<div class="thread-out">
+      <span class="thread-chosen">▸ ${esc(f.chosen || '')}</span>${md(f.outcome)}</div>` : ''}
+    ${on && f.thread && f.expired ? '<div class="thread-out dimmer">You did not answer. It resolved itself.</div>' : ''}
+  </div>`;
+}
 
 // Shared with the workstation: the Wire is the same element in both housings.
 export function feedHtml(S) {
-  // Open threads pin to the top — an unanswered decision should never scroll away.
-  const openItems = S.feed.filter((f) => f.thread && !f.resolved);
-  const rest = S.feed.filter((f) => !(f.thread && !f.resolved)).slice(0, 55 - openItems.length);
-  const items = [...openItems, ...rest];
+  // Needs-you first, then newest — and a thread the founder pressed Later on
+  // sits below the ones still asking, which is the whole of what Later buys.
+  // `triageFeed` owns that order so both housings sort one rail one way.
+  const items = triageFeed(S);
   return items.map((f) => {
     const open = f.thread && !f.resolved;
-    const opts = open ? threadOptions(S, f) : [];
+    if (f.type === 'mail') return envelopeHtml(S, f);
     return `
-    <div class="feed-item ${f.tone || ''} ${open ? 'actionable' : ''} ${f.thread && f.resolved ? 'answered' : ''} ${f.byWorld ? 'by-world' : ''} ${f.untrusted ? 'untrusted' : ''}">
+    <div class="feed-item ${f.tone || ''} ${open ? 'actionable' : ''} ${f.snoozed && open ? 'later' : ''} ${f.thread && f.resolved ? 'answered' : ''} ${f.byWorld ? 'by-world' : ''} ${f.untrusted ? 'untrusted' : ''}"${open ? ' data-tut="thread"' : ''}>
       <div class="feed-meta">
         <span class="feed-type ${f.type}">${TYPE_LABEL[f.type] || f.type}</span>
-        ${f.author ? `<span class="feed-author">${esc(f.author)}</span>` : ''}
+        ${f.author ? `<span class="feed-author">${esc(f.author)}${f.via ? ` · via ${esc(f.via)}` : ''}</span>` : ''}
         <span class="grow"></span>
         ${open ? '<span class="feed-live">needs you</span>' : ''}
+        ${open ? leftChip(S, f) : ''}
         <span>d${f.day}</span>
       </div>
       <div class="feed-text">${md(f.text)}</div>
       ${f.meta ? `<div class="feed-sub">${md(f.meta)}</div>` : ''}
       ${f.type === 'hn' && f.points ? `<div class="feed-sub">▲ ${f.points} · ${f.comments} comments</div>` : ''}
-      ${open ? `<div class="thread-opts">
-        ${opts.map((o, i) => `<button class="thread-opt" data-act="thread" data-v="${f.id}" data-i="${i}">${esc(o.label)}</button>`).join('')}
-      </div>` : ''}
+      ${open ? threadOptsHtml(S, f) : ''}
       ${f.thread && f.resolved && f.outcome ? `<div class="thread-out">
         <span class="thread-chosen">▸ ${esc(f.chosen)}</span>${md(f.outcome)}
         ${f.effects?.length ? `<span class="row wrap g4 mt6">${f.effects.map(([k, v]) =>

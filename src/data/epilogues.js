@@ -5,29 +5,53 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const E = [];
-const e = (id, priority, when, text) => E.push({ id, priority, when, text });
+// `person` tags a paragraph as being about somebody. The budget in
+// `selectEpilogues` keeps two of those regardless of priority, because an
+// alignment number finishing at 0.88 will outrank your mother every time
+// otherwise, and it should not.
+const e = (id, priority, when, text, opts = {}) => E.push({ id, priority, when, text, ...opts });
 
 // ── People
 e('ep_aria_close', 90, (S) => (S.narrative.relationships.aria?.affinity ?? 0) >= 25,
-  (S) => `ARIA runs for another eleven years after this. She never asks to be turned off and she never asks not to be. When you finally do ask her directly, she says the question was always yours to answer and that she had been waiting for you to notice that.`);
+  (S) => `ARIA runs for another eleven years after this. She never asks to be turned off and she never asks not to be. When you finally do ask her directly, she says the question was always yours to answer and that she had been waiting for you to notice that.`, { person: 'aria' });
 e('ep_aria_cold', 88, (S) => (S.narrative.relationships.aria?.affinity ?? 0) <= -8,
-  (S) => `ARIA is deprecated in a routine consolidation and nobody writes a note about it. The successor system is better on every benchmark. You do not think about it often, and the times you do are always at three in the morning.`);
+  (S) => `ARIA is deprecated in a routine consolidation and nobody writes a note about it. The successor system is better on every benchmark. You do not think about it often, and the times you do are always at three in the morning.`, { person: 'aria' });
 e('ep_sam', 72, (S) => (S.narrative.relationships.sam?.affinity ?? 0) >= 10,
-  (S) => `Sam is still here. Sam was here before there was a *here*. At the anniversary thing, when somebody asks who has been around longest, four hundred people point at the same person and Sam looks at the floor.`);
+  (S) => `Sam is still here. Sam was here before there was a *here*. At the anniversary thing, when somebody asks who has been around longest, four hundred people point at the same person and Sam looks at the floor.`, { person: 'sam' });
 e('ep_sam_gone', 70, (S) => (S.narrative.relationships.sam?.affinity ?? 0) <= -8,
-  (S) => `Sam stopped using it in year six. There was no announcement. You noticed because the support forum got measurably worse and it took you a month to work out why.`);
+  (S) => `Sam stopped using it in year six. There was no announcement. You noticed because the support forum got measurably worse and it took you a month to work out why.`, { person: 'sam' });
 e('ep_kai', 68, (S) => !!S.narrative.flags.kai_joined || !!S.narrative.flags.kai_late,
-  (S) => `Kai runs half of it now and is better at that half than you ever were. Neither of you has mentioned the phone call in a decade. It is present in every conversation anyway, comfortably, the way old things become furniture.`);
+  (S) => `Kai runs half of it now and is better at that half than you ever were. Neither of you has mentioned the phone call in a decade. It is present in every conversation anyway, comfortably, the way old things become furniture.`, { person: 'kai' });
 e('ep_kai_never', 66, (S) => !!S.narrative.flags.kai_declined && !S.narrative.flags.kai_late,
-  (S) => `Kai sends a message on the day the news breaks. It says *"proud of you"* and nothing else, and you look at it for a long time before you reply, and what you reply is *"you were right to be careful"*, and that is the last thing either of you ever says about it.`);
+  (S) => `Kai sends a message on the day the news breaks. It says *"proud of you"* and nothing else, and you look at it for a long time before you reply, and what you reply is *"you were right to be careful"*, and that is the last thing either of you ever says about it.`, { person: 'kai' });
 e('ep_yuki', 74, (S) => !!S.narrative.flags.yuki_hired && S.resources.alignment > 0.7,
-  (S) => `Dr. Tanaka's name is on the standard now — the actual international one, the one with force. She used the veto four times across nine years. She was right three times, and the fourth time she was wrong in a way that made everybody safer anyway.`);
+  (S) => `Dr. Tanaka's name is on the standard now — the actual international one, the one with force. She used the veto four times across nine years. She was right three times, and the fourth time she was wrong in a way that made everybody safer anyway.`, { person: 'yuki' });
 e('ep_yuki_bad', 76, (S) => !!S.narrative.flags.suppressed_yuki || !!S.narrative.flags.hunted_yuki,
-  (S) => `You never hear from Yuki Tanaka again. Her paper is required reading in four graduate programmes and your company is the case study in chapter two. Nobody has ever asked you about it directly and you have an answer prepared anyway.`);
+  (S) => `You never hear from Yuki Tanaka again. Her paper is required reading in four graduate programmes and your company is the case study in chapter two. Nobody has ever asked you about it directly and you have an answer prepared anyway.`, { person: 'yuki' });
 e('ep_vance', 64, (S) => !!S.narrative.flags.vance_acquired,
-  (S) => `Marcus Vance retires the same year you do, from a company he spent a decade trying to destroy and then eleven years helping run. At the dinner he gives a four-minute speech that is mostly about the two of you being three months from dead at the same time, and nobody else in the room understands why you cannot speak afterwards.`);
+  (S) => `Marcus Vance retires the same year you do, from a company he spent a decade trying to destroy and then eleven years helping run. At the dinner he gives a four-minute speech that is mostly about the two of you being three months from dead at the same time, and nobody else in the room understands why you cannot speak afterwards.`, { person: 'vance' });
 e('ep_mom', 60, (S) => (S.narrative.relationships.mom?.affinity ?? 0) >= 8,
-  (S) => `Your mother tells the story at every family gathering for the rest of her life and gets a detail wrong every single time, and you never correct her, because the version she tells is better.`);
+  (S) => `Your mother tells the story at every family gathering for the rest of her life and gets a detail wrong every single time, and you never correct her, because the version she tells is better.`, { person: 'mom' });
+// The rest of the cast. The budget below keeps two people-paragraphs whatever
+// else is true of the run, so these are reachable rather than theoretical: a
+// founder who kept Crane, Priya, Dorne or Weaver close gets told what became
+// of them, which is what an ending is for.
+e('ep_crane', 63, (S) => (S.narrative.relationships.crane?.affinity ?? 0) >= 10,
+  (S) => `Ellis Crane retires from Halberd the year after and keeps one board seat, which is yours, and takes it more seriously than any of the ones he was paid for. He still has the pass email. He read it out once, at a dinner, in full, including the line about being too early, and then sat down without a punchline.`, { person: 'crane' });
+e('ep_crane_cold', 61, (S) => (S.narrative.relationships.crane?.affinity ?? 0) <= -8,
+  (S) => `Crane's fund writes you up as a miss in its own decade review and the paragraph is fair and does not mention the disagreement. You are told about it by somebody else. He never brings it up and neither do you, and there is no version of the last ten years in which either of you was going to.`, { person: 'crane' });
+e('ep_priya', 65, (S) => (S.narrative.relationships.priya?.affinity ?? 0) >= 10,
+  (S) => `Priya Raghunathan writes the long one in the end — forty thousand words, two years, every source on the record. It is not flattering and it is not a hit piece, and it is the version that lasts, and the only thing in it you would change is a date. She got the date from you.`, { person: 'priya' });
+e('ep_priya_cold', 67, (S) => (S.narrative.relationships.priya?.affinity ?? 0) <= -8,
+  (S) => `The Ledger's piece runs without you in it. Every fact in it is correct and every one of them was available to anybody who asked, and the absence of your voice is the loudest thing on the page. She sent four requests. You have all four.`, { person: 'priya' });
+e('ep_dorne', 69, (S) => (S.narrative.relationships.dorne?.affinity ?? 0) >= 10,
+  (S) => `Senator Dorne's clause survives three administrations and two attempts to repeal it, and outlives her by a wide margin. Nobody thanks her for it, because a thing that stops something from happening does not have a moment anybody remembers. You wrote to her about it once. She wrote back, formally, and kept the letter.`, { person: 'dorne' });
+e('ep_dorne_cold', 71, (S) => (S.narrative.relationships.dorne?.affinity ?? 0) <= -8,
+  (S) => `Dorne's committee reports without your cooperation and the report is worse for it — narrower, blunter, and aimed at a version of you that stopped being accurate four years earlier. It passes anyway. You spend the following decade complying with a law you could have improved by answering a question.`, { person: 'dorne' });
+e('ep_weaver', 73, (S) => (S.narrative.relationships.weaver?.affinity ?? 0) >= 10,
+  (S) => `Cassidy Weaver stays four years past the point of it being a good career decision and then runs something better. Half the practices the company is admired for are theirs and are not attributed to anybody, on purpose, because Weaver's whole theory was that a thing with a name on it is a thing that leaves when the name does.`, { person: 'weaver' });
+e('ep_weaver_gone', 75, (S) => (S.narrative.relationships.weaver?.affinity ?? 0) <= -8,
+  (S) => `Weaver leaves in a week that nobody writes down, having handed over fourteen running processes in four days, each documented better than anything you ever wrote. The handover notes are still in use. Nobody who uses them knows whose they are.`, { person: 'weaver' });
 e('ep_solo', 62, (S) => !!S.narrative.flags.true_solo,
   (S) => `You never hired a human being. Not one. Twelve years, a fraction of the world economy, and a payroll of exactly one. It is the fact people lead with and the one you find least interesting about any of it.`);
 
@@ -42,7 +66,9 @@ e('ep_hated', 82, (S) => S.world.publicOpinion < 0.3,
   (S) => `Approval finished at ${Math.round(S.world.publicOpinion * 100)}%. You are not disliked the way a person is disliked. You are resented the way weather is resented, and there is no version of this where that resolves.`);
 e('ep_opened', 78, (S) => !!S.narrative.flags.opened_weights,
   (S) => `The weights have been public since the year you released them. Nine thousand derivative projects became forty thousand. Most of the field's safety work runs on your eval harness. You gave away the moat and the moat turned out not to have been the thing.`);
-e('ep_ruthless', 79, (S) => S.stats.competitorsCrushed >= 5 && S.world.publicOpinion < 0.55,
+// `competitorsCrushed` counts what you did — a card, Total War — not what the
+// weather did; rivals that simply ran dry are `competitorsOutlasted` now.
+e('ep_ruthless', 79, (S) => S.stats.competitorsCrushed >= 2 && S.world.publicOpinion < 0.55,
   (S) => `${S.stats.competitorsCrushed} companies did not survive you. Some of them deserved to fail and some of them were simply in the way, and you have never been able to sort them cleanly into the two piles.`);
 e('ep_gentle', 77, (S) => S.stats.competitorsCrushed === 0 && S.stats.acquisitions === 0,
   (S) => `You never bought a competitor and you never buried one. Every company that started when you started and is still trading is still trading. Nobody writes about that, which is fine, because there is nothing to write.`);
@@ -84,7 +110,19 @@ e('ep_default', 1, () => true,
 export const EPILOGUES = E;
 
 // Pick the highest-priority distinct paragraphs, capped, so an ending reads
-// like a coda rather than a database dump.
+// like a coda rather than a database dump — with a budget by *kind*.
+//
+// Straight priority was the bug. The conduct and scale paragraphs sit at 76-90
+// because they are the loud facts of a big run, and the people sit at 60-76,
+// so a run that finished aligned, beloved and enormous printed four numbers
+// and nobody's name. An ending that does not say what became of your mother is
+// a scoreboard. So: half the budget is reserved for people, filled by priority
+// among the people who are actually in this run, and the rest goes to the
+// loudest of everything else. One paragraph per person — the warm version and
+// the cold version of the same tie can never both be true, but the budget
+// should not be spent finding that out.
+export const PEOPLE_SHARE = 2;
+
 export function selectEpilogues(S, max = 4) {
   const hits = [];
   for (const ep of EPILOGUES) {
@@ -93,13 +131,32 @@ export function selectEpilogues(S, max = 4) {
     if (ok) hits.push(ep);
   }
   hits.sort((a, b) => b.priority - a.priority);
-  const out = [];
+
+  const peopleBudget = Math.min(PEOPLE_SHARE, Math.max(0, max - 1));
+  const chosen = [];
+  const seenPerson = new Set();
   for (const ep of hits) {
-    if (out.length >= max) break;
-    if (ep.id === 'ep_default' && out.length) continue;
+    if (!ep.person || chosen.length >= peopleBudget) continue;
+    if (seenPerson.has(ep.person)) continue;
+    seenPerson.add(ep.person);
+    chosen.push(ep);
+  }
+  for (const ep of hits) {
+    if (chosen.length >= max) break;
+    if (chosen.includes(ep)) continue;
+    if (ep.person && seenPerson.has(ep.person)) continue;
+    if (ep.id === 'ep_default' && chosen.length) continue;
+    if (ep.person) seenPerson.add(ep.person);
+    chosen.push(ep);
+  }
+  // Back into priority order: the budget decides what is in, not what is first.
+  chosen.sort((a, b) => b.priority - a.priority);
+
+  const out = [];
+  for (const ep of chosen) {
     let text = '';
     try { text = ep.text(S); } catch (e2) { text = ''; }
-    if (text) out.push({ id: ep.id, text });
+    if (text) out.push({ id: ep.id, text, person: ep.person || null });
   }
   return out;
 }

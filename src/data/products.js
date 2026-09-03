@@ -1,56 +1,65 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // PRODUCT CATEGORIES — "what should I build?" is the first real decision.
 // tam: total addressable users. viral/churn/price shape the whole run.
+//
+// `computeHungry` is what a user costs to serve, relative to the category's own
+// fair price — §A5. It is the whole reason a free consumer app needs capital
+// and a boring B2B tool prints money: the media and agent categories run a
+// model for every interaction, and the marketplace mostly moves rows between
+// two people. The scale is set in `ECON.SERVE_FAIR_SHARE`; these are ratios.
 // ─────────────────────────────────────────────────────────────────────────────
 export const CATEGORIES = [
   { id: 'devtools', name: 'Developer Tools', icon: '⌘', color: '#4dd0e1',
     tagline: 'Sell shovels to the people digging.',
     desc: 'Fast feedback, brutal taste, users who will tell you exactly what is wrong. Low prices, low churn, high credibility.',
-    tam: 42e6, baseViral: 0.14, baseChurn: 0.030, basePrice: 22, arpuScale: 1.0,
-    insightNeed: 0.7, qualityWeight: 1.25, regRisk: 0.1, hypeSensitivity: 0.8,
+    tam: 42e6, baseViral: 0.14, baseChurn: 0.030, basePrice: 22,
+    qualityWeight: 1.25, regRisk: 0.1, hypeSensitivity: 0.8, computeHungry: 0.8,
     startingFeature: 'A CLI that does one thing well' },
   { id: 'b2b', name: 'B2B SaaS', icon: '⌗', color: '#f5a623',
     tagline: 'Boring problems. Beautiful margins.',
     desc: 'Slow to start, impossible to kill. Enterprise contracts, annual plans, and procurement departments that love you.',
-    tam: 16e6, baseViral: 0.045, baseChurn: 0.018, basePrice: 190, arpuScale: 3.2,
-    insightNeed: 1.3, qualityWeight: 0.9, regRisk: 0.25, hypeSensitivity: 0.4,
+    tam: 16e6, baseViral: 0.045, baseChurn: 0.018, basePrice: 190,
+    qualityWeight: 0.9, regRisk: 0.25, hypeSensitivity: 0.4, computeHungry: 0.55,
     startingFeature: 'A dashboard someone will pay for' },
   { id: 'consumer', name: 'Consumer App', icon: '☼', color: '#00e5a0',
     tagline: 'Everyone or no one.',
     desc: 'Explosive virality, terrifying churn, and monetization that arrives late if at all. The lottery ticket.',
-    tam: 3.1e9, baseViral: 0.31, baseChurn: 0.105, basePrice: 9, arpuScale: 0.5,
-    insightNeed: 1.1, qualityWeight: 1.0, regRisk: 0.3, hypeSensitivity: 1.6,
+    tam: 3.1e9, baseViral: 0.31, baseChurn: 0.105, basePrice: 9,
+    qualityWeight: 1.0, regRisk: 0.3, hypeSensitivity: 1.6, computeHungry: 1.5,
     startingFeature: 'A feed that is hard to put down' },
   { id: 'agents', name: 'Autonomous Agents', icon: '⌬', color: '#8b5cf6',
     tagline: 'Software that does the job, not software that helps you do it.',
     desc: 'The frontier. Enormous willingness-to-pay, enormous compute costs, and the regulators are already circling.',
-    tam: 180e6, baseViral: 0.17, baseChurn: 0.06, basePrice: 96, arpuScale: 1.7,
-    insightNeed: 1.0, qualityWeight: 1.2, regRisk: 0.75, hypeSensitivity: 1.9,
+    tam: 180e6, baseViral: 0.17, baseChurn: 0.06, basePrice: 96,
+    qualityWeight: 1.2, regRisk: 0.75, hypeSensitivity: 1.9,
+    // The hungriest thing in the game: an agent that finishes a job runs a
+    // model for the length of the job. `serveCostPerUser` in systems/product.js
+    // reads this, and the Product view prints the margin it leaves.
     computeHungry: 2.4, startingFeature: 'An agent that finishes what it starts' },
   { id: 'marketplace', name: 'Marketplace', icon: '⇄', color: '#f472b6',
     tagline: 'Take a cut of something that already happens.',
     desc: 'Two-sided cold start hell, then unstoppable network effects. Hardest first year, best fifth year.',
-    tam: 760e6, baseViral: 0.24, baseChurn: 0.075, basePrice: 34, arpuScale: 1.4,
-    insightNeed: 1.4, qualityWeight: 0.85, regRisk: 0.4, hypeSensitivity: 1.0,
+    tam: 760e6, baseViral: 0.24, baseChurn: 0.075, basePrice: 34,
+    qualityWeight: 0.85, regRisk: 0.4, hypeSensitivity: 1.0, computeHungry: 0.6,
     coldStart: 1.5, networkBonus: 1.9, startingFeature: 'A way for two strangers to transact' },
   { id: 'fintech', name: 'Fintech', icon: '§', color: '#34d399',
     tagline: 'Move money. Keep a little.',
     desc: 'Revenue from day one, licensing from day zero. Every feature needs a lawyer.',
-    tam: 900e6, baseViral: 0.09, baseChurn: 0.028, basePrice: 58, arpuScale: 2.0,
-    insightNeed: 1.2, qualityWeight: 1.1, regRisk: 0.95, hypeSensitivity: 0.7,
+    tam: 900e6, baseViral: 0.09, baseChurn: 0.028, basePrice: 58,
+    qualityWeight: 1.1, regRisk: 0.95, hypeSensitivity: 0.7, computeHungry: 0.5,
     startingFeature: 'A ledger you can trust' },
   { id: 'infra', name: 'Infrastructure', icon: '▦', color: '#60a5fa',
     tagline: 'Be the floor everyone else stands on.',
     desc: 'Usage-based revenue that scales with your customers\' success. Reliability is the entire product.',
-    tam: 14e6, baseViral: 0.075, baseChurn: 0.012, basePrice: 330, arpuScale: 3.4,
-    insightNeed: 0.9, qualityWeight: 1.5, regRisk: 0.2, hypeSensitivity: 0.5,
+    tam: 14e6, baseViral: 0.075, baseChurn: 0.012, basePrice: 330,
+    qualityWeight: 1.5, regRisk: 0.2, hypeSensitivity: 0.5, computeHungry: 1.1,
     reliabilityCritical: 2.0, startingFeature: 'An API with four nines' },
   { id: 'media', name: 'AI Media & Games', icon: '✦', color: '#fbbf24',
     tagline: 'Attention is the only real currency.',
     desc: 'Generative content at infinite scale. Hits are enormous; the hit rate is not.',
-    tam: 2.2e9, baseViral: 0.27, baseChurn: 0.095, basePrice: 13, arpuScale: 0.6,
-    insightNeed: 0.8, qualityWeight: 1.15, regRisk: 0.45, hypeSensitivity: 2.1,
-    hitDriven: 1, startingFeature: 'Something people screenshot' },
+    tam: 2.2e9, baseViral: 0.27, baseChurn: 0.095, basePrice: 13,
+    qualityWeight: 1.15, regRisk: 0.45, hypeSensitivity: 2.1, computeHungry: 2.0,
+    startingFeature: 'Something people screenshot' },
 ];
 export const CATEGORY_MAP = Object.fromEntries(CATEGORIES.map((c) => [c.id, c]));
 

@@ -347,12 +347,16 @@ html.reduced-motion .modal::after { animation: none; }
   position: absolute; inset: 0; z-index: -1; overflow: hidden; pointer-events: none;
   clip-path: var(--cut-br-in);
 }
-.choice:hover .choice-sheen::before {
+.choice .choice-sheen::before {
   content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 32%;
   background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--tone) 22%, transparent), transparent);
-  animation: hudSweep .78s cubic-bezier(.3,.1,.2,1);
+  transform: translateX(-108%) skewX(-14deg); opacity: 0;
 }
-html.reduced-motion .choice:hover .choice-sheen::before { animation: none; }
+.choice:hover .choice-sheen::before {
+  opacity: 1;
+  animation: hudSweep .78s cubic-bezier(.3,.1,.2,1) both;
+}
+html.reduced-motion .choice:hover .choice-sheen::before { animation: none; opacity: 0; }
 
 /* The keycap. This is the reference the whole card is built around: a cut,
    lit, mono cell that looks like something you press. */
@@ -546,6 +550,100 @@ html.reduced-motion .choice:hover .choice-sheen::before { animation: none; }
   background: rgba(255,255,255,0.055);
 }
 .panel-title { color: var(--ink-2); }
+
+/* ═══ FOUNDER FOCUS ═══════════════════════════════════════════════════════
+   Focus pays for every direct action, so it reads as an instrument rather
+   than a generic meter. The large number carries the exact state; the deeper
+   segmented track carries it at a glance; the footer explains both output
+   quality and recovery without sending the founder elsewhere. */
+.focus-panel {
+  --pk: color-mix(in srgb, var(--focus-color) 62%, transparent);
+}
+.focus-panel::after {
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--focus-color) 28%, transparent));
+}
+.focus-gauge {
+  position: relative; overflow: hidden; margin-bottom: 14px; padding: 12px 13px 10px;
+  --ch: 9px; clip-path: var(--cut-br);
+  background:
+    radial-gradient(120% 180% at 0 0, color-mix(in srgb, var(--focus-color) 17%, transparent), transparent 55%),
+    linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.012));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--focus-color) 42%, transparent),
+    inset 0 18px 45px -34px var(--focus-color),
+    0 8px 24px -20px var(--focus-color);
+}
+/* No stripe down the left edge. A bar pinned to one side is the web's idiom
+   for "category", and `tools/oneside.mjs` flags it: the accent here already
+   closes on all four sides as the plate's own inset ring, which is what makes
+   this read as an instrument rather than a card. */
+.focus-gauge-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+}
+.focus-identity { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.focus-orb {
+  display: grid; place-items: center; width: 27px; height: 27px; flex: 0 0 27px;
+  color: var(--focus-color); font-size: 16px;
+  background: color-mix(in srgb, var(--focus-color) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--focus-color) 40%, transparent),
+              0 0 14px -5px var(--focus-color);
+  --ch: 5px; clip-path: var(--cut-br);
+  text-shadow: 0 0 8px var(--focus-color);
+}
+.focus-copy { display: flex; flex-direction: column; min-width: 0; }
+.focus-copy b {
+  font-family: var(--mono); font-size: 11px; line-height: 1.1; letter-spacing: .18em;
+  text-transform: uppercase; color: var(--ink);
+}
+.focus-copy small {
+  margin-top: 3px; color: var(--ink-3); font-size: 9.5px; line-height: 1.2;
+}
+.focus-amount {
+  display: inline-flex; align-items: baseline; flex: 0 0 auto;
+  font-family: var(--mono); font-variant-numeric: tabular-nums;
+}
+.focus-amount strong {
+  color: var(--focus-color); font-size: 27px; line-height: .9; letter-spacing: -.055em;
+  text-shadow: 0 0 15px color-mix(in srgb, var(--focus-color) 48%, transparent);
+}
+.focus-amount span { color: var(--ink-3); font-size: 11px; margin-left: 3px; }
+.focus-track {
+  position: relative; margin-top: 12px; padding: 3px;
+  background: rgba(0,0,0,0.34);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10),
+              0 0 18px -10px var(--focus-color);
+}
+.focus-gauge .focus-track .bar {
+  height: 13px;
+  background: color-mix(in srgb, var(--focus-color) 9%, rgba(255,255,255,0.035));
+  -webkit-mask-image: repeating-linear-gradient(90deg, #000 0 11px, transparent 11px 14px);
+  mask-image: repeating-linear-gradient(90deg, #000 0 11px, transparent 11px 14px);
+}
+.focus-gauge .focus-track .bar-fill {
+  filter: drop-shadow(0 0 7px var(--focus-color));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.40);
+}
+.focus-gauge-foot {
+  display: flex; align-items: center; gap: 9px; margin-top: 8px;
+  font-family: var(--mono); font-size: 8.5px; line-height: 1;
+  letter-spacing: .08em; text-transform: uppercase; color: var(--ink-4);
+}
+.focus-state {
+  display: inline-flex; align-items: center; gap: 5px; margin-right: auto;
+  color: var(--focus-color); font-weight: 750;
+}
+.focus-state i {
+  width: 5px; height: 5px; flex: 0 0 5px; border-radius: 50%;
+  background: var(--focus-color); box-shadow: 0 0 7px var(--focus-color);
+}
+.focus-vital { white-space: nowrap; }
+.focus-vital.gain { color: color-mix(in srgb, var(--green) 78%, var(--ink-3)); }
+.focus-vital.loss { color: color-mix(in srgb, var(--red) 78%, var(--ink-3)); }
+
+@media (max-width: 500px) {
+  .focus-copy small { display: none; }
+  .focus-gauge-foot { gap: 7px; letter-spacing: .04em; }
+}
 
 /* ═══ TILES AND CELLS ══════════════════════════════════════════════════════ */
 
@@ -811,6 +909,53 @@ html.reduced-motion .btn:hover::after { animation: none; opacity: 0; }
     linear-gradient(180deg, #161a23, #101520);
 }
 
+/* §I12. The alarm, following the cut. `filter: drop-shadow` rather than
+   `box-shadow`, which would draw a rectangle behind a chamfered plate — the
+   rule this stylesheet was written around. Two chained passes at most: this is
+   one, and a plate that already carries a drop-shadow keeps its own. */
+.alarm.alarm { animation: alarmGlow 1.1s ease-in-out infinite; }
+@keyframes alarmGlow {
+  0%, 100% { border-color: rgba(255,77,94,0.9); filter: drop-shadow(0 0 7px rgba(255,77,94,0.42)); }
+  50%      { border-color: rgba(255,77,94,0.32); filter: drop-shadow(0 0 2px rgba(255,77,94,0.12)); }
+}
+html.reduced-motion .alarm { animation: none; filter: drop-shadow(0 0 5px rgba(255,77,94,0.3)); }
+@media (prefers-reduced-motion: reduce) {
+  .alarm { animation: none; filter: drop-shadow(0 0 5px rgba(255,77,94,0.3)); }
+}
+
+/* §I4. The list. A tick is the one square thing on the screen that is meant to
+   be square — a checkbox with a chamfer reads as a badge — so it keeps its
+   corners and takes the frame language everywhere else instead. */
+.td-tick { border-radius: 0; }
+.td-tick:hover { box-shadow: inset 0 0 0 1px rgba(0,229,160,0.4); }
+.td-row.done .td-tick { border-color: rgba(0,229,160,0.45); }
+.td-note { --ch: 4px; clip-path: var(--cut-br); }
+.td-go { --ch: 5px; clip-path: var(--cut-br); border-radius: 0; }
+
+/* §C9. The four hands, as keycaps: one cut each, a closed frame, and the
+   chosen one lit on all four sides rather than underlined. */
+.spend-hand {
+  --ch: 7px; clip-path: var(--cut-br); border-radius: 0;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.spend-hand.on { box-shadow: inset 0 0 0 1px rgba(0,229,160,0.45); }
+
+/* Later, and the clock it buys a week of. A key that is not a reply, so it
+   does not take the reply's fill: a single cut, a closed hairline frame, and
+   nothing lit until the pointer is on it. */
+.thread-later {
+  --ch: 6px; clip-path: var(--cut-br); border-radius: 0;
+  border: 1px solid rgba(255,255,255,0.14);
+}
+.thread-later:hover { border-color: rgba(255,255,255,0.3); background: rgba(255,255,255,0.03); }
+.feed-left { --ch: 4px; clip-path: var(--cut-br); border-radius: 0; }
+
+/* An envelope is a row, not a plate: the frame is the feed item's own and the
+   line inside it is bare, so a rail of nine letters reads as an index. */
+.env-mark { opacity: 0.75; }
+.feed-item.envelope.unfolded { --fk: rgba(245,166,35,0.42); border-color: var(--fk); }
+.env-body { border-top: 1px solid rgba(255,255,255,0.06); padding-top: 8px; }
+
 
 /* ═══ THE TREE ═════════════════════════════════════════════════════════════
    A research node is a cell on a board, so it takes the plate language at
@@ -928,7 +1073,7 @@ html.reduced-motion .btn:hover::after { animation: none; opacity: 0; }
    take the cut corner so the whole game speaks one silhouette. They keep real
    borders, so the accent already closes all the way round them. */
 .ending-card, .region-card, .char-card, .ach, .doctrine, .approach,
-.rival-row, .journal-entry { --ch: 10px; clip-path: var(--cut-br); border-radius: 0; }
+.rival-row, .journal-entry, .end-plate { --ch: 10px; clip-path: var(--cut-br); border-radius: 0; }
 
 /* ═══ THE STATUS LINE ══════════════════════════════════════════════════════ */
 
@@ -1260,3 +1405,18 @@ html.reduced-motion .tb-wire.needs .tbw-dot { animation: none; }
   .modal { --ch: 14px; }
   .modal::after { background-size: 22px 2px, 2px 22px, 22px 2px, 2px 22px; }
 }
+
+/* ═══ THE PHONE ═══════════════════════════════════════════════════════════
+   The deal on the table is a framed plate, closed on four sides, with the
+   amber of a decision waiting. The transcript is bare — prose, not a panel. */
+.call-deal.call-deal {
+  position: relative; border: 1px solid color-mix(in srgb, var(--amber) 55%, transparent);
+  --ch: 6px; clip-path: var(--cut-br); background: transparent;
+}
+.call-deal.call-deal::before {
+  content: ''; position: absolute; inset: 1px; z-index: -1;
+  clip-path: var(--cut-br-in);
+  background: linear-gradient(160deg, rgba(20,16,10,0.99), rgba(10,12,18,0.99));
+}
+.call-topic.call-topic { --ch: 6px; }
+.kept-row.kept-row { border: 1px solid color-mix(in srgb, var(--kc, var(--ink-3)) 45%, transparent); border-left-width: 1px; }

@@ -25,6 +25,11 @@ export const REGIONS = [
     desc: 'Enormous, fast, and already building its own version of everything you make.',
     likes: ['control'], dislikes: ['opinion'],
     flavour: 'Access is conditional. It is always conditional.',
+    // The card has always said they are already building their own version.
+    // §A10 makes that true: East Asia opens with somebody in the room, at the
+    // infrastructure stage, and the only way past them is to displace them.
+    domestic: { name: 'Wanshu Compute', stage: 'infra',
+      note: 'State-adjacent, four years old, and running on fabrication nobody else can book.' },
     bonus: { key: 'compute', value: 900, label: '+900 PF compute', note: 'Fabrication capacity nobody else can access.' } },
   { id: 'in', path: 'M 626,182 L 716,174 L 726,232 L 686,270 L 648,244 L 626,214 Z', at: [674, 220], name: 'South Asia', short: 'SA', icon: '◪', color: '#f5a623',
     pop: 0.24, gdp: 0.09, baseStance: 0.48, regBase: 0.45,

@@ -1243,9 +1243,14 @@ first.
 ### 8.6 The tool surface does not change
 `show_module`'s enum is `views(s)` — the eight module ids — and stays so.
 `setView` doing more on the workstation is invisible to the tool. `spotlight_panel`'s
-enum is `spotlightAnchors()`, aliased at resolve time. No tool is added: the
-surface is capped at sixteen, every name goes through a platform safety review,
-and `evals/select.mjs` scores the descriptions. A "window" vocabulary in tool
+enum is `spotlightAnchors()`, aliased at resolve time. No tool is added for the
+housing. The sixteen-slot ceiling this paragraph used to name was never the
+platform's: what is enforced is **100 published tools and 65,536 serialised
+descriptor bytes**, plus ten registration snapshots for the life of the
+document — and it is that last one, not a slot count, that is why `surface.js`
+publishes a stable superset in one batch instead of re-registering as the run
+grows. The surface stands at 27 names. Every one goes through a platform safety
+review, and `evals/select.mjs` scores the descriptions. A "window" vocabulary in tool
 descriptions would also leak the shell into the assistant's world, which is a
 founder simulation, not a desktop.
 

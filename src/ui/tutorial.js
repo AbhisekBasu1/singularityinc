@@ -72,7 +72,10 @@ export function chapterStatus() {
   return CHAPTERS.map((c) => ({
     id: c.id, name: c.name, sub: c.sub, steps: c.steps.length,
     done: isDone(c.id),
-    available: safe(c.when, true),
+    available: safe(c.when, true) && !(c.osOnly && !osMode),
+    // A chapter about the workstation's apps has nothing to point at in the
+    // console. It stays in the list, and the note says where it lives.
+    why: c.osOnly && !osMode ? 'workstation only' : null,
   }));
 }
 
@@ -88,9 +91,14 @@ const AUTO_GAP_DAYS = 60;
 export function maybeAutoStart() {
   if (chapter || !S || isDisabled()) return false;
   const st = store();
-  if (st.lastAuto != null && S.time.day - st.lastAuto < AUTO_GAP_DAYS) return false;
+  // A chapter marked `urgent` is about something that is on screen and
+  // waiting — the first thread in the Wire — and the spacing rule would teach
+  // it sixty days after the decision it is about had answered itself.
+  const spaced = st.lastAuto != null && S.time.day - st.lastAuto < AUTO_GAP_DAYS;
   for (const c of CHAPTERS) {
     if (isDone(c.id)) continue;
+    if (c.osOnly && !osMode) continue;
+    if (spaced && !c.urgent) continue;
     if (!safe(c.when)) continue;
     if (!safe(c.auto)) continue;
     st.lastAuto = S.time.day;
@@ -105,6 +113,7 @@ export function maybeAutoStart() {
 export function start(id, { from = 0 } = {}) {
   const c = typeof id === 'object' && id ? id : CHAPTER_MAP[id];
   if (!c?.steps?.length || chapter) return false;
+  if (c.osOnly && !osMode) return false;
   chapter = c;
   index = Math.max(0, Math.min(from, c.steps.length - 1));
   if (c.hold) S.tutorialHold = true;

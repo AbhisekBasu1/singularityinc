@@ -8,7 +8,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { S } from '../../engine/state.js';
 import { render } from '../dom.js';
-import { nowWidgetHtml, readoutsWidgetHtml } from './model.js';
+import { nowWidgetHtml, readoutsWidgetHtml, floorWidgetHtml } from './model.js';
 import { OS } from './config.js';
 
 let wallEl = null;
@@ -72,7 +72,7 @@ export function paintWidgets({ mode: layout = 'desktop' } = {}) {
     if (widgetsEl.innerHTML) { widgetsEl.innerHTML = ''; widgetsEl.__html = null; }
     return;
   }
-  render(widgetsEl, nowWidgetHtml(S) + readoutsWidgetHtml(S));
+  render(widgetsEl, nowWidgetHtml(S) + floorWidgetHtml(S) + readoutsWidgetHtml(S));
 }
 
 export function widgetsOn() { return enabled; }

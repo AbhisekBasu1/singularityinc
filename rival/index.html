@@ -24,12 +24,32 @@
   .st { margin-top: 16px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.09);
         font-size: 10px; color: #6b7686; letter-spacing: .08em; }
   .ok { color: #00e5a0; } .no { color: #f5a623; }
+  a { color: #ff4d5e; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .chair { margin-top: 14px; }
+  .chair .k { font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: #6b7686; margin: 14px 0 6px; }
+  .plays { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+  .play { text-align: left; padding: 9px 10px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,77,94,.35);
+          color: #d8dee8; font: inherit; cursor: pointer; }
+  .play:hover { background: rgba(255,77,94,.14); }
+  .play b { display: block; color: #fff; font-weight: 650; }
+  .play span { font-size: 10.5px; color: #8a93a3; }
+  .say { display: flex; gap: 6px; margin-top: 8px; }
+  .say input, .say select { flex: 1; min-width: 0; padding: 8px 10px; background: rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.14);
+               color: #fff; font: inherit; }
+  .say button { padding: 8px 12px; background: #ff4d5e; color: #14060a; border: 0; font: inherit; font-weight: 700; cursor: pointer; }
+  .state { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-bottom: 6px; }
+  .state div { padding: 8px 10px; border: 1px solid rgba(255,255,255,.09); }
+  .state .d { display: block; }
+  .state b { color: #fff; }
+  .note { font-size: 10.5px; color: #6b7686; margin-top: 8px; line-height: 1.5; }
 </style>
 </head>
 <body>
   <h1>Aperture Systems</h1>
   <div class="sub">Press office · Marcus Vance, founder</div>
   <div id="feed"></div>
+  <div class="chair" id="chair"></div>
   <div class="st" id="status">…</div>
   <script type="module" src="./rival.js"></script>
 </body>

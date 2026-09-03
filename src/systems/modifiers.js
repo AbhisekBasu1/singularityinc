@@ -7,10 +7,11 @@ import { TRAIT_MAP, TOOL_MAP, MODELS } from '../data/agents.js';
 import { LEGACY_PERKS } from '../data/legacy.js';
 import { projectMods } from './projects.js';
 import { regionEffects } from './regions.js';
-import { DIRECTIVE_MAP, directiveStrength } from '../data/directives.js';
+import { orderStrengths } from '../data/directives.js';
 import { doctrineMods } from './doctrines.js';
+import { helixResearchMult, helixRogueMult } from './helix.js';
 import { diffMods } from '../data/difficulty.js';
-import { AGENTS, MODIFIERS } from '../data/balance.js';
+import { AGENTS, MODIFIERS, PRODUCT, NGPLUS } from '../data/balance.js';
 
 let cache = null;
 let cacheFor = null;
@@ -27,7 +28,7 @@ const DEFAULTS = () => ({
   buildLaneOutput: 1, growthLaneOutput: 1, researchLaneOutput: 1, opsLaneOutput: 1, moonshotLaneOutput: 1,
   opCost: 1, hostingCost: 1, computeCost: 1, energyCost: 1,
   valuationMult: 1, raiseValuation: 1, priceElastic: 1,
-  repDamage: 1, competitorGrowth: 1, rivalHeat: 1, rogueChance: 1,
+  repDamage: 1, competitorGrowth: 1, rivalHeat: 1, heatRate: 1, rogueChance: 1,
   focusRegen: 1, moonshotOdds: 1, infraSpeed: 1, controlRate: 1, allLanes: 1,
   computeCapMult: 1, energyCapMult: 1, launchPower: 1,
   // additive (default 0)
@@ -41,6 +42,19 @@ const DEFAULTS = () => ({
   networkChurn: 0, gdpUsers: 0, gdpRevenue: 0, researchCompound: 0,
   computeCompound: 0, hostileImmune: 0, noBurnout: 0, incidentAuto: 0,
 });
+
+// A weaker or stronger copy of a node's own effects: interpolated between "no
+// effect" and what the card says, so it works for a bonus (1.4) and for a
+// reduction (0.55) alike, and leaves a flag (1 with a base of 0) alone.
+function scaleMods(mods, k) {
+  const out = {};
+  for (const [key, v] of Object.entries(mods)) {
+    if (key.startsWith('+')) out[key] = v * k;
+    else if (typeof v === 'number') out[key] = 1 + (v - 1) * k;
+    else out[key] = v;
+  }
+  return out;
+}
 
 function apply(mods, source) {
   if (!source) return;
@@ -65,7 +79,13 @@ export function computeMods(S) {
   // 1. Research
   for (const id of Object.keys(S.research.done)) {
     const node = RESEARCH_MAP[id];
-    if (node?.mods) apply(m, node.mods);
+    if (!node?.mods) continue;
+    // §A12c. A node with `scaleWith` was worth what the company was on the day
+    // it landed; `completeResearch` fixed the strength then and stored it. A
+    // save from before this — and every node without the field — has no entry
+    // and gets exactly the mods it always did.
+    const k = S.research.scale?.[id];
+    apply(m, k == null || k === 1 ? node.mods : scaleMods(node.mods, k));
   }
 
   // 2. Legacy perks (permanent across runs)
@@ -127,12 +147,25 @@ export function computeMods(S) {
   m['+opinionDrift'] += pm.opinionDrift;
   m.computeCost *= pm.computeCostMult;
   m.reliabilityFloor = Math.max(m.reliabilityFloor, pm.reliabilityFloor);
-  m.polishPerDay = pm.polishPerDay;
+  // Polish that grows on its own: the Design Studio's rate plus whatever
+  // `unlocks.autoPolish` is worth (the Designer starts with it). Additive, so
+  // neither source erases the other — this line used to assign.
+  m.polishPerDay = (m.polishPerDay || 0) + pm.polishPerDay
+    + (S.unlocks?.autoPolish ? PRODUCT.AUTO_POLISH_PER_DAY : 0);
 
-  // 7b. Standing directive, scaled by how long it has been held.
-  const dir = DIRECTIVE_MAP[S.company.directive || 'none'];
-  if (dir && dir.id !== 'none') {
-    const k = directiveStrength(S);
+  // 7b. Standing orders, each scaled by how long *it* has been held and by the
+  // shared budget. §A23a: this used to read one directive; it reads the stack
+  // now, and `orderStrengths` returns a one-row list for every run that has not
+  // researched `autonomous_corporation`, so a single order is applied exactly
+  // as it always was. `m.directiveStrength` stays slot zero's, because that is
+  // what the Desk, the Calendar and the race all mean by it.
+  const orders = orderStrengths(S);
+  m.directiveStrength = 0;
+  m.directiveAlign = 0;
+  for (const o of orders) {
+    const dir = o.dir;
+    if (!dir || dir.id === 'none') continue;
+    const k = o.k;
     const scaled = {};
     for (const [key, v] of Object.entries(dir.mods || {})) {
       if (key.startsWith('+')) scaled[key] = v * k;
@@ -141,10 +174,22 @@ export function computeMods(S) {
       else scaled[key] = v;
     }
     apply(m, scaled);
-    m.directiveStrength = k;
-    m.directiveAlign = (dir.mods.alignBoost ? MODIFIERS.DIRECTIVE_ALIGN_GAIN : 0)
+    if (o.slot === 0) m.directiveStrength = k;
+    // Alignment drift. Slot zero contributes the flat value it always has —
+    // this term was never ramped and making it ramp would move every existing
+    // run — and the slots the stack adds contribute theirs scaled by their own
+    // strength, so a third-slot Ascend at 0.53 drains a little over half of
+    // what a sole Ascend does.
+    const flat = (dir.mods.alignBoost ? MODIFIERS.DIRECTIVE_ALIGN_GAIN : 0)
       - (dir.mods.alignDrain ? MODIFIERS.DIRECTIVE_ALIGN_DRAIN : 0);
-  } else { m.directiveStrength = 0; m.directiveAlign = 0; }
+    m.directiveAlign += o.slot === 0 ? flat : flat * k;
+  }
+
+  // 7b-ii. §A23b. HELIX, once there is a HELIX: a model that trusts the
+  // instrument works better, and one that does not is likelier to route
+  // around you. Both are 1 for a run with no foundation model.
+  m.researchRate *= helixResearchMult(S);
+  m.rogueChance *= helixRogueMult(S);
 
   // 7c. Doctrines — permanent, earned by how you ran the company.
   apply(m, doctrineMods(S));
@@ -159,7 +204,10 @@ export function computeMods(S) {
   m.researchCostMult = dm.researchCost || 1;
   m.hardFail = dm.hardFail || 0;
   m.noOffline = dm.noOffline || 0;
-  m.rivalRace = dm.rivalRace || 1;
+  // New Game+'s inverted timeline: a run that ended in The Refusal leaves a
+  // world whose labs are slower, because the leading one stopped.
+  m.rivalRace = (dm.rivalRace || 1)
+    * (S.settings?.invertFrom === 'refusal' ? NGPLUS.INVERT_REFUSAL_RACE : 1);
 
   // 7e. Scenario rules
   if (S.unlocks.quietWorld) {
@@ -206,7 +254,7 @@ export function agentStats(a, S, m = computeMods(S)) {
   let upkeep = model.upkeep;
   let xp = 1, incident = 1, insightBleed = 0, repBleed = 0, breakthrough = 0;
   let crossLane = AGENTS.CROSS_LANE_DEFAULT, aggression = 1, moraleFloor = 0, indestructible = 0, safe = 0;
-  let debtSensitive = 0, crowdPenalty = 0, focusRamp = 0, drift = 0, lies = 0;
+  let debtSensitive = 0, crowdPenalty = 0, focusRamp = 0, drift = 0, lies = 0, unauditable = 0;
   let alignDelta = 0, autonomyCreep = 0;
 
   for (const tid of a.traits || []) {
@@ -229,6 +277,7 @@ export function agentStats(a, S, m = computeMods(S)) {
     if (md.focusRamp) focusRamp = md.focusRamp;
     if (md.drift) drift = md.drift;
     if (md.lies) lies = 1;
+    if (md.unauditable) unauditable = 1;
     if (md.alignment) alignDelta += md.alignment;
     if (md.autonomyCreep) autonomyCreep += md.autonomyCreep;
   }
@@ -244,10 +293,22 @@ export function agentStats(a, S, m = computeMods(S)) {
 
   // level, morale, autonomy
   output *= 1 + (a.level - 1) * AGENTS.LEVEL_OUTPUT_RATE;
+  // §A1: and the wage follows the level, the way the output does. A veteran
+  // runs longer, holds more context and is asked harder questions; it was
+  // costing exactly what it cost on its first day.
+  upkeep *= 1 + (a.level - 1) * AGENTS.UPKEEP_PER_LEVEL;
   const morale = Math.max(moraleFloor, a.morale ?? 1);
   output *= AGENTS.MORALE_OUTPUT_BASE + AGENTS.MORALE_OUTPUT_RANGE * morale;
   output *= 1 + (a.autonomy ?? 0.5) * AGENTS.AUTONOMY_OUTPUT_RATE;
   debt *= 1 + (a.autonomy ?? 0.5) * AGENTS.AUTONOMY_DEBT_RATE;
+  // The model card's `ctx` and `reliability`. A small context window makes
+  // more mistakes the bigger the codebase gets; a low-reliability model makes
+  // more of them everywhere. Both land as debt per work unit, which is what a
+  // mistake an agent ships actually is.
+  const codebase = Math.min(AGENTS.MODEL_CTX_CAP,
+    (S.stats?.featuresShipped || 0) / AGENTS.MODEL_CTX_FEATURES);
+  debt *= 1 + (1 - (model.ctx ?? 1)) * codebase * AGENTS.MODEL_CTX_DEBT_RATE;
+  debt *= 1 + (1 - (model.reliability ?? 1)) * AGENTS.MODEL_MISTAKE_DEBT;
 
   if (crowdPenalty && S.agents.length > AGENTS.CROWD_GROUP_SIZE) {
     output *= Math.max(AGENTS.CROWD_OUTPUT_FLOOR,
@@ -262,8 +323,14 @@ export function agentStats(a, S, m = computeMods(S)) {
   debt *= m.agentDebt * m.debtRate;
   upkeep *= m.agentUpkeep;
   xp *= m.agentXp;
+  // The Probe's first promise: alignment cannot decay from this agent. Its
+  // second — rogue odds — is a multiplier in tickAgentsDaily, not a zero.
+  if (safe) alignDelta = Math.max(0, alignDelta);
+  // What the agent says it did. Only a Sycophant's differs from the truth, and
+  // the roster card prints this one while the lane panel prints `output`.
+  const reported = output * (lies ? AGENTS.SYCOPHANT_REPORT_MULT : 1);
 
-  return { output, debt, upkeep, xp, incident, insightBleed, repBleed, breakthrough,
-           crossLane, aggression, morale, indestructible, safe, drift, lies,
-           alignDelta, autonomyCreep, model };
+  return { output, reported, debt, upkeep, xp, incident, insightBleed, repBleed, breakthrough,
+           crossLane, aggression, morale, indestructible, safe, drift, lies, unauditable,
+           alignDelta, autonomyCreep, creativity: model.creativity ?? 0.5, model };
 }

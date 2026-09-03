@@ -84,6 +84,16 @@ export function gameDateShort(day) {
   return `${MONTHS[month]} ${dom} '${String(year).slice(2)}`;
 }
 
+// The founder's clock. `hourOfDay` counts from the day boundary; `dawn` is
+// where that boundary sits on a wall clock (TIME.DAWN_H), so the two readouts
+// and the cold open all agree about what time it is.
+export function clockText(hourOfDay, dawn = 0) {
+  const h = (((Number(hourOfDay) || 0) + (Number(dawn) || 0)) % 24 + 24) % 24;
+  const hh = Math.floor(h);
+  const mm = Math.floor((h - hh) * 60);
+  return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+}
+
 export function runwayText(cash, burnPerDay) {
   if (burnPerDay <= 0) return 'Profitable';
   const days = cash / burnPerDay;

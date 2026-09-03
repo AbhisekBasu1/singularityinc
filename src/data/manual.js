@@ -13,11 +13,28 @@ export const KEYS = [
   ['E', 'Talk to users', 'Generates Insight — the difference between building and guessing.'],
   ['R', 'Post publicly', 'Reputation, with a small chance of a very large day.'],
   ['S', 'Ship a feature', 'Spends accumulated Code. Insight decides how good it lands.'],
+  ['G', 'Spend the bar', 'Runs the hand chosen on the Desk over and over — until the next feature is covered, or the Focus bar is down to its last tenth, or something asks for you.'],
   ['A', 'Ask ARIA', 'A full read of the current situation, in her words.'],
+  ['M', 'The post', 'Opens the inbox. On the workstation it is a window; in the console it is a sheet.'],
+  ['C', 'Contacts', 'Everyone you have met, and a number for each of them.'],
+  ['F', 'Focus mode', 'In the console: the nav to icons and the Wire away. On the workstation, F is Find.'],
   ['Space', 'Pause / resume', 'The world stops on its own during events anyway.'],
+  ['− / =', 'Slower / faster', 'Steps the clock through 1× to 5×. Down past 1× is a stop; up from a stop is a start.'],
+  ['N', 'Next decision', 'Runs at 5× until something asks for you — a card, a thread, a letter, an incident, a finished node — then holds the clock.'],
   ['1–9', 'Choose', 'Pick an option while an event card is open.'],
   ['Enter', 'Continue', 'Move past an outcome.'],
   ['?', 'This manual', 'Also / — and the ? button in the top right.'],
+];
+
+// The mark on every choice a card offers. The tone used to be a coloured edge
+// and nothing else; this is the same information in a glyph, with the legend
+// the manual prints under the keys.
+export const TONE_LEGEND = [
+  ['◇', 'neutral', 'No lean. What it says is what it does.'],
+  ['●', 'good', 'The decent thing, which is not always the cheap one.'],
+  ['▲', 'risky', 'A gamble. The upside is real, and so is the other side.'],
+  ['$', 'costly', 'Paid for up front, in cash, equity or focus.'],
+  ['✕', 'cruel', 'Somebody pays for it who is not you.'],
 ];
 
 // Every term the interface uses, grouped the way the interface is grouped.
@@ -32,11 +49,23 @@ export const GLOSSARY = [
     ['Burnout', 'Rises when you sleep too little and rest too rarely. At 100 the game takes a week off you, whether or not that is convenient.'],
   ] },
 
+  { group: 'The clock', items: [
+    ['Decision hold', 'A card, call, walkthrough or act transition suspends time only while it is on screen. Closing it returns the clock to the state you chose. A notification switches on Pause only where you asked it to.'],
+    ['Next decision', 'The ▸❚ key beside the speeds, or N. The clock runs at 5× until something asks for you, then holds with your own speed back on the dial. Space, or any speed key, stops it sooner.'],
+    ['Stop the clock for', 'Five moments in Settings — an incident, a thread or a letter, runway under 30 days, cash going negative, an agent going rogue. All five start off, and while they are off nothing but your own hand ever pauses the game. Turn one on and it pauses the way the button does, and says which one it was.'],
+  ] },
+
   { group: 'The founder', items: [
+    ['Sleep', 'How much of a person is left at the end of the day. The Rest share of your time keeps it; a focus bar that sits empty erodes it. It moves slowly, in both directions.'],
+    ['Health', 'Follows sleep, with a lag. Above the line it costs nothing. Below it, focus comes back slower and burnout arrives faster. It cannot end a run on its own.'],
+    ['Judgement', 'Below a sleep line, the interface stops explaining itself: a card prints the answers without the line under each one saying what it costs, the phone offers one topic fewer, and a prompt rolls like somebody three levels less practised. Nothing is taken from the company. What goes is your ability to read it, and the Life panel says so in mono so it does not read as a fault.'],
+    ['Warmth', 'How recently somebody heard from you. A card with their face, a call, or a reply to their post warms it; silence cools it by half every six weeks. A warm tie pays a small daily dividend in the one thing that person is good for.'],
     ['Skills', 'Seven of them, each raising a different rate. Skill points come from levelling; levels come from doing things.'],
     ['Allocation', 'How your sixteen waking hours split between build, users, growth, learning and rest. This runs every day without being asked and it dwarfs your clicking.'],
     ['Approach', 'How you prompt. Each approach has a different spread of outcomes — safe and small, or wild and occasionally enormous. More unlock as Prompting rises.'],
     ['Streak', 'Consecutive actions without pausing. Small bonus, mostly a rhythm.'],
+    ['Quarter', 'Ninety days with a name on it. Set up to three intentions at the boundary and a card reads them back at the end. Setting one costs nothing — the commitment is the saying — and each one kept pays a little reputation, focus and alignment. Every run has quarters, board or no board.'],
+    ['Standing order', 'One company-wide policy, ramping to full strength over a month, so commitment is rewarded and thrashing is not. Once the company can run itself there are three slots sharing one budget: three orders are three weaker orders. The first slot is the one The Long View counts.'],
     ['Archetype', 'Your starting shape. Locked ones unlock by finishing runs.'],
   ] },
 
@@ -74,6 +103,8 @@ export const GLOSSARY = [
     ['Equity', 'Your remaining share. It only ever goes down.'],
     ['Sector hype', 'Market weather. Lifts valuations, launches and organic growth — and invites competitors.'],
     ['Saturation', 'How much of your addressable market is already taken, by you or anyone else. High saturation makes every new user cost more.'],
+    ['The Board', 'A Series A or later seats one; angels and a seed do not. It meets every ninety days with one ask chosen from whatever it would actually be reading — the growth line, the burn, the roster, the price, the frontier. A founder who never raises never has one.'],
+    ['Confidence', 'The only number the board has, and every power it holds is a threshold on it. Taking an ask raises it and keeping the ask raises it again; refusing costs. Two quarters low and it sets the standing order itself. Three at the floor, with control sold, and it removes you.'],
   ] },
 
   { group: 'The world', items: [
@@ -88,6 +119,7 @@ export const GLOSSARY = [
     ['Energy', 'Dedicated generation capacity in megawatts. Past a certain scale, power is the constraint rather than chips.'],
     ['World GDP', 'The share of global economic output that flows through you. The single best measure of how large this has become.'],
     ['Doom clock', 'Misalignment, scrutiny and distrust combined. It does not end the game by itself; it decides how bad the bad days get.'],
+    ['HELIX', 'Your own foundation model, once you have trained one, as a standing relationship rather than four cards. Its standing drifts toward what alignment, its granted requests and its arc say it should be. High standing is faster research; low standing is likelier to route around you. There is no button — it is a consequence you can watch.'],
     ['The Race', 'Rival labs closing on the frontier. They accelerate when they fall behind. Only the Frontier branch and raw compute move your number.'],
     ['Regions', 'Eight blocs, four depths of engagement: market entry, infrastructure, government partnership, sovereign integration. Each stage binds a region tighter to you.'],
   ] },

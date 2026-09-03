@@ -90,9 +90,14 @@ export function mdInline(t) {
 }
 
 // ── Sparkline ──────────────────────────────────────────────────────────────
-export function sparkline(data, { w = 240, h = 42, color = '#00e5a0', fill = true, log = false } = {}) {
-  if (!data || data.length < 2) return `<svg class="spark" viewBox="0 0 ${w} ${h}"></svg>`;
-  const vals = data.slice(-90).map((v) => (log ? Math.log10(Math.max(1, v)) : v));
+// `label` names the series for assistive tech; the `<title>` says its span, so
+// a chart that is a picture to a screen reader is at least a sentence.
+export function sparkline(data, { w = 240, h = 42, color = '#00e5a0', fill = true, log = false, label = 'trend' } = {}) {
+  if (!data || data.length < 2) return `<svg class="spark" viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(label)}: no data yet"><title>${esc(label)}: no data yet</title></svg>`;
+  const raw = data.slice(-90);
+  const vals = raw.map((v) => (log ? Math.log10(Math.max(1, v)) : v));
+  const rawMin = Math.min(...raw), rawMax = Math.max(...raw);
+  const title = `${label}: ${raw.length} points, from ${compact(rawMin)} to ${compact(rawMax)}, ending at ${compact(raw[raw.length - 1])}`;
   let min = Math.min(...vals), max = Math.max(...vals);
   if (max === min) { max = min + 1; }
   const pad = 3;
@@ -111,26 +116,61 @@ export function sparkline(data, { w = 240, h = 42, color = '#00e5a0', fill = tru
       <stop offset="0%" stop-color="${color}" stop-opacity="0.32"/>
       <stop offset="100%" stop-color="${color}" stop-opacity="0"/></linearGradient></defs>
       <path d="${d} L${w - pad},${h} L${pad},${h} Z" fill="url(#${id})" stroke="none"/>` : '';
-  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">${area}
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="${esc(title)}"><title>${esc(title)}</title>${area}
     <path d="${d}" fill="none" stroke="${color}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>
     <circle cx="${pts[pts.length-1][0].toFixed(1)}" cy="${pts[pts.length-1][1].toFixed(1)}" r="2.2" fill="${color}"/>
   </svg>`;
 }
 
+// A short number for a title, without importing the formatter into a module
+// the formatter's own callers import.
+function compact(n) {
+  if (!Number.isFinite(n)) return '—';
+  const a = Math.abs(n);
+  if (a >= 1e12) return (n / 1e12).toFixed(1) + 'T';
+  if (a >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+  if (a >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (a >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return a >= 10 ? String(Math.round(n)) : n.toFixed(1);
+}
+
 // ── Bar helper ─────────────────────────────────────────────────────────────
+// The shape the stylesheets rely on — `.bar > .bar-fill` — with the ARIA a
+// progress bar owes: role, the three values, and a name when the caller has
+// one. `meter()` passes its label and its printed value, so a screen reader
+// hears "Next feature, 40 of 120" rather than a bare percentage.
 export function bar(pct, color = 'var(--green)', opts = {}) {
   const p = Math.max(0, Math.min(1, pct || 0)) * 100;
   const cls = ['bar', opts.tall ? 'tall' : '', opts.thin ? 'thin' : ''].filter(Boolean).join(' ');
   const fillCls = ['bar-fill', opts.shimmer ? 'shimmer' : ''].filter(Boolean).join(' ');
-  return `<div class="${cls}"><div class="${fillCls}" style="width:${p.toFixed(1)}%;background:${color}"></div></div>`;
+  const name = opts.label ? ` aria-label="${esc(plain(opts.label))}"` : '';
+  const text = opts.valueText ? ` aria-valuetext="${esc(plain(opts.valueText))}"` : '';
+  return `<div class="${cls}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(p)}"${name}${text}><div class="${fillCls}" style="width:${p.toFixed(1)}%;background:${color}"></div></div>`;
 }
+
+// Labels are sometimes authored markup — an icon span and a word. The ARIA
+// name wants the word.
+function plain(s) { return String(s ?? '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim(); }
 
 export function meter(label, valueText, pct, color, opts = {}) {
   return `<div class="meter">
     <div class="meter-head"><span class="meter-label">${label}</span>
       <span class="meter-value" style="color:${opts.valueColor || 'inherit'}">${valueText}</span></div>
-    ${bar(pct, color, opts)}
+    ${bar(pct, color, { ...opts, label: opts.label ?? label, valueText: opts.valueText ?? valueText })}
   </div>`;
+}
+
+// ── A greyed control that says why ─────────────────────────────────────────
+// A disabled `<button>` takes no pointer events in some browsers, and with
+// them goes the tooltip that would explain it. The slot around it takes the
+// hover instead and carries the note — the same mono uppercase string the
+// workstation's menus print (`src/ui/notes.js`). `note` null means the control
+// is live and the slot is inert.
+export function noteSlot(note, title, cls, inner) {
+  const tip = note
+    ? ` data-tip="${esc(`<span class="note">${esc(note)}</span>`)}"${title ? ` data-tip-title="${esc(title)}"` : ''}`
+    : '';
+  return `<span class="action-slot ${cls || ''}"${tip}>${inner}</span>`;
 }
 
 // ── Slider (custom, pointer-driven) ────────────────────────────────────────
@@ -294,39 +334,113 @@ function openTip(hit, source = 'pointer') {
 // it. Both handlers ask the same question instead: has the *tipped ancestor*
 // changed? Crossing between two children of one anchor is not an arrival, and
 // leaving one for another child of the same anchor is not a departure.
+//
+// Hover intent, on top of that. A tip opens 120ms after the pointer arrives,
+// which is long enough that a hand crossing the Desk to reach a button does
+// not light every readout on the way — and once one is open, or has been open
+// in the last 300ms, the next opens at once, so reading along a row of stats
+// is one motion rather than five waits.
+const OPEN_DELAY_MS = 120;
+const WARM_MS = 300;
+let openTimer = 0;
+let pendingEl = null;
+let warmUntil = 0;
+
+function cancelPending() {
+  if (openTimer) clearTimeout(openTimer);
+  openTimer = 0; pendingEl = null;
+}
+
 document.addEventListener('pointerover', (e) => {
   if (e.pointerType === 'touch') return;      // touch is handled below
   const hit = tipFor(e.target);
   if (hit && hit.el === tipAnchor) return;    // already open, for this very thing
-  openTip(hit);
+  if (hit && hit.el === pendingEl) return;    // already on its way
+  cancelPending();
+  if (!hit) return;                            // leaving is pointerout's job
+  const warm = !!tipEl || performance.now() < warmUntil;
+  if (warm) { openTip(hit); return; }
+  pendingEl = hit.el;
+  openTimer = setTimeout(() => {
+    openTimer = 0; pendingEl = null;
+    // The hand may have moved on during the delay; a stale open is a tip
+    // hanging over the thing the pointer left.
+    let still = false;
+    try { still = hit.el.isConnected && hit.el.matches(':hover'); } catch { still = !!hit.el.isConnected; }
+    if (still) openTip(hit);
+  }, OPEN_DELAY_MS);
 });
 document.addEventListener('pointerout', (e) => {
   if (e.pointerType === 'touch') return;
-  if (!tipAnchor) return;
   // `relatedTarget` is where the pointer is going — null when it leaves the
   // window entirely, which is a departure like any other.
   const to = e.relatedTarget;
+  if (pendingEl && !(to && pendingEl.contains?.(to))) cancelPending();
+  if (!tipAnchor) return;
   if (to && tipAnchor.contains?.(to)) return;
   if (tipFor(e.target)) hideTip();
 });
 
 // Touch has no hover, so a fifty-term glossary would be invisible on a tablet.
-// First tap on something explainable shows the note instead of activating it;
-// a second tap goes through. Anything not explainable behaves normally.
+// Two rules, by what the thing under the finger is:
+//
+//   · a label, a readout, a glossary term — nothing that acts: the first tap
+//     shows the note and the second tap dismisses it.
+//   · a control: the tap is the tap. Every tipped button used to cost two taps
+//     on iOS, the first one swallowed to show a note nobody asked for. Holding
+//     a control still for a moment shows its note instead, and the click that
+//     the hold would release is swallowed once.
+//
+// The workstation's context menu opens on a shorter hold (ctxmenu.js, 500ms)
+// and takes precedence: if a menu is up when this timer fires, the note yields.
+const LONG_PRESS_MS = 600;
+const PRESS_SLOP = 8;
 let touchArmed = null;
+let pressTimer = 0;
+let pressAt = null;
+let swallowClick = false;
+
+function endPress() {
+  if (pressTimer) clearTimeout(pressTimer);
+  pressTimer = 0; pressAt = null;
+}
+
 document.addEventListener('pointerdown', (e) => {
   if (e.pointerType !== 'touch') { hideTip(); return; }
+  swallowClick = false;
+  endPress();
   const hit = tipFor(e.target);
   if (!hit) { hideTip(); touchArmed = null; return; }
-  if (touchArmed === hit.el) { hideTip(); touchArmed = null; return; }   // second tap: let it through
-  hideTip();
-  openTip(hit);
-  touchArmed = hit.el;
-  // Only swallow the click if the note is on something that would otherwise act.
-  if (hit.el.closest('[data-act], button, a, [role="button"]')) {
-    e.preventDefault();
-    e.stopPropagation();
+  const acts = !!hit.el.closest('[data-act], button, a, [role="button"], .slider, [data-slider]');
+  if (!acts) {
+    if (touchArmed === hit.el) { hideTip(); touchArmed = null; return; }   // second tap: put it away
+    hideTip();
+    openTip(hit);
+    touchArmed = hit.el;
+    return;
   }
+  hideTip(); touchArmed = null;
+  pressAt = { x: e.clientX, y: e.clientY };
+  pressTimer = setTimeout(() => {
+    pressTimer = 0; pressAt = null;
+    if (document.querySelector('.ctx-menu')) return;    // the context menu won the hold
+    if (!hit.el.isConnected) return;
+    openTip(hit);
+    swallowClick = true;
+  }, LONG_PRESS_MS);
+}, true);
+document.addEventListener('pointermove', (e) => {
+  if (pressTimer && pressAt && Math.hypot(e.clientX - pressAt.x, e.clientY - pressAt.y) > PRESS_SLOP) endPress();
+});
+document.addEventListener('pointerup', endPress);
+document.addEventListener('pointercancel', endPress);
+// The click a long press releases would activate the control the note is
+// about. Once, in the capture phase, before the delegated handler sees it.
+document.addEventListener('click', (e) => {
+  if (!swallowClick) return;
+  swallowClick = false;
+  e.preventDefault();
+  e.stopPropagation();
 }, true);
 
 // A tap anywhere else dismisses.
@@ -336,9 +450,21 @@ document.addEventListener('pointerdown', (e) => {
 });
 window.addEventListener('blur', () => hideTip());
 window.addEventListener('resize', () => hideTip());
-// `.tip` is position: fixed. Scrolling the view under it left it hanging in
-// the air where its anchor used to be.
-document.addEventListener('scroll', () => hideTip(), true);
+// `.tip` is position: fixed. Scrolling the view under it used to hide it at
+// once, which made every note under a wheel a note you could not finish
+// reading. It follows its anchor now, and goes only when the anchor does —
+// off the top or bottom of whatever scrolls it, or off the screen.
+document.addEventListener('scroll', () => {
+  cancelPending();
+  if (!tipEl || !tipAnchor) return;
+  if (!tipAnchor.isConnected) { hideTip(); return; }
+  const r = tipAnchor.getBoundingClientRect();
+  const host = tipAnchor.closest?.('.main, .win-body, .feed-list, .modal-body, .nc-list, .menu');
+  const clip = host?.getBoundingClientRect?.();
+  const top = Math.max(0, clip?.top ?? 0), bottom = Math.min(window.innerHeight, clip?.bottom ?? window.innerHeight);
+  if (r.bottom <= top || r.top >= bottom || r.right <= 0 || r.left >= window.innerWidth) { hideTip(); return; }
+  placeTip(tipAnchor);
+}, true);
 
 // Focus is the hover the keyboard has. `:focus-visible` keeps a mouse click —
 // which focuses the button too — from opening a note that would then sit
@@ -361,6 +487,12 @@ function showTip(text, title, anchor) {
   tipEl.innerHTML = (title ? `<div class="tip-title">${esc(title)}</div>` : '')
     + mdInline(text).replace(/\n/g, '<br>');
   document.body.appendChild(tipEl);
+  placeTip(anchor);
+}
+// Above the anchor, centred, or below it when there is no room above. Called
+// again on scroll so the note rides with the thing it is about.
+function placeTip(anchor) {
+  if (!tipEl || !anchor?.getBoundingClientRect) return;
   const r = anchor.getBoundingClientRect();
   const tr = tipEl.getBoundingClientRect();
   let left = r.left + r.width / 2 - tr.width / 2;
@@ -371,7 +503,8 @@ function showTip(text, title, anchor) {
   tipEl.style.top = top + 'px';
 }
 function hideTip() {
-  if (tipEl) { tipEl.remove(); tipEl = null; }
+  cancelPending();
+  if (tipEl) { tipEl.remove(); tipEl = null; warmUntil = performance.now() + WARM_MS; }
   if (glossed) { glossed.classList.remove('glossed'); glossed = null; }
   tipAnchor = null;
 }

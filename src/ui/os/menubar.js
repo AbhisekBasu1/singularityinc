@@ -14,7 +14,7 @@ import { S } from '../../engine/state.js';
 import { esc } from '../dom.js';
 import { statsHtml, statsKey, paintStats, visibleStats } from '../readouts.js';
 import { APP_MAP, menuFor } from './apps.js';
-import { alertsHtml, clockHtml, speedHtml, powerHtml, aboutHtml, transportHtml, statsForWidth,
+import { alertsHtml, clockHtml, clockTime, speedHtml, powerHtml, aboutHtml, transportHtml, statsForWidth,
   dockMoreItems } from './model.js';
 import { alertChips } from '../readouts.js';
 import { OS, machineName } from './config.js';
@@ -120,7 +120,14 @@ export function paint() {
   html('mb-wire', wireDoor(S));
   html('mb-power', powerHtml(S));
   html('mb-speed', speedHtml(S));
-  html('mb-clock', clockHtml(S));
+  // The clock button is rebuilt only when the act, the day or the date moves;
+  // the minutes spin at seven seconds a day and are patched in place, so the
+  // button keeps its hover and its lit state while its popover is open.
+  const clockNow = clockHtml(S);
+  const clockKey = clockNow.replace(/id="mb-time">[^<]*</, 'id="mb-time"><');
+  const clockEl = document.getElementById('mb-clock');
+  if (clockEl && clockEl.__h !== clockKey) { clockEl.__h = clockKey; clockEl.innerHTML = clockNow; }
+  set('mb-time', clockTime(S));
 
   const nc = barEl.querySelector('.mb-nc');
   if (nc) nc.classList.toggle('has', !!ncCount);
@@ -256,7 +263,7 @@ function helpItems() {
     for (const c of rows) {
       items.push({
         label: c.name,
-        note: c.done ? 'complete' : c.available ? 'available' : 'not yet',
+        note: c.done ? 'complete' : c.available ? 'available' : (c.why || 'not yet'),
         act: 'os-walk', v: c.id, disabled: !c.available,
       });
     }
@@ -419,18 +426,25 @@ export function aboutDialogBody(tools) {
 // A line from ARIA lights her glyph and says what she said, briefly. It is the
 // one thing in the bar that is a voice rather than a number.
 let ariaTimer = null;
-export function ariaSpoke(line) {
+export function ariaSpoke(line) { return spoke('ARIA', line); }
+
+// §I9. The same plate, for anybody who works here. ARIA's glyph only lights
+// when it is her: Weaver has no glyph in the bar, and lighting hers under his
+// line would be the machine attributing it to the wrong person.
+export function spoke(who, line) {
+  const mine = String(who || 'ARIA').toUpperCase() === 'ARIA';
   const el = document.getElementById('mb-aria');
-  if (!el) return;
-  el.classList.add('spoke');
-  clearTimeout(ariaTimer);
-  ariaTimer = setTimeout(() => el.classList.remove('spoke'), 6000);
+  if (mine && el) {
+    el.classList.add('spoke');
+    clearTimeout(ariaTimer);
+    ariaTimer = setTimeout(() => el.classList.remove('spoke'), 6000);
+  }
   if (!line) return;
   const pop = document.createElement('div');
   pop.className = 'aria-pop';
-  pop.innerHTML = `<span class="aria-pop-who">ARIA</span><span class="aria-pop-line">${esc(line)}</span>`;
+  pop.innerHTML = `<span class="aria-pop-who">${esc(who || 'ARIA')}</span><span class="aria-pop-line">${esc(line)}</span>`;
   menusEl?.appendChild(pop);
-  const r = el.getBoundingClientRect?.();
+  const r = (el || barEl)?.getBoundingClientRect?.();
   if (r) { pop.style.top = `${Math.round(r.bottom + 6)}px`; pop.style.right = '12px'; }
   requestAnimationFrame(() => pop.classList.add('in'));
   setTimeout(() => { pop.classList.remove('in'); setTimeout(() => pop.remove(), 300); }, 5200);

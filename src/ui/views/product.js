@@ -1,10 +1,16 @@
 // ── PRODUCT ────────────────────────────────────────────────────────────────
-import { esc, bar, meter, sparkline } from '../dom.js';
+import { esc, bar, meter, slider, sparkline, noteSlot } from '../dom.js';
+import { launchNote } from '../notes.js';
 import { fmt, money, pct, clamp } from '../../engine/format.js';
 import { CATEGORY_MAP, CATEGORIES, PRICING_MODELS, FEATURE_KINDS } from '../../data/products.js';
-import { totalUsers, totalMrr, featureCost, pricingAllowed, explainProduct, portfolioEffects } from '../../systems/product.js';
+import { totalUsers, totalMrr, featureCost, pricingAllowed, explainProduct, portfolioEffects,
+         launchEstimate, serveCostPerUser, servingCostPerDay, grossMargin,
+         PRICE_CLICK_COST } from '../../systems/product.js';
+import { marketingMax, infraMax, marketingAwareness, expenseBreakdown } from '../../systems/economy.js';
 import { computeMods } from '../../systems/modifiers.js';
+import { ECON } from '../../data/balance.js';
 import { activeProduct } from '../../engine/state.js';
+import { alarmClass } from '../alarm.js';
 
 const KIND_COLOR = { core: 'var(--cyan)', ux: 'var(--violet)', ai: 'var(--green)',
   integration: 'var(--blue)', perf: 'var(--amber)', trust: 'var(--ink-2)', wild: 'var(--pink)' };
@@ -26,7 +32,7 @@ export function render(S) {
   ${!p ? `<div class="empty">No product.</div>` : `
   <div class="grid split-side">
     <div class="col g12">
-      <div class="panel" data-tut="product-head">
+      <div class="panel${alarmClass('incident')}" data-tut="product-head">
         <div class="panel-head">
           <span class="panel-title">${esc(p.name)}</span>
           <span class="row g6">
@@ -75,11 +81,15 @@ export function render(S) {
           ${p.features.length === 0 ? `<div class="empty">Nothing shipped yet. Write code on The Desk.</div>` :
             `<div class="ship-grid">
             ${p.features.slice().reverse().slice(0, 40).map((f, i) => `
-              <div class="ship-row" style="--kc:${KIND_COLOR[f.kind]}">
+              <div class="ship-row" style="--kc:${KIND_COLOR[f.kind]}"
+                data-tip="${esc(f.by
+                  ? `Built by <b>${esc(f.by)}</b> — the largest share of the build lane the day it shipped. Fit ${(f.fit * 100).toFixed(0)}%: how much of it was the thing users actually wanted.`
+                  : `You wrote this one. Fit ${(f.fit * 100).toFixed(0)}%: how much of it was the thing users actually wanted.`)}"
+                data-tip-title="${esc(f.name)}">
                 <span class="ship-n">${String(p.features.length - i).padStart(3, '0')}</span>
                 <span class="ship-name">${esc(f.name)}</span>
                 <span class="ship-kind">${f.kind}</span>
-                <span class="ship-meta">d${Math.floor(f.day)} · ${(f.fit * 100).toFixed(0)}%</span>
+                <span class="ship-meta">d${Math.floor(f.day)} · ${(f.fit * 100).toFixed(0)}% · <span class="ship-by">${f.by ? esc(f.by) : 'you'}</span></span>
               </div>`).join('')}
           </div>`}
         </div>
@@ -106,7 +116,11 @@ export function render(S) {
               <span class="pt-side high">above fair &middot; buys churn</span>
             </div>
             <div class="tiny dim mt6">Fair value is <b>${money(p.fairPrice || 0)}</b>. Under it you grow faster and earn less per user; over it conversion collapses and churn multiplies.</div>
+            <div class="tiny dimmer mt4">Every rise costs
+              <b>${PRICE_CLICK_COST.sentiment.toFixed(2)}</b> sentiment and
+              <b>${PRICE_CLICK_COST.momentum.toFixed(2)}</b> momentum, once, on the press. Cuts are free.</div>
           </div>
+          ${marginRow(S, p, m)}
           <div class="divider" style="margin:0"></div>
           <div>
             <div class="meter-label mb8">Model</div>
@@ -125,6 +139,8 @@ export function render(S) {
         </div>
       </div>
 
+      ${p.launched ? spendPanel(S, m) : ''}
+
       <div class="panel">
         <div class="panel-head"><span class="panel-title">Trajectory</span></div>
         <div class="panel-body col g12">
@@ -138,8 +154,9 @@ export function render(S) {
         <div class="panel-body">
           <div class="small dim mb12">Launch strength is set by <b>quality</b>, <b>polish</b>, <b>reputation</b> and how hot the market is right now. It only happens once.</div>
           ${meter('Projected impact', estimateLaunch(S, p), clamp(p.quality * (0.6 + p.polish), 0, 1), 'var(--green)')}
-          <button class="btn btn-primary btn-block btn-lg mt16" data-act="launch" ${p.features.length < 1 ? 'disabled' : ''}>
-            ${p.features.length < 1 ? 'Ship a feature first' : 'Launch ' + esc(p.name)}</button>
+          ${seedRange(S, p)}
+          ${noteSlot(launchNote(p), 'Launch', 'block', `<button class="btn btn-primary btn-block btn-lg mt16" data-act="launch" ${p.features.length < 1 ? 'disabled' : ''}>
+            ${p.features.length < 1 ? 'Ship a feature first' : 'Launch ' + esc(p.name)}</button>`)}
         </div>
       </div>`}
     </div>
@@ -227,6 +244,15 @@ function explainPanel(S, p) {
   </div>`;
 }
 
+// The seed users the launch roll can land, from the same strength the launch
+// itself uses — the roll is the only thing between the two ends.
+function seedRange(S, p) {
+  const e = launchEstimate(S, p);
+  if (!Number.isFinite(e.seedLo) || !Number.isFinite(e.seedHi)) return '';
+  return `<div class="row between mt8 tiny mono dim" data-tip="What the launch itself computes, minus the roll. Ship more, polish more, or wait for a hotter market to move both ends." data-tip-title="Seed users">
+    <span>first users</span><span>${fmt(e.seedLo)} – ${fmt(e.seedHi)}</span></div>`;
+}
+
 function estimateLaunch(S, p) {
   const s = (0.35 + p.quality) * (0.6 + p.polish * 1.4) * (1 + Math.min(2, S.resources.reputation / 260));
   if (s > 2.6) return 'Enormous';
@@ -239,4 +265,72 @@ function estimateLaunch(S, p) {
 function tile(label, value, sub) {
   return `<div class="stat-tile"><div class="stat-tile-label">${label}</div>
     <div class="stat-tile-value">${value}</div><div class="stat-tile-sub">${esc(sub)}</div></div>`;
+}
+
+// ── §A5 The margin, and §A17 the two dials ─────────────────────────────────
+// Serving cost is per category, per user, and independent of what you charge —
+// so the price buttons above are a margin decision and this is the readout that
+// makes it one. A free app shows the whole bill and no revenue against it.
+function marginRow(S, p, m) {
+  // The damped total over the whole book, not the raw per-user rate: past the
+  // world-GDP ceiling `servingCostPerDay` bends and the raw rate does not, and
+  // a readout that disagreed with the Ledger would be the more believable of
+  // the two and the wrong one.
+  const total = servingCostPerDay(S, m);
+  const users = totalUsers(S);
+  const per = users > 0 ? total / users : serveCostPerUser(S, p, m);
+  const gm = grossMargin(S, m);
+  const cat = CATEGORY_MAP[p.category];
+  const billable = Math.max(0, p.users - ECON.SERVE_FREE_USERS);
+  const colour = gm == null ? 'var(--ink-2)'
+    : gm > 0.75 ? 'var(--green)' : gm > 0.45 ? 'var(--amber)' : 'var(--red)';
+  return `<div class="divider" style="margin:0"></div>
+  <div data-tip="Serving is what a user costs you to run: this category's appetite (${esc(cat.name)}, ×${(cat.computeHungry ?? 1).toFixed(2)}) against what the product is worth. It does not move when you change the price — which is what makes the price a margin." data-tip-title="Gross margin">
+    <div class="row between mb4"><span class="meter-label">Gross margin</span>
+      <span class="mono bold" style="color:${colour}">${gm == null ? '—' : pct(gm, 0)}</span></div>
+    <div class="row between tiny dim"><span>Serving, per user</span>
+      <span class="mono">${money(per * 30, 2)}/mo</span></div>
+    <div class="row between tiny dim"><span>Serving, today</span>
+      <span class="mono">${money(total)}/day</span></div>
+    <div class="tiny dimmer mt4">${billable <= 0
+      ? `The first ${fmt(ECON.SERVE_FREE_USERS)} users of a product ride on the flat hosting bill.`
+      : `A better margin lifts the valuation multiple; a worse one cuts it.`}</div>
+  </div>`;
+}
+
+// Two dials the ledger has always had rows for and nothing ever wrote. Both are
+// scale-relative: the top of each slider is a share of what the company earns
+// in a day, so neither is a decision for one act and a rounding error after it.
+function spendPanel(S, m) {
+  const mMax = marketingMax(S, m);
+  const iMax = infraMax(S, m);
+  const mb = Math.min(S.company.marketingBudget || 0, mMax);
+  const ib = Math.min(S.company.infraSpend || 0, iMax);
+  const aw = marketingAwareness(S, m);
+  const eff = S._infraEffect || 0;
+  const e = expenseBreakdown(S, m);
+  const bill = e.hosting + e.serving + e.compute + e.upkeep;
+  return `
+  <div class="panel" data-tut="spend">
+    <div class="panel-head"><span class="panel-title">Spend</span>
+      <span class="tiny mono dim">${money(mb + ib)}/day</span></div>
+    <div class="panel-body col g12">
+      <div data-tip="Awareness bought rather than earned. Returns are square-root: the second million buys less than the first, and the Autonomous Ad Engine multiplies whatever you commit." data-tip-title="Marketing">
+        <div class="row between mb4"><span class="meter-label">Marketing</span>
+          <span class="mono bold">${money(mb)}/day</span></div>
+        ${slider('marketing', mMax > 0 ? mb / mMax : 0, 'var(--amber)')}
+        <div class="row between tiny dim mt4"><span>+${aw.toFixed(1)} awareness/day</span>
+          <span class="mono">max ${money(mMax)}</span></div>
+      </div>
+      <div data-tip="Redundancy, headroom and the people who carry the pager. Measured against the infrastructure bill it is topping up, so matching that bill is half of the maximum at any size." data-tip-title="Infrastructure">
+        <div class="row between mb4"><span class="meter-label">Infrastructure</span>
+          <span class="mono bold">${money(ib)}/day</span></div>
+        ${slider('infra', iMax > 0 ? ib / iMax : 0, 'var(--blue)')}
+        <div class="row between tiny dim mt4">
+          <span>+${(eff * ECON.INFRA_RELIABILITY_CAP * 100).toFixed(1)}% reliability · −${(eff * ECON.INFRA_INCIDENT_CUT * 100).toFixed(0)}% incidents</span>
+          <span class="mono">bill ${money(bill)}</span></div>
+      </div>
+      <div class="tiny dimmer">Running out of cash stops both immediately.</div>
+    </div>
+  </div>`;
 }

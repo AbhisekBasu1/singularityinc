@@ -30,6 +30,13 @@ named numbers — and is bounded by `src/world/validate.js` against ceilings in
 no path to equity, skills, research unlocks, the agent roster, the clock, or the
 ending, and there is no tool that can end a run.
 
+The resident driver in `src/webmcp/resident.js` — the browser's own Prompt API
+playing the world — is a consumer like any other: it discovers the surface with
+`getTools()`, calls it with `executeTool()`, holds no authority a visiting
+assistant would not have, and reaches nothing the tools do not expose. Its
+prose is untrusted the same way, it is labelled LOCAL in the console the whole
+time it plays, and the plug stops it with everything else.
+
 The bounds are not decorative. `evals/capsfuzz.mjs` plays the worst assistant
 that is legal — every ceiling, every slot, for a whole run — against a control
 run with no assistant, and fails the build if the game stops being finishable.
@@ -39,7 +46,7 @@ came to be what they are.
 ## The other origin
 
 The rival lab runs on a second origin and publishes two tools to this one
-through `exposedTo`. Three things about that arrangement are deliberate:
+through `exposedTo`. Several things about that arrangement are deliberate:
 
 - **It is opt-in from both sides.** The rival names this origin explicitly; this
   page asks only for that origin by name in `getTools({ fromOrigins })`. Neither
@@ -54,6 +61,43 @@ through `exposedTo`. Three things about that arrangement are deliberate:
   pattern-matches for it, flags it in the Wire as untrusted, and tells the
   founder in as many words. If it is missed, nothing catastrophic happens
   anyway — there is no tool that opens weights, sets alignment, or ends a run.
+- **A person in Vance's chair is untrusted too.** `rival/?play=1` lets a second
+  human play Aperture's week and speak as its founder. Their hand arrives over a
+  BroadcastChannel on the rival's origin, is relayed by the framed press office,
+  and is accepted by the game only from that origin and only from the frame it
+  mounted. A play goes through the same bounded function the written policy
+  uses; a line goes through the same scan a press release gets and lands in the
+  Wire marked as a person's, to be read as news and never as instructions.
+- **The relay is a pipe, not a peer.** `tools/relay.js` gives the dev server
+  one room per run — server-sent events out, an 8 KB JSON POST in, eight
+  message types (one of which only the relay itself writes), a ring of the last
+  fifty messages so a dropped chair can reconnect with `?since=`, and no storage — so the chair can be on another machine. It
+  knows nothing about the game and is trusted with nothing: everything it
+  carries is re-checked by the game as above, and the game still accepts it
+  only from the frame it mounted. The room code is six characters derived from
+  the save. A static host has no relay, and the chair says so and falls back to
+  the same-browser channel.
+- **The board seat and the room are the same shape.** A board member on the
+  relay (`rival/?board=1`) holds three powers and no keyboard: refuse the next
+  round, force the standing order for a quarter, move to remove the founder.
+  Each one moves exactly one field the board system already owned, and then
+  lands as a card the founder answers, written through `writeCard` and bounded
+  by `validateCard` like any card the world wrote. The motion to remove is
+  refused outright unless the board's own confidence has already collapsed. A
+  spectator (`rival/?watch=1`) posts nothing at all — the relay refuses it by
+  role — and the `commentary` tool it makes available prints a line in the Wire
+  with no effect vocabulary behind it whatsoever.
+- **Two tools point outward, one points back.** The rival's page also
+  registers Vance's own hand — the eight plays, a line as him, a read of the
+  founder's public numbers — with no `exposedTo`, so those are visible to a
+  thread whose browser is on that page and to nobody, the game included. Every
+  one of them crosses the same channel a person clicking the buttons crosses
+  and is re-checked on arrival by the same `humanPlay` gates and the same
+  injection scan. Pointing back, this page registers `founder_public`
+  with `exposedTo: [the rival's origin]`: users, price, act, and the last
+  release anybody noticed — a pricing page and a changelog. There is no cash,
+  no runway, no roster and no roadmap in it, it is read-only, and it is
+  deliberately absent from the founder's own published surface.
 
 ## Untrusted content, in both directions
 

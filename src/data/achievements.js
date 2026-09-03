@@ -1,10 +1,23 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// ACHIEVEMENTS — 90 of them. Some are milestones. Some are jokes. Some hurt.
+// ACHIEVEMENTS — some are milestones. Some are jokes. Some hurt. The count is
+// `ACHIEVEMENTS.length`, and every surface that prints it derives it.
+//
+// Every check reads state something writes. A threshold here is authored
+// against the floors in balance.js (`speedrun` against the act gates, the
+// all-nighters against the card's draw cap), and an achievement marked
+// `secret` is a story beat: the Legacy view and Find hide its name until it
+// lands, because the name is the spoiler.
 // ─────────────────────────────────────────────────────────────────────────────
 import { totalUsers, totalMrr } from '../systems/product.js';
+import { treeComplete } from '../systems/research.js';
+import { ENDINGS } from './endings.js';
+import { endingProgress } from './commitments.js';
 
 const A = [];
 const a = (id, name, desc, check, opts = {}) => A.push({ id, name, desc, check, ...opts });
+// The six chosen endings: not automatic, not reached through a card.
+const PATHS = () => ENDINGS.filter((e) => !e.auto && !e.viaEvent);
+const gateOpen = (S, e) => { try { return !!e.when(S); } catch { return false; } };
 
 // ── The world, played
 // Only reachable with an assistant at the table. They are ordinary
@@ -71,33 +84,38 @@ a('perfect_align', 'Aligned', 'Reach 0.90 alignment.', (S) => S.resources.alignm
 a('dark_align', 'Unsupervised', 'Drop below 0.15 alignment and keep going.', (S) => S.resources.alignment <= 0.15, { icon: '▨', rare: true });
 
 // ── Engineering
-a('debt_zero', 'Spotless', 'Reach 0 tech debt after having 100+.', (S) => S.resources.techDebt <= 0.5 && S.stats.featuresShipped > 20, { icon: '⊹' });
-a('debt_500', 'Load-Bearing Duct Tape', 'Accumulate 500 tech debt.', (S) => S.resources.techDebt >= 500, { icon: '⚠' });
+a('debt_zero', 'Spotless', 'Reach 0 tech debt after having 100+.', (S) => S.resources.techDebt <= 0.5 && (S.stats.peakDebt || 0) >= 100, { icon: '⊹' });
+a('debt_500', 'Held Together', 'Carry 500 tech debt and keep shipping through it.', (S) => S.resources.techDebt >= 500, { icon: '⚠' });
 a('features_50', 'Prolific', 'Ship 50 features.', (S) => S.stats.featuresShipped >= 50, { icon: '⌘' });
 a('features_250', 'Relentless', 'Ship 250 features.', (S) => S.stats.featuresShipped >= 250, { icon: '⌘' });
 a('features_1000', 'Industrial', 'Ship 1,000 features.', (S) => S.stats.featuresShipped >= 1000, { icon: '⌘', rare: true });
 a('reliability_99', 'Four Nines', 'Reach 99% reliability.', (S) => S.products.some((p) => p.reliability >= 0.99), { icon: '⛨' });
-a('clicks_500', 'Carpal', 'Take 500 manual actions.', (S) => S.stats.clicks >= 500, { icon: '☞' });
-a('clicks_5000', 'The Grind', 'Take 5,000 manual actions.', (S) => S.stats.clicks >= 5000, { icon: '☞', rare: true });
+a('clicks_500', 'By Hand', 'Do five hundred things yourself, one at a time.', (S) => S.stats.clicks >= 500, { icon: '☞' });
+a('clicks_5000', 'Still By Hand', 'Do five thousand. Nobody asked you to and nothing stopped you.', (S) => S.stats.clicks >= 5000, { icon: '☞', rare: true });
 
 // ── Research
 a('research_25', 'Well Read', 'Complete 25 research nodes.', (S) => S.stats.researchDone >= 25, { icon: '⌬' });
 a('research_50', 'Deep Stack', 'Complete 50 research nodes.', (S) => S.stats.researchDone >= 50, { icon: '⌬' });
-a('research_all', 'The Whole Tree', 'Complete every research node.', (S) => S.stats.researchDone >= 85, { icon: '✦', rare: true });
+a('research_all', 'The Whole Tree', 'Complete every research node still open to you.', (S) => treeComplete(S), { icon: '✦', rare: true });
 a('own_model', 'Yours', 'Train your own foundation model.', (S) => !!S.research.done.own_foundation_model, { icon: '❋', legacy: 'researcher' });
 a('rsi', 'It Improves Itself', 'Achieve recursive self-improvement.', (S) => !!S.research.done.recursive_self_improvement, { icon: '∞', rare: true });
 a('fusion', 'Q > 1', 'Achieve commercial fusion.', (S) => !!S.research.done.fusion, { icon: '☀' });
 a('dyson', 'Phase I', 'Begin the Dyson swarm.', (S) => !!S.research.done.dyson_swarm, { icon: '☀', rare: true });
 
 // ── Market
-a('kill_1', 'One Down', 'Outlast a competitor.', (S) => S.stats.competitorsCrushed >= 1, { icon: '⚔' });
-a('kill_5', 'Consolidation', 'Outlast 5 competitors.', (S) => S.stats.competitorsCrushed >= 5, { icon: '⚔' });
+// Outlasting is the market's weather taking a rival while you were still
+// standing; `competitorsCrushed` is what you did to one. Different ledgers.
+a('kill_1', 'One Down', 'Outlast a competitor.', (S) => (S.stats.competitorsOutlasted || 0) >= 1, { icon: '⚔' });
+a('kill_5', 'Consolidation', 'Outlast 5 competitors.', (S) => (S.stats.competitorsOutlasted || 0) >= 5, { icon: '⚔' });
 a('acquire_1', 'Buy, Don\'t Build', 'Acquire a competitor.', (S) => S.stats.acquisitions >= 1, { icon: '⇄' });
 a('acquire_10', 'Roll-Up', 'Acquire 10 companies.', (S) => S.stats.acquisitions >= 10, { icon: '⇄' });
 a('monopoly', 'No Competition', 'Have zero active competitors after act 3.',
   (S) => S.company.act >= 3 && S.market.competitors.filter((c) => c.status === 'active').length === 0, { icon: '♛' });
-a('crash_survivor', 'Through The Winter', 'Survive a market crash without raising.',
-  (S) => S.market.macro === 'crash' && S.company.cash > 0 && S.stats.daysSurvived > 200, { icon: '❄' });
+// `_crash_survived` is set in game.js when a crash ends with the company
+// solvent and not one round raised since it began. It used to be "cash is
+// positive during a crash", which is most crashes.
+a('crash_survivor', 'Through The Winter', 'Come out the other side of a market crash without raising a round.',
+  (S) => !!S.narrative.flags._crash_survived, { icon: '❄' });
 
 // ── Capital
 a('raised_1', 'Term Sheet', 'Raise your first round.', (S) => S.stats.roundsRaised >= 1, { icon: '⌗' });
@@ -126,15 +144,18 @@ a('yuki_hired', 'A Conscience, Salaried', 'Hire Dr. Tanaka.', (S) => !!S.narrati
 a('vance_works_for_you', 'Reporting To You', 'Acquire Aperture and Marcus Vance with it.', (S) => !!S.narrative.flags.vance_acquired, { icon: '⚔', rare: true });
 a('funded_rival', 'A Worthy Opponent', 'Fund a dying rival to keep them alive.', (S) => !!S.narrative.flags.funded_rival, { icon: '⚖', rare: true });
 a('opened_weights', 'Given Away', 'Open-source your foundation model.', (S) => !!S.narrative.flags.opened_weights, { icon: '⌘', rare: true });
-a('nullptr_solved', 'Ninety Seconds', 'Discover who nullptr is.', (S) => (S.narrative.relationships.nullptr?.arc ?? 0) >= 3, { icon: '◌', rare: true });
+a('nullptr_solved', 'Ninety Seconds', 'Discover who nullptr is.', (S) => !!S.narrative.flags.aria_confessed, { icon: '◌', rare: true });
 a('chose_50', 'Consequences', 'Resolve 50 narrative events.', (S) => S.stats.eventsResolved >= 50, { icon: '✎' });
 a('chose_150', 'A Life Of Decisions', 'Resolve 150 narrative events.', (S) => S.stats.eventsResolved >= 150, { icon: '✎', rare: true });
 
 // ── Endurance & oddities
 a('day_365', 'One Year In', 'Survive 360 days.', (S) => S.stats.daysSurvived >= 360, { icon: '☾' });
 a('day_1000', 'A Thousand Days', 'Survive 1,000 days.', (S) => S.stats.daysSurvived >= 1000, { icon: '☾' });
-a('day_3000', 'A Decade', 'Survive 3,000 days.', (S) => S.stats.daysSurvived >= 3000, { icon: '☾', rare: true });
-a('allnighters_10', 'Sleep Is A Choice', 'Pull 10 all-nighters.', (S) => S.stats.allNighters >= 10, { icon: '☾' });
+// A full run lands between 1,000 and 1,700 days; 3,000 was never going to
+// happen. Only "One more push" on the all-nighter card counts one, and that
+// card is capped at four draws, so three is the most anybody can be asked.
+a('day_1500', 'Four Years In', 'Survive 1,500 days.', (S) => S.stats.daysSurvived >= 1500, { icon: '☾', rare: true });
+a('allnighters_10', 'Sleep Is A Choice', 'Pull three all-nighters.', (S) => S.stats.allNighters >= 3, { icon: '☾' });
 a('burnout_max', 'Empty', 'Reach 100 burnout.', (S) => S.founder.burnout >= 99, { icon: '⚠' });
 a('never_burnout', 'Sustainable', 'Reach Act III without ever exceeding 25 burnout.',
   (S) => S.company.act >= 3 && !S.narrative.flags._burned, { icon: '♡', rare: true });
@@ -193,12 +214,15 @@ a('chains', 'Consequences Compound', 'Complete a multi-part story chain.',
 a('solo_forever', 'Nobody Else', 'Reach Act IV having never hired a human.',
   (S) => S.company.act >= 4 && !S.narrative.flags.hired_weaver && !S.narrative.flags.kai_joined
     && !S.narrative.flags.sam_hired && !S.narrative.flags.yuki_hired, { icon: '◌', rare: true });
+// `endingProgress` counts state commitments as well as the acts you press —
+// the commit log holds only the acts, and only Steward has three of those.
 a('committed', 'Built, Not Chosen', 'Complete all three commitments on any ending path.',
-  (S) => { const log = S.narrative.commitLog || []; const by = {};
-    for (const c of log) by[c.ending] = (by[c.ending] || 0) + 1;
-    return Object.values(by).some((n) => n >= 3); }, { icon: '✦', rare: true });
-a('two_paths', 'Hedging', 'Complete commitments on two different ending paths in one run.',
-  (S) => { const log = S.narrative.commitLog || []; return new Set(log.map((c) => c.ending)).size >= 2; },
+  (S) => PATHS().some((e) => { const p = endingProgress(S, e.id); return p.total >= 3 && p.done >= p.total; }),
+  { icon: '✦', rare: true });
+// The path lock refuses a second path's acts, so "commitments on two paths"
+// could never happen. Two *gates* open at once can, and is the harder thing.
+a('two_paths', 'Hedging', 'Have two ending gates open at the same time.',
+  (S) => S.company.act >= 5 && PATHS().filter((e) => gateOpen(S, e)).length >= 2,
   { icon: '⚖', rare: true });
 a('ruthless_clear', 'Ruthless', 'Finish a run on Ruthless difficulty.',
   (S) => !!(S.legacy.difficultiesCleared || {}).ruthless, { icon: '⚔', rare: true });
@@ -212,10 +236,48 @@ a('scenarios_4', 'Every Opening', 'Finish runs on four different scenarios.',
   (S) => Object.keys(S.legacy.scenariosCleared || {}).length >= 4, { icon: '❖', rare: true });
 a('every_ending', 'All The Ways It Ends', 'Reach five different endings across timelines.',
   (S) => Object.keys(S.legacy.endings || {}).length >= 5, { icon: '⊙', rare: true });
-a('speedrun', 'Escape Velocity, Literally', 'Reach Act III in under 260 days.',
-  (S) => S.company.act >= 3 && S.stats.daysSurvived < 260, { icon: '⚡', rare: true });
+// ACT2_MIN_DAYS + ACT3_MIN_DAYS make day 370 the earliest Act III there is;
+// 260 was a promise the floors made impossible. Read the act mark, so a
+// player who kept going does not lose it by the time it is checked.
+a('speedrun', 'Early', 'Reach Act III inside 420 days.',
+  (S) => S.company.act >= 3 && (S.company.actMarks?.[3] ?? S.stats.daysSurvived) < 420, { icon: '⚡', rare: true });
 a('pacifist', 'Nobody Got Hurt', 'Reach Act IV having never acquired or crushed a rival.',
   (S) => S.company.act >= 4 && S.stats.acquisitions === 0 && S.stats.competitorsCrushed === 0, { icon: '☮', rare: true });
+
+// ── Secrets
+// Story beats. Each reads a flag a written card sets today; the Legacy view
+// and Find print '???' for these until they land, because the name would be
+// the spoiler.
+a('named_number', 'You Said A Number', 'Name your price to an acquirer, and mean it.',
+  (S) => !!S.narrative.flags.named_number, { icon: '⌗', rare: true, secret: true });
+a('bought_the_buyer', 'The Buyer, Bought', 'Buy the company that came back to buy you.',
+  (S) => !!S.narrative.flags.bought_the_buyer, { icon: '⇄', rare: true, secret: true });
+a('refused_sovereign', 'Not For Sale To A State', 'Turn a government down, on the record.',
+  (S) => !!S.narrative.flags.refused_sovereign, { icon: '✋', rare: true, secret: true });
+a('loyal_opposition', 'Loyal Opposition', 'Endow the people organising against you, with no conditions.',
+  (S) => !!S.narrative.flags.funded_opposition, { icon: '⚖', rare: true, secret: true });
+a('wrote_the_will', 'A Real Answer', 'Take a year over the document that says what happens without you.',
+  (S) => !!S.narrative.flags.wrote_the_will, { icon: '✎', rare: true, secret: true });
+a('last_commit', 'For The Record', 'Write the last commit yourself, by hand, with nobody left who needs it.',
+  (S) => !!S.narrative.flags.last_commit, { icon: '⌘', rare: true, secret: true });
+
+// ── The run, summarised ─────────────────────────────────────────────────────
+// Achievements about the *shape* of a whole run rather than a threshold it
+// crossed on the way past. Every one reads a counter something already writes:
+// `eventsResolved` in `resolveChoice`, `daysProfitable` and `daysInRed` beside
+// the daily cash check in `game.js`, and `actMarks` where the act turns. They
+// are deliberately hard to earn by accident — a bot that plays every card and
+// burns every quarter gets none of the three.
+a('few_decisions', 'The Quiet Run', 'Reach Act IV having resolved fewer than 90 decisions.',
+  (S) => S.company.act >= 4 && (S.stats.eventsResolved || 0) < 90, { icon: '◌', rare: true });
+a('long_profit', 'It Paid For Itself', 'Spend 400 days of one run with the day\'s revenue above the day\'s costs.',
+  (S) => (S.stats.daysProfitable || 0) >= 400, { icon: '◇', rare: true });
+// `speedrun` is Act III inside 420 days; this is the harder one below it, and
+// the floors (ACT2_MIN_DAYS + ACT3_MIN_DAYS) make 370 the earliest there is.
+a('fast_third', 'Straight Through', 'Reach Act III within ten days of the earliest it can be reached.',
+  (S) => S.company.act >= 3 && (S.company.actMarks?.[3] ?? Infinity) <= 380, { icon: '⇥', rare: true, secret: true });
+a('never_underwater', 'Never Once In The Red', 'Reach Act III without the account ever going negative.',
+  (S) => S.company.act >= 3 && (S.stats.daysInRed || 0) === 0, { icon: '⌗', rare: true });
 
 function bestPlayer(S) {
   let p = 0;

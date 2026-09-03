@@ -32,8 +32,8 @@ You and ARIA, your first agent. Direct action is genuinely the fastest way to
 get anything done: writing it yourself beats explaining it, and the game says so
 out loud. Nothing compounds yet.
 
-**Gate:** ship 8 features, then reach $7K MRR with 2,200 users — or 12,000 users
-on their own. Median exit ≈ day 110.
+**Gate:** launch the product, ship 8 features, then reach $7K MRR with 2,200
+users — or 12,000 users on their own. Floor 45 days; median exit ≈ day 126.
 
 ### Act II — The Machine · *Product–Market Fit*
 
@@ -42,7 +42,9 @@ morale. Tech debt starts charging real interest. Price becomes an interior
 decision — above fair value you buy churn, below it you buy reach — and there is
 no setting that avoids the trade.
 
-**Gate:** $120M ARR and a $1.6B valuation. Median exit ≈ day 400.
+**Gate:** $120M ARR and a $1.6B valuation, and either a Series A or ninety
+straight days where the day paid for itself. Floor 250 days; median exit ≈ day
+383.
 
 ### Act III — The Empire · *Escape Velocity*
 
@@ -50,8 +52,10 @@ Scale turns the environment from weather into politics. Regions, regulatory
 heat, public approval. A named rival develops an actual grudge and starts making
 moves against you rather than merely existing.
 
-**Gate:** train a frontier-class model, reach a $180B valuation and 2,600 PF of
-compute. Median exit ≈ day 870.
+**Gate:** a $180B valuation and 2,600 PF of compute, and one of three ways to
+stop being only a market participant — a hearing sat through, a region taken to
+government partnership, or a frontier-class training run. Floor 420 days;
+median exit ≈ day 760.
 
 ### Act IV — The Singularity · *Recursive Ascent*
 
@@ -61,24 +65,59 @@ speed set by your standing order, your agents on Research, your own study hours,
 your frontier megaprojects, and how little you are slowing down for alignment.
 
 **Gate:** recursive self-improvement, a $12T valuation, 4.5% of global GDP, and
-85% on the frontier benchmark.
+85% on the frontier benchmark — or somebody else crossed and the question is
+settled without you. And one thing done inside this act: a quarterly intention
+kept, or a season of the feud closed in your favour. Floor 215 days, with a
+620-day stall valve underneath the whole clause, so a run that is otherwise
+finished cannot be locked out of its own ending. Median exit ≈ day 1016.
+
+**Every act since §A2 closes on a deed as well as a number**, because the
+economic curves are near vertical by Act III — raising the Act III bar from $75M
+ARR to $280M moved the transition by 36 days. A threshold cannot pace anything;
+it can only wall off a bad run while a good one sails past. So the day floor
+sets the pace, the numbers are the competence check, and the deed is the thing
+the act was *for*. Every deed has more than one door: a bootstrapper who never
+raises must still be able to leave Act II.
 
 ### Act V — Ascension · *What Comes After*
 
-The commitments open and the run gets its ending. Median ≈ day 1200; a full run
-lands between 1000 and 1700 in-game days.
+The commitments open, the gates start closing on their own, and the run gets its
+ending. Each gate on the Ascension panel now says how many days it has left —
+alignment falls while the company is pointed at the frontier, approval falls as
+GDP share rises, and both of those were always true and were never once shown
+next to the gate they close. Past a window inside the act one of three cards
+seals a gate for good, and which one is the founder's answer. Median ≈ day 1200;
+a full run lands between 1000 and 1700 in-game days.
 
 ## The endings
 
-Two arrive on their own:
+Sixteen of them, across eight photographs — the eight added since this table was
+first written borrow a plate from the one they rhyme with, which is a deliberate
+economy and the most visible thing still owed art.
+
+**Four arrive unasked.** These are the losses, and three of them are new: the
+game used to have exactly one way to end badly, which was running out of money.
 
 | Ending | Tone | How it happens |
 |---|---|---|
-| **Out Of Runway** | bad | You ran out of money. The only automatic bad end. |
-| **The Responsible Outcome** | neutral | You were acquired. A real outcome, not a failure. |
+| **Out Of Runway** | bad | Run out of money. The card declines at the coffee shop. |
+| **Removed** | dark | Board confidence at the floor for three quarters, below 42% held. Needs a priced round and a majority sold, so a bootstrapper can never see it. |
+| **Nationalised** | dark | Heat at 95+ for 60 days while mediating over 10% of world GDP. Get large enough, and hot enough, for long enough, and somebody else decides. |
+| **Unsupervised** | dark | Alignment at or under 0.15 for 90 days. The systems stop asking. |
 
-Six are built — and the first commitment **locks the path** (`S.narrative.pathLocked`),
-so every one of them is individually reachable and no run gets more than one:
+**Five are offered by a card** you are free to refuse:
+
+| Ending | Tone | What it asks |
+|---|---|---|
+| **The Responsible Outcome** | neutral | Accept an acquisition offer in Act II or III. A real outcome, not a failure. |
+| **The Lifestyle Business** | neutral | Hold Frugal Empire in Act II or III, then stop. Never become a story. |
+| **Second** | neutral | Lose the race, and take the winner's offer. Second turned out to matter enormously — to everyone else. |
+| **The Merger** | neutral | Come within 3× of Aperture in Act III or IV, and take the deal. Neither of you ever finds out which would have won. |
+| **The Long Game** | strange | Reach three different endings across your career, then refuse all the doors and keep going. |
+
+**Seven are built** — and the first commitment **locks the path**
+(`S.narrative.pathLocked`), so every one of them is individually reachable and no
+run gets more than one:
 
 | Ending | Tone | What it asks |
 |---|---|---|
@@ -88,23 +127,49 @@ so every one of them is individually reachable and no run gets more than one:
 | **The Question** | strange | Ask ARIA what she wants and accept the answer — but only if you spent years actually answering when *she* asked. It needs a relationship, not a research node. |
 | **Outward** | good | Point everything at the sky. Send a seed that does not need instructions. |
 | **The Refusal** | good | Freeze the weights, publish everything, stop on purpose at the top. Costs 85% of your research rate for the rest of the run. |
+| **The Handover** | good | Name a successor, make the purpose binding, and go. It needs Weaver, or the memo. Nothing depends on you, and arranging that took a decade. |
 
-The three tier-8 research nodes that unlock endings cost 3.5M / 5.7M / 8.1M
-points with prerequisites. The research budget is tuned so you can afford
-roughly **one**.
+The tier-8 research nodes that unlock endings cost 3.5M / 5.4M / 4.3M points
+with prerequisites. The research budget is tuned so you can afford roughly
+**one**; `stellar_engineering` came down from 3,456,000 to 1,400,000 because its
+chain is a whole branch in front of it and no run had ever reached the third
+door.
 
 ## The race is losable
 
-Measured over 14 runs the player wins 10 and loses 4, and **every** race is
-decided by under 25 points — wins by a median of 11, losses by 0–3. The harness
-bot commits at ≈0.58 and builds no megaprojects, so a player who actually points
-the company at the frontier wins more often than that; one who never does loses.
+Measured over 28 seeded runs per column, with the harness bot running directives
+and regions:
+
+| | wins | margins | best lab at the finish |
+|---|---|---|---|
+| harness bot | 21/28 | 2–44, median 18 | 47–100 |
+| committed (push ≈ 0.70) | 26/28 | 2–54, median 35 | 46–100 |
+| uncommitted (push ≈ 0.07) | 9/28 | 0–40, median 8 | 53–100 |
+
+Roughly 10 of 14 for the bot, which is where it has always been. What changed is
+the *shape*. The rival labs used to speed up because you were ahead — `sprint`
+scaled with the player's own progress and `behind` added catch-up on top — so
+every race came out inside 24 points whatever the founder did, and a leading
+founder watched four labs accelerate for no reason anybody in the fiction could
+name. Both are gone. A lab's rate is its own roster, its own frontier nodes and
+its own money, on the same 0–100 scale you are measured on. The one rubber band
+left is published work spreading, which is capped, one-directional, and printed
+on the panel in the words that make it true. A committed founder now wins 26 of
+28 and an uncommitted one loses 19 of 28, where before the spread between them
+was a handful of points.
+
+Difficulty changes the opposition's *shape* rather than its rate. Ruthless
+carries no race scalar at all any more; what it carries is a war chest and two
+decisions a week for Aperture, so it hires while it researches and the board
+fills up while you are still choosing a bloc. Measured on Ruthless: committed
+9/14, harness bot 1/14, uncommitted 0/14.
+
 You can win the company and lose the century.
 
 ## The cast
 
-Twelve people, and the game is careful that a card from a person and a card from
-a system are not the same object.
+Thirteen people, and the game is careful that a card from a person and a card
+from a system are not the same object.
 
 - **ARIA** — your first agent
 - **HELIX** — your foundation model
@@ -118,6 +183,9 @@ a system are not the same object.
 - **Cassidy Weaver** — chief of staff
 - **nullptr** — anonymous
 - **Mom**
+- **Jo** — the person you live with. The only one of the thirteen with no phone
+  key: you do not ring Jo, you come home or you do not, and the game says so by
+  leaving the number out rather than by explaining it.
 
 ## What it teaches
 
@@ -148,7 +216,9 @@ game hands you a permanent bonus for holding rather than for buying:
   were undone."* There is no rewind, and Legacy keeps the ledger across runs.
 
 And the sharpest thing the design says is structural rather than written:
-**six good endings exist and you get one.** *Outward*, *The Refusal* and
-*The Steward* are all good, and they are mutually exclusive. The thesis is that
-at that scale there is no correct answer — only the one you committed to early
-enough to afford.
+**four good endings exist and you get one.** *Outward*, *The Refusal*,
+*The Steward* and *The Handover* are all good, and they are mutually exclusive.
+The thesis is that at that scale there is no correct answer — only the one you
+committed to early enough to afford. Act V's clock is the same argument with a
+deadline on it: leave the doors open long enough and one of them shuts by
+itself, and which one shuts is still your decision.

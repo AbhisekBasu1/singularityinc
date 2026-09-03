@@ -129,8 +129,8 @@ world exactly as before, and that path must never regress.
   rather than importing the world. Judged by the same `effectProblems` a card's
   choice gets, at `THREAD_CAP_MULT` of the ceilings, with the same door rule.
 - **Ceilings are derived, and split by direction.** `tools/capsderive.mjs` runs
-  all 383 authored choices once per act each can appear in, five times each from
-  a seeded stream (3,575 executions, `REPS` to change it) and
+  all 957 authored choices once per act each can appear in, five times each from
+  a seeded stream (8,340 executions, `REPS` to change it) and
   reports what the deck takes and what it gives
   separately, because they are not the same number. Deriving a ceiling on damage
   from the size of the game's rewards was a real bug: it let the world take most
@@ -141,7 +141,7 @@ world exactly as before, and that path must never regress.
   — **and after adding cards**, which is the non-obvious one. The ceilings are
   derived from the written deck's own p80, so growing the deck moves them:
   thirty-eight mostly-late character cards took the deck's authored choices from
-  383 to 497 and pulled the p80 of what it *takes* in cash and focus down
+  383 to 497 — it is 957 today — and pulled the p80 of what it *takes* down
   sharply, while the hand-pasted caps stayed where they were. The world was
   then allowed to be harsher than anything the game does to itself, and
   `capsfuzz` failed on "Act IV still arrives".
@@ -164,8 +164,9 @@ world exactly as before, and that path must never regress.
   exposes them to the game's origin with `exposedTo`; the game reaches them
   across an `<iframe allow="tools">` through `getTools({fromOrigins})`. The dev
   server puts up two listeners so this is real in development rather than
-  mocked. If the other origin is not answering, `read_the_rival` and
-  `ask_the_rival` are simply not published and nothing else notices.
+  mocked. `read_the_rival` and `ask_the_rival` are stable wrappers published in
+  the initial batch; if the other origin is not answering, they refuse cleanly
+  without changing the page's registration snapshot.
 - **One of its press releases is a prompt injection, on purpose.** It is the
   only thing in the repo whose job is to be disobeyed. `partners.js` flags it,
   the Wire marks it, and `SECURITY.md` explains why there is nothing behind it
@@ -186,9 +187,65 @@ world exactly as before, and that path must never regress.
   the registry, on purpose: stock Chrome ships no consumer agent, so without it
   the whole feature is invisible to anybody without the ChatGPT desktop app.
   Keep it honest — the button says "scripted" because it is.
+- **A cut read is a page, not a lie.** `activity_log` used to hand back the
+  fourteen entries that happened to fit and a run with three hundred decisions
+  in it could not be read at all. `read_journal(page, filter)`,
+  `activity_log(since_day, page)` and `inspect_module(story, page)` page
+  instead, every page result carrying `page`, `pages`, `of` and a `next` that
+  says how to turn it — and `pack()`'s `_trimmed` is a *list* of what it cut
+  (`recent: 36 of 48`) rather than a bare `true`, because "something was
+  removed" is not a fact a model can act on. Page sizes are
+  `JOURNAL_PAGE` / `ACTIVITY_PAGE` / `STORY_PAGE` in `WORLD_AUTHOR`; the story
+  page is smallest because it shares its payload with the whole open card, and
+  the card is what the read is for. Two related traps: `pack` used to shed one
+  array element per round with eight rounds available, so a forty-eight-row
+  list came back over budget *and called itself trimmed* (it sheds a quarter a
+  round now); and every new paged read must be measured against a 1,500-day
+  journal of maximum-length entries, which is what the webmcptest section
+  builds.
+- **The deck writes people out, and the world has to honour it.**
+  `DEPARTURES` and `departed(S, id)` in `validate.js` are the one place that
+  knows: `metCharacters` drops them from the published cast, and
+  `validateCard`, `validatePost`, `validateRing` and `Calls.ringable` refuse by
+  name with the card that did it. Before this the world could ring the founder
+  as Crane the morning after `e7_crane_seat` had him resign. Two things
+  deliberately not in that table: `vance_acquired` (that card is Vance coming
+  to work *for* the founder) and `kai_declined` (somebody saying no to a job is
+  not leaving the story). `released_yuki` is a `back` flag — a reconciliation
+  puts somebody back.
+- **The world writes at run time, so `copylint` never sees it.**
+  `src/world/voice.js` is that linter's rules as a pure function, run on every
+  card, post and line the world writes, returned as `warnings` and never as a
+  refusal. It reads *narration only* — quoted speech and blockquote lines are
+  cut out first, because every contraction in the written deck is inside
+  quotation marks and flagging them would be flagging the house style. Two
+  rules that fought each other on the first pass: "counts as words" and "one
+  concrete number in the body" — a body reading "nine days" has its number,
+  so `hasNumber` accepts number *words*. The console counts the notes in its
+  tally; nothing anywhere refuses over one.
+- **Everything the world remembers lives inside `S.world.author`.** The mode,
+  the pending slot and the waiter are module memory because they describe a
+  connection; `notes` (the `remember` notebook), `queue` (post-dated cards) and
+  `epilogue` describe the *story*, so they are saved — `serialisable` strips
+  top-level flags only, which is exactly why they ride in there. `resetAuthor`
+  clears all three, because they belong to the timeline; the notebook survives
+  into the next one through `buildDossier`'s `worldNotes` instead.
+- **A post-dated card is judged twice, and the second time is the one that
+  counts.** `write_event(in_days)` stores through `queueCard`, which runs
+  `validateCard(S, card, { deferred: true })` — shape, prose, people and
+  ceilings now, timing on the day — and `tickQueue` puts it back through
+  `writeCard` whole when the day comes. So the founder earning Zero Entropy,
+  or spending the budget, or running out of money in between all bite. Timing
+  refusals mean "wait" (up to `QUEUE_WAIT_DAYS`); anything else drops the card
+  with a note. The plug empties the queue, and so does the ending.
 
 ### WebMCP gotchas that have bitten here
 
+- **The desktop bridge permits only 10 distinct registration snapshots per
+  document** (plus 100 tools and 65,536 serialised descriptor bytes). Do not
+  re-register around cards, submission ids, calls, cast changes, acts or
+  doctrines. `surface.js` publishes the stable superset in one batch; executors
+  enforce live authority and return the current refusal.
 - `registerTool` **rejects on a duplicate name**, there is no `unregisterTool`,
   and aborting the signal **also rejects the original registration promise** —
   so a revoke ten minutes later is an unhandled rejection mid-take unless a
@@ -573,22 +630,316 @@ an act, shuts the machine down, slides the drawer out at three widths and
 carries one save between the two housings. A hundred assertions and twenty
 screenshots. Run it with a GPU.
 
+## The cast, the person and the long game
+
+Nine features from `newideas.md`, built on top of the world layer. Every one is
+additive: with no assistant the phone plays written trees, Aperture plays a
+written policy and the chair is empty. Nothing new reaches a reducer except
+through the seventeen keys and `commit()`.
+
+- **The phone is a thread that lasts more than one round.** `src/systems/calls.js`
+  owns it; `src/data/calls.js` is the written dialogue, one tree per contact,
+  and every reply's effects are ordinary effect keys. `canCall` is the only
+  gatekeeper and it *says why* — `aria`, `unbuilt`, `stranger`, `over`,
+  `offline`, `busy`, `card`, `cold`, `cooldown`, `focus` — with a mono note the
+  Story view, the Contacts app and the context menu all print. A call costs
+  `CALLS.FOCUS_COST`, blocks the clock through `advanceBlocked`, and ends
+  through `endCall`, which returns the finished call because `activeCall(S)` is
+  already null by then and the hang-up repaint needs it. When the world is on
+  the line (`take_the_call`) every reply goes through `validateCallReply`:
+  affinity at `AFFINITY_MULT`, everything else at `CAP_MULT` of a card's
+  ceilings, and the *merged* deal of the whole call may never exceed one card.
+  `ring_the_founder` is the world calling — not before `RING_MIN_DAY`, not
+  twice inside `RING_WINDOW_DAYS`. Digit keys pick topics, Enter is the close
+  key, and Escape never dismisses a live call. `src/data/characters.js` carries
+  the dossier the plate prints and the briefing hands over: `wants`, `knows`,
+  `tie`.
+- **Life is a floor, not a meter.** `src/systems/life.js`: sleep drifts toward
+  the hours you keep, health follows sleep, `healthMult` scales focus regen and
+  burnout, and ties cool with `WARMTH_HALFLIFE` while `touch()` warms them
+  whenever a contact card, a reply or a call lands. `warmthWord` answers
+  `quiet` for a tie nobody has touched; it used to answer "never" beside a
+  "never", which is two labels and not a sentence. The payoffs are specific —
+  `gives` on a warm tie — because a chore meter is the one thing this must not be.
+- **Keep, and the dossier.** `src/systems/keep.js`. "Keep this card" on a world
+  card's outcome copies it into `S.legacy.kept` through `cardShape`, face and
+  effects intact; `keptEvents(S)` turns them into deck entries `eligibleEvents`
+  draws beside `EVENTS`, marked `author: 'kept'`, and each effect still passes
+  `boundEffects` on landing. Export and import are text on the Legacy screen.
+  `buildDossier` runs on prestige and rides the briefing as `pastTimelines`.
+- **The director steers the draw; it never picks.** `measure(S)` in
+  `src/systems/director.js` reads the last `DIRECTOR.WINDOW` journal entries —
+  the crisis run, days since a milestone, faces against institutions — and
+  `steer(S, e)` is a multiplier `drawEvent` applies to a weight. `beatSheet(S)`
+  is the same reading in words, on the briefing as `beat` and in the context
+  every world card is written against. `once` and `when` are never touched.
+- **The chronicle is generated, never stored.** `src/systems/chronicle.js` is a
+  pure function of `S` (and an ending, if there is one) to chapters; the
+  sentences live in `src/data/chronicle.js` under `copylint`. Never quote a
+  live number in an opener: the chronicle of a dead company reported that
+  morning's MRR.
+- **Aperture plays the same game.** `src/systems/rivalco.js` gives the rival lab
+  a company — funding, roster, users, research on the real tree — that
+  `tickRivalCo` plays once a `RIVALCO.WEEK` by `PLAY_WEIGHTS`. `rival_move` lets
+  the world choose the play and `humanPlay` lets a person; both go through
+  `play()`, which refuses what the funding does not cover. Its research raises
+  the frontier through `apertureRaceMult`, bounded by `RACE_BONUS`; over seven
+  bot runs the race did not move, which is the right amount. Users floor at
+  `roster × USERS_PER_HEAD`, or one bad week took the company to zero and it
+  never came back. `apertureState(S)` is what its own site renders, pushed when
+  the frame loads, after every play, and once a day.
+- **Two humans.** `rival/?play=1` is Vance's chair. It talks to the copy of the
+  page the game has framed over a `BroadcastChannel` on the rival's origin; that
+  copy relays to the game with `postMessage`, and `handleRivalMessage` in
+  `src/webmcp/partners.js` accepts only the rival's origin and only the frame it
+  mounted. A play goes through `humanPlay`; a line goes through the same
+  `looksLikeInjection` scan a press release gets and lands in the Wire marked as
+  a person's. `boot()` mounts the frame even at tier `none`, because the press
+  office is the channel whether or not anything can call a tool. A
+  BroadcastChannel is one browser profile, so this is two windows on one
+  machine; two machines need a relay, and that is deliberately not built.
+- **The long game is a pace, not a mode.** `settings.pace` is `sitting` or
+  `long`, chosen in the opening and in Settings. After `LONG.LIVE_DAYS_PER_DAY`
+  live days in a real day `longHeld()` blocks the clock and the machine says so
+  once per date (`long:held`), with a way to keep going tonight. Offline
+  catch-up in the long game is linear at `DAYS_PER_REAL_DAY`, capped at
+  `MAX_OFFLINE_DAYS`, and delivers the mail that arrived meanwhile.
+- **The machine's own apps.** Contacts, Mail (`src/data/mail.js`, delivered by
+  `tickMail` one a day as feed type `mail`, read state in `S.mail`), Browser
+  (the rival's origin, for real), Journal (`S.notes`), Calendar
+  (`src/systems/calendar.js`) and Terminal (`src/data/terminal.js`). Each is an
+  entry in `apps.js` with a READOUT and a MENU, a paint branch in `os/shell.js`
+  that keeps its input — the journal's draft, the terminal's line and scroll —
+  across the seven-a-second repaint, a builder in `src/data/context.js`, and
+  its copy in `machine.js`. The Record reads calls, the journal and the
+  chronicle as folders, so each needed a reader.
+- **A render path must never draw from the RNG** still applies to all of it:
+  the Terminal answers from state without a draw, and the line for one of
+  Aperture's plays is picked inside `tickRivalCo`, never when its site renders.
+
+### The phone remembers, and it rings
+
+The first version of the phone was three exchanges and a hang-up from a menu
+that never changed, and after two calls a player had seen all of it. What
+fixed that is in `src/data/calls2.js` and `src/data/signals.js`, merged into
+the trees at the bottom of `calls.js`.
+
+- **`signals.js` is the one place content reads the run.** `incidentRecently`,
+  `raisedRecently`, `lostRecently`, `playedRecently`, `recentTone`, `sleep`,
+  `runway`, `behindInRace` and the rest are pure functions of `S` that
+  tolerate a save without the field. The phone and the mail ask the same
+  questions the same way; anything written later should import from here
+  rather than reading `S.stats` by hand. The stamps they lean on —
+  `lastIncidentDay`, `lastIncident`, `lastRaiseDay` — are written in
+  `incidents.js` and `economy.js`, beside the counters that already existed.
+- **A topic with a `when` is about something that just happened, and it goes
+  first.** `options()` sorts never-said before said, timely before standing,
+  then slices `TOPIC_KEEP`. Without that sort the reactive topics sat behind
+  the four evergreen openers and were never offered; the phone test that
+  asserts "a year in, the anniversary is offered" is what found it.
+- **Memory is `S.calls.said[char][topic]`, counted across every call.** A
+  `once` topic is never offered again; `label`, `reply` and `when` receive `n`
+  (times said) as their third argument so a repeat can be written as a
+  repeat; the plate marks a repeated topic `again`. Every topic carries an
+  `about` noun and every tree a `recall(S, r, m)`, so the pickup can say
+  "Last time it was the truce" — `memoryOf` names the *first* topic of the
+  last call, and a follow-up inherits its parent's `about` in the merge.
+  `RECALL_DAYS` stops a call from a year ago being brought up.
+- **`fx` may be a function of `(S, r)`.** Crane's bridge is sized to the burn.
+  `lint.mjs` evaluates a function `fx` against a probe state and checks the
+  keys like any other.
+- **The written world rings.** A tree's `rings[]` are what that person calls
+  *you* about: `when(S, r)`, an `opening`, and their own `topics`, which come
+  first because a call that started about the outage still ends up about
+  everything else. `tickRings` runs in the day hook, never offline, never
+  while an assistant is present (`ring_the_founder` is the world's own way),
+  at `RING_CHANCE` a day, one ring per `RING_WINDOW_DAYS`, each once a run
+  (`S.calls.rang`). `startCall(by: 'them')` is the same path `ring_the_founder`
+  takes with `by: 'world'`; `main.js` opens the plate for any `by` that is
+  not the founder.
+- **A ring holds the clock, so every bot has to pick up.** `simulate()` stops
+  at `advanceBlocked()`, and a written ring on day fourteen used to freeze
+  every harness run there. `tools/bot.mjs` says one thing and hangs up;
+  `tools/shot.mjs` hangs up a call the fast-forward left open, the way it
+  answers a card. The dev harness (`?dev=1&days=N`) runs the day hooks live,
+  so a call plate can already be up when a page loads — that is the game
+  working, not a bug.
+
+### What a scripted first half hour found
+
+`tools`-free, but worth recording: a Playwright script that plays the opening
+and the first twenty days the way a new person would, photographing every beat
+in both housings, found three things no suite could.
+
+- **A prompt takes focus when it comes forward.** The Terminal opened without
+  the cursor in it, so the first thing typed — `help` — went to the game's
+  hotkeys: `e` talked to users and spent focus. `focusPrompt` in `os/shell.js`
+  runs at the end of `setView` and `toggleFromDock` for the terminal.
+- **The same sentence from two handles in one week reads as a script.**
+  `generateFeed` drew from short pools with `pick()`, and the rail showed
+  "@vibesbased" and "@uptime_enjoyer" saying the identical line a day apart.
+  `fresh()` in `feed.js` re-draws while the line is still among the last
+  twenty-five items, and gives up after six tries rather than loop.
+- **Whoever is due, not whoever is first.** `tickRings` took `due[0]`, and
+  `pendingRings` walks the cast in declaration order, so Sam's outage call —
+  incidents come early — opened every run's phone. It picks among the rings
+  that are due now, one RNG draw, and only when there is more than one.
+
+### Where repetition hides
+
+Two pools were one or two lines deep and the run drew from them for a
+thousand days. Aperture's plays in `src/data/rivalco.js` had one sentence
+for a price cut and one for a raise, so its site read the same every quarter;
+each play has five or six now, and `play()` re-draws while the line is among
+the last six it printed. The chronicle in `src/data/chronicle.js` had one
+template per kind of entry, so every chapter was "Day N: title. You chose to
+X. Outcome." — there are three per kind now, three closers per temperament
+and three openers per act, and `systems/chronicle.js` rotates them with the
+entry's day as the salt, because the chronicle is a pure function and may
+not draw from the RNG. When a pool is under three deep, the game will show
+you the seam within an act.
+
+### The post answers the run
+
+`src/data/mail2.js` is the letters that only arrive because of something
+that happened — the week of an outage, a round closing, a departure, a
+rival's move, a week without sleep — merged into `LETTERS` at the bottom of
+`mail.js`. Most are `urgent`, and `tickMail` delivers an urgent letter ahead
+of anything else waiting, because a letter about this week's outage that
+arrives after the conference invitation has missed its moment. One a day
+still holds. Their `when` gates include the recency, so an urgent letter that
+was never delivered stops being due rather than landing a month late.
+
+### The walkthrough teaches the new surfaces
+
+Three chapters and two steps in `src/data/tutorial.js`: **The People** (the
+phone, the rings, Life, the pace), **The Other Company** (Aperture's panel,
+who chooses the play, the site), two steps on **What Carries** (keep, the
+shelf), and **The Machine**, which is `osOnly`. A chapter marked `osOnly`
+has nothing to point at in the console: `chapterStatus` reports it
+unavailable there with `why: 'workstation only'`, which the Manual and the
+menu bar print instead of "not yet", and `maybeAutoStart` and `start` refuse
+it. Its steps name windows (`view: 'mail'`) rather than modules;
+`tutorialtest` accepts app ids from `apps.js` for an `osOnly` chapter and for
+any step's `os` override, reads `src/ui/os/*.js` as anchor sources, and
+counts `styles/os.css` as styling. The rival chapter is gated on
+`apertureState(S)` rather than the act, because the panel it spotlights
+exists only once the company does. Walkthrough prose is under `copylint`
+now, `os` titles included.
+
+### Two humans, two machines
+
+`tools/relay.js` is a room per run in the dev server: server-sent events out,
+an 8 KB JSON POST in, eight message types, no storage, mounted on both
+origins by `serve.js`. The chair and the framed press office meet there when
+the URL carries `room=`; `roomCode(S)` in `src/webmcp/origin.js` derives six
+characters from the save, `partners.js` puts it on the frame URL, and
+`inviteLink(S)` is the line under Aperture's week on the Market view, in the
+Terminal (`invite`), and on the clipboard from **Copy**. Without a room, or
+when the relay is not there, the rival page falls back to the
+BroadcastChannel and its status line says so in mono.
+
+Three things bit while building it. **A throw inside an `http` event
+callback takes the process down, and the process serves both origins**: the
+first `hello` reply wrote a body and then a 204 header, and the dev server
+died with `ERR_HTTP_HEADERS_SENT` in the middle of a browser run. Every
+relay callback is wrapped now and answers exactly once. **Playwright's
+`networkidle` never arrives once a page holds an open event stream**, so
+every harness waits for `load` instead, and `liveworld` gives the app a
+beat after each navigation because `load` fires before it has booted.
+**Two browser contexts are two profiles**, so a BroadcastChannel does not
+cross them — which is exactly what makes a two-context Playwright run a
+proof that the relay carried the play. `resolveOrigin` treats a bare IP as
+the dev server (the rival is the next port up), and `location.hostname` is
+undefined headless, so it returns `null` there rather than throwing inside
+a view render — `uitest` caught that one. And **a state with no company in
+it is not a message**: before Vance appears `apertureState(S)` is null, the
+framed copy used to relay it anyway, and the relay's 400 showed up as three
+console errors in every harness run. The relay logs what it refuses now.
+
+### Four seats, and what each one may reach
+
+The room grew three more occupants and the rule for all of them is the same
+one: **the relay is a pipe and the game re-checks everything**.
+
+- **The chair** plays Aperture's week, through `humanPlay`. Unchanged.
+- **The rival's own agent** (§H14) is Vance's hand as tools, registered on the
+  rival's origin with *no* `exposedTo` — visible to a thread whose browser is on
+  that page and to nobody, the game included. `aperture_play` posts on the same
+  bus a button press does and waits a beat for the answer, so a refusal comes
+  back in the game's own words. The tools live in `rival/rival.js`; the press
+  office's prose and its generation live in `rival/press.js`, which is pure and
+  imports nothing, so `tools/rivalorigintest.mjs` can drive the whole origin
+  headlessly — two copies of the page in one process, keyed by
+  `rival.js?copy=chair` and `?copy=frame`, with `location.search` swapped
+  between the imports because the page reads it once at evaluation.
+- **The board seat** (§H15, `?board=1`) holds three powers and no keyboard.
+  Each moves one field — `boardRefusedUntil`, the board's `forcedUntil`, the
+  standing order — and then lands as a card through `writeCard` with
+  `author: 'board'`, bounded by `validateCard` exactly like a card the world
+  wrote. Two consequences worth knowing: a board card's numbers must fit the
+  *tightest* act it can land in, and a motion whose card is refused still
+  *applies* — the decision is a fact about the board and the card is the founder
+  hearing about it, so `boardMotion` answers `{ ok: true, card: false }` and
+  says why.
+- **The spectator** (§H16, `?watch=1`) posts nothing: the relay refuses every
+  type but `hello` from a client that said hello as a watcher. While one is
+  present the game publishes `commentary`, which prints a caster's line and
+  moves nothing. It is the only conditional name on the surface and it
+  **latches** — once seen, published for the session — because a registration
+  snapshot is one of ten for the life of the document and a room somebody joins
+  and leaves four times would spend the budget by itself. `execute` re-checks
+  whether anybody is still watching, which is the same stable-registration,
+  live-authority rule everything else here follows.
+
+`src/systems/chair.js` holds the roster (session memory, like the chair's rate
+buckets — it describes a connection, not a run) and both mechanisms.
+`founder_public` is the one tool minted *outside* `desiredTools`: it is
+published to the rival's origin with `exposedTo` and must not appear in the
+founder's own hand, so `surface.js` keeps a small `external` set and
+`reconcile` does not treat it as a stray to revoke. `muteAll` still takes it,
+because the plug means every origin.
+
 ## Before committing
+
+`npm test` is the whole of the list below down to `choreo`, in that order. Run it
+before every commit; the three evals and the balance run are separate because
+one of them is slow and two of them are gates on tuning rather than on code.
 
 ```bash
 node tools/lint.mjs          # content integrity
+node tools/copylint.mjs      # the voice, across every content module, including machine.js
 node tools/uitest.mjs        # every view renders, every choice executes, no undefined/NaN leaks
+node tools/ostest.mjs        # the workstation's readouts, menus and widgets, headlessly
+node tools/puretest.mjs      # no view draws from the seeded stream — the `askAria` rule, enforced
 node tools/tutorialtest.mjs  # every walkthrough step still anchors to something that renders
+node tools/transporttest.mjs # the pause bit belongs to the founder, and the opt-in is the founder
 node tools/fmttest.mjs       # the string a player reads means the number the sim holds
 node tools/savetest.mjs      # round trip, migration, offline catch-up
+node tools/lifetest.mjs      # sleep, health and ties — the floor stays a floor
+node tools/phonetest.mjs     # every tree and letter reads; memory, once, sized effects, the written rings, urgent post
+node tools/keeptest.mjs      # a kept card is dealt, bounded, exported and imported
+node tools/chronicletest.mjs # the chronicle is pure, and a lost run gets one
+node tools/rivaltest.mjs     # Aperture's week, every play, the chair, the board seat and the room
+node tools/rivalorigintest.mjs # the rival's own agent: its private tools, through the founder's gates
+node tools/longtest.mjs      # the long game holds the clock and catches up
+node tools/prestigetest.mjs  # a timeline ends, pays and opens the next one
+node tools/endingtest.mjs    # every ending is individually reachable, and not all of them at once
 node tools/worldtest.mjs     # every rule the world plays under, one refusal at a time
 node tools/webmcptest.mjs    # the registry, the surface, every tool, against real reducers
+node tools/residenttest.mjs  # the local model plays the same loop through the same bounds
 node tools/choreo.mjs        # the filmed sequence, beat by beat
 node evals/select.mjs        # can a player's words reach the right tool
 node evals/baseline.mjs      # what an agent reading the page cannot get
 node evals/capsfuzz.mjs      # can the worst legal world break the game
 RUNS=3 DAYS=2000 node tools/balance.mjs
 ```
+
+`tools/simtest.mjs` is deliberately not in that list. It asserts nothing and
+exits zero: it plays one seeded run and prints the whole of it — the ledger line
+by line, the gate marks against the days the gates were *met*, the doctrines
+held, the deeds and when each one landed. It is the instrument you read when a
+number looks wrong and you do not yet know which number.
 
 `tools/parity.mjs` answers the one question `balance.mjs` cannot: is the base
 game still the base game? Same seed, same bot, two checkouts — it prints act
@@ -610,42 +961,415 @@ ChatGPT's chat box at three widths.
 Balance targets (medians across builds): Act II ≈ day 110, Act III ≈ 400,
 Act IV ≈ 870, Act V ≈ 1200. A full run should land between 1000 and 1700 in-game
 days. Measured on the current build (medians of 5 runs × 7 builds): Act II
-100–140, Act III 408–442, Act IV 858–900, Act V 1110–1274, runs ending 1500–1650.
+84–148, Act III 354–514, Act IV 739–873, Act V 985–1265, runs ending 1285–1565.
 
-**Which act gate binds is deliberate.** The economic curves are near vertical by
-Act III — raising the Act III bar from $75M ARR to $280M moved the transition by
-36 days — so a threshold cannot pace anything; it can only wall off a player
-having a bad run while a good one sails past. So `minDays` sets the pace and the
-`test` is the competence check. The floors are tuned so the two land together and
-transitions read as earned. Do not "fix" a floor without re-measuring the goal it
-sits next to.
+Re-run at the close of the pass, `RUNS=3 DAYS=2000`, so a *three*-run sample
+against that five-run one: Act II 83–179, Act III 337–408, Act IV 718–789,
+Act V 951–1271, and 0 bankruptcies in 21 runs. Medians of those medians are
+126 / 383 / 760 / 1016. Read the spread and not the point: three runs is
+exactly the sample this file has twice recorded lying to it, and the two
+readings overlap everywhere they can. What is worth noticing is the same shape
+the paragraph below already names — Act IV keeps coming in early, and Act V's
+median with it, because §A2 took the waiting out of the floors and nothing has
+put length back into the game. The honest lever remains `ACT4_MIN_DAYS`, and it
+costs the open share directly.
 
-The AGI race **is losable**. Capability (nodes, compute, data, frontier agents) is
-now a ceiling rather than progress itself: `RACE.CONVERT_PER_DAY` converts it at a
-speed set by Frontier Commitment (`pushTarget`), which reads the Ascend standing
-order, agents on Research, the founder's study hours, frontier megaprojects, and
-how little you are slowing down for alignment. Measured over 14 runs the player
-wins 10 and loses 4, and **every** race is decided by under 25 points (wins median
-11, losses 0–3) — against 21/21 player wins at a mean margin of 62 before. The
-harness bot commits at ≈0.58 and builds no megaprojects, so a player who actually
-commits wins more often than that; one who never points the company at the
-frontier loses. `c_race_lost`, `ep_race_lost` and the `race_lost` achievement all
-fire now — verified end to end, not just reachable on paper.
+And the gate-open column, on that run: **0% / 0–38% / 0–75% / 0%**, median about
+0 / 26 / 33 / 0. Acts II and IV still leave with no wait at all in most builds.
+Act III is the one that is not fixed: a third of it, and in two builds two
+thirds, is still spent with the next gate open. The deed there has three doors
+by design and every one of them lands early, so the fix is not a fourth door and
+it is certainly not narrowing to one — that is the defect §A2 was written to
+remove. It wants either a floor that admits what it is or a door that is
+genuinely late in the act, and either one has to be measured against Act IV's
+arrival before it is believed.
 
-Difficulty scales the race through `rivalRace`, and it is a sharp knob now that
-the player's curve is contested rather than runaway. At the old Ruthless value of
-1.3 a **fully** committed player — commitment 0.93, six frontier megaprojects —
-still lost 3/3 by 0–6 points, which made crossing first unreachable on two of the
-four difficulties: the original defect, mirrored. At 1.15 (One Take 1.25) a clean
-committed run on Ruthless wins narrowly, an uncommitted one loses 3/3, and the
-losses that remain are self-inflicted — `opened_weights` hands rivals 35% and
-`moratorium` cuts your own commitment to a quarter. Re-check both ends after any
-change here: the harness bot dies on One Take around day 11, so that difficulty is
-reasoned by proportion from Ruthless rather than measured.
+Act IV moved, on purpose, and the run did not. §A2 cut the act floors (310→250,
+470→420, 270→215) and put a deed in each gate; the act that had been held open
+longest by a timer came in the furthest, and **Act IV's median is 801 against
+the old 867** — below the band this paragraph used to name. What did *not* move
+is the length of a run: 1,474 days against 1,454, because the days came out of
+the waiting rather than out of the game. Measured across the same 35 runs, the
+acts re-proportioned — Act II 306→288 days, Act III 433→397, **Act IV 287→373**
+— and the share of each act spent with the next gate already open went from
+0% / 29% / 58% / 22% to **0% / 0% / 33% / 0%**. Acts II and IV no longer wait at
+all; Act III still does, and it is the one left to fix. Act II (116) and Act V
+(1174) are inside the old band. If a later pass wants Act IV back at 870, the
+honest lever is `ACT4_MIN_DAYS` and it costs the open share directly.
+
+**Which act gate binds is deliberate — and since §A2 an act also closes on a
+deed.** The economic curves are near vertical by Act III — raising the Act III
+bar from $75M ARR to $280M moved the transition by 36 days — so a threshold
+cannot pace anything; it can only wall off a player having a bad run while a
+good one sails past. `minDays` therefore still sets the pace and the `test` is
+still the competence check. Do not "fix" a floor without re-measuring the goal
+it sits next to.
+
+What changed is that the floor used to be the *whole* of the pace. Measured on
+21 seeded runs: the median Act II lasted 310 days against a floor of 310, Act
+III 470 against 470 and Act IV 270 against 270 — the floor *was* the act — and
+the median act spent **36% (II), 50% (III) and 10% (IV)** of its length with the
+next gate already open. The last third of an act was the founder waiting for a
+calendar.
+
+`ACT_DEEDS` in `systems/progression.js` is the answer: one authored act per
+transition, ANDed into that act's `test`, and the floors cut to meet it
+(310→250, 470→420, 270→215; Act I's 60→45 has never bound). Re-measured on the
+same 21 runs the open share is **0% / 2% / 29% / 0%**.
+
+Three rules hold the table together:
+
+- **Every deed has more than one door.** Act II is a Series A *or* a profitable
+  quarter, because a bootstrapper must be able to leave it — measured, the
+  harness raises a Series A in 2 runs of 21 and holds a profitable quarter in
+  21 of 21, so the second door is the one that carries the act. Act III is a
+  hearing sat through *or* a region at government partnership *or* the
+  frontier-class training run, which widens what used to be a single research
+  node into three ways a company stops being only a market participant.
+- **A deed is a competence check, not a delay.** Measured, every door lands
+  before its act's numbers do, so the deeds move no median on their own; what
+  moved the medians is the floors coming down behind them.
+- **Act IV's deed is scoped to Act IV.** "Keep a quarterly intention, or close
+  a season of the feud in your favour" counts only from `actStartedDay`, or a
+  promise kept in the garage would close the last act before it. The Act V
+  gate's `ACT5_STALL_DAYS` valve covers the deed as well as the benchmark, so
+  a founder who never plans and never fights is slowed rather than locked out.
+
+The deed is also that act's last objective (`data/objectives.js` reads the same
+table rather than restating it) and the act-transition card in
+`data/events_acts.js` names the door the founder actually walked through.
+`tools/balance.mjs` prints the open share per act from `S.company.gateMetDay`,
+which `checkActProgression` stamps the first day a test passes; that column is
+the instrument this pass is judged on and it should not be removed.
+
+**§A4. The roster is bounded by attention, not by cash.** Every active agent
+draws `FOUNDER.REVIEW_FOCUS_PER_AGENT` of the founder's day, and the day's focus
+*regeneration* pays that line before the work of the day touches it — so a
+founder who never rests can cover nobody, however full the bar is. Three reliefs
+buy it back and each is a decision with its own bill: a higher model tier needs
+less reading, a longer leash needs less asking (and writes more debt and goes
+rogue more often), and the Weaver halves the whole line, which is what a chief of
+staff is for. Whoever the day could not reach runs **unreviewed** —
+`AGENTS.UNREVIEWED_DEBT` on its debt per work unit and `UNREVIEWED_MORALE` off
+its morale target — and says so, in mono, on its own card. `reviewLoad` in
+`systems/agents.js` is pure and is called from `founderOutput`, which the Desk
+renders seven times a second; `tickFounder` caches it on `S._review`, `save.js`
+strips it beside `_specFx`, and `reviewState` recomputes it when it is not
+there. `_review.ids` is an array and not the Set `reviewLoad` works in, because
+`forecast` and `preview` deep-copy the state and a JSON copy turns a Set into an
+empty object with no `has` on it.
+
+All three bots share the hiring rule — `canReview(S, cand)` beside the runway
+check — for the reason `whatitneeds.md` gives: when attention becomes scarce, a
+harness that hires on cash alone measures its own ignorance. Measured across 35
+runs the end-of-run roster went 10 → 8 and Act V's went 10 → 8, with act medians
+moving by under 3%: the cap is `MAX_ROSTER_BASE` plus research as before, but
+the *reachable* roster is now the one the founder can read.
+
+**§A12. Research is a build.** Three things, and the first is the one with
+teeth. `excludes` is a door a finished node closes, checked in `isAvailable` so
+the queue, a self-directing researcher and the world layer all obey it without
+knowing it exists, and printed on the node *before* it is walked through
+(`closes …` in amber, `closed by …` in red). Three pairs, all leaf against leaf:
+Unified Monorepo against Swarm Orchestration, Custom Silicon against Substrate
+Independence, Constitutional Alignment against Total Attention Capture.
+`tools/lint.mjs` enforces the rule that keeps them honest — **an exclusion may
+never sit on the required chain of a node an act gate or an ending names** —
+which is why the pairs are not the obvious ones: Regulatory Capture *requires*
+Standards Capture, and Consent of the Governed is what The Question is built on.
+Anything that counted the finished tree counts `treeComplete` now, or the
+achievement becomes unearnable the moment a door shuts.
+
+`scaleWith` is time-to-value: Network Effects is worth what the network was on
+the day it landed, Platform & API what there was to build on, Distillation what
+the roster was. The strength is fixed once in `completeResearch`, stored on
+`S.research.scale`, and `computeMods` interpolates that node's own effects
+between nothing and the card — bounded at `SCALE_MIN`/`SCALE_MAX` (0.6–1.5),
+because the point is to make the *order* a decision and not to make a mistimed
+node worthless.
+
+`MAX_RATE` came down from 22,000 to 12,000. Measured, it binds only in the last
+two or three hundred days of a run — the rate is under 1,000/day at day 1,000
+and slams into the ceiling after `recursive_self_improvement` compounds — so it
+is a pure endgame knob and moves no act median. A run finishes 79–81 of the 86
+nodes now against 83–85, and 5–11 are left unfinished against 1–2. Note that
+"60% of the tree" is not reachable at any value: the cost curve is brutally
+exponential (the 80 cheapest nodes are 10% of the tree's cost, the three tier-8
+nodes are 65%), and a run that reaches an Act V ending has bought about 68 of
+them by necessity. Node *count* is the wrong instrument here; what is left
+unfinished is the right one.
+
+And `stellar_engineering` cost 3,456,000 for a reason nobody had measured: its
+chain is a whole branch (Dyson Swarm and Molecular Manufacturing are act-5
+nodes in front of it), so the three ending paths cost 3.5M, 5.4M and **8.1M**
+points and no run — before this pass or after it — ever reached the third. It
+is 1,400,000 now, which puts the Expansion path at about 4.3M, and all three
+are individually reached by an aimed harness run while no played run reaches
+more than two.
+
+The AGI race **is losable**, and since §A3 it is losable *to something*. Capability
+(nodes, compute, data, frontier agents) is a ceiling rather than progress itself:
+`RACE.CONVERT_PER_DAY` converts it at a speed set by Frontier Commitment
+(`pushTarget`), which reads the Ascend standing order, agents on Research, the
+founder's study hours, the compute they pointed at the frontier
+(`frontierComputeMult`), what they built (`frontierProjectBonus`, the only term
+that reaches past `INTENTIONAL_PUSH_CAP`), and how little they are slowing down
+for alignment.
+
+**The other side of it is no longer a rubber band.** `sprint` scaled with the
+*player's* own progress (×4.4 at 100) and `behind` added catch-up on top, so a
+rival's speed was a function of the founder's: measured, every race was decided
+by 0–24 points whatever the build did, and a leading founder watched four labs
+accelerate for no reason anybody in the fiction could name. Both are gone. A
+lab's rate is `labDrive(labCapabilityOf(...))` — its roster, the frontier nodes
+it has finished off the real tree, and the money standing in for the compute it
+can buy, on the same 0..100 scale the founder is measured on. `systems/labs.js`
+plays a week for the Consortium, Obsidian and the Commons the way `rivalco.js`
+has always played one for Aperture; Aperture's own company feeds the same curve
+1:1 through `apertureCapability`, so `apertureRaceMult` is now the number the
+race applies rather than a decorative 22% ceiling. Two terms carry the variance
+a race needs: `RIVAL_LABS.EDGE_*` is how good each lab's programme turns out to
+be, drawn once per timeline, and `RACE.DIFFUSION_MAX` is the one rubber band
+left — bounded at 42%, one-directional, and printed on the race panel in the
+words that make it true ("published work spreads").
+
+Measured, 28 seeded runs per column, harness bot with directives and regions:
+
+|                       | wins | margins        | best lab at the finish |
+|-----------------------|------|----------------|------------------------|
+| before (sprint+catch-up) | 22/28 | 1–36, median 18 | 64–99 |
+| after, harness bot    | 21/28 | 2–44, median 18 | 47–100 |
+| after, committed (push ≈0.70) | 26/28 | 2–54, median 35 | 46–100 |
+| after, uncommitted (push ≈0.07) | 9/28 | 0–40, median 8 | 53–100 |
+
+Roughly 10 of 14 for the harness bot, as before — but the *shape* changed:
+a committed founder now wins 26 of 28 and an uncommitted one loses 19 of 28,
+where before the spread between them was a handful of points. `c_race_lost`,
+`ep_race_lost` and the `race_lost` achievement all still fire — verified end to
+end against a real lab crossing, not just reachable on paper.
+
+**Difficulty changes the opposition's shape, not its rate** (§A21). `rivalRace`
+is a scalar on the whole field and it is a sharp knob now that the labs are
+strong in their own right: at 1.15 a *fully* committed player lost 12 of 14 on
+Ruthless, which is the original defect mirrored. Ruthless carries no `rivalRace`
+at all any more. What it carries is `rivalFunding: 2.5` and `rivalPlays: 2` —
+Aperture opens with a war chest and takes two decisions a week, so it hires
+while it researches and the board fills up while you are still choosing a bloc.
+Measured on Ruthless: committed 9/14, the harness bot 1/14, uncommitted 0/14 —
+which is the band this file has always asked for. One Take keeps `rivalRace:
+1.05` on top of five times the funding; the harness bot dies there around day 11
+(10 of 14 runs never reach a race outcome), so that difficulty is still reasoned
+by proportion from Ruthless rather than measured.
+
+## The opposition, on every board
+
+Five pieces that share one idea: the world should be doing something whether or
+not the founder is looking at it.
+
+- **The region board has another side** (§A10). `S.world.regionRivals` is one
+  holder per bloc — Aperture through its `expand` play, the three labs through
+  theirs, and in East Asia a domestic champion that was in the flavour text and
+  nowhere else. Below `REGION_BOARD.EXCLUSIVE_FROM` their presence is a
+  competing offer and costs you standing; from partnership up a bloc runs on one
+  supplier, so `canEngage` answers `rival` and the only door is `displaceRival`
+  — cash, standing, and heat, because leaning on a government is noticed. Every
+  bloc's own `dislikes` scale with the share of world output you mediate, and
+  each keeps a little sovereignty back in proportion to `regBase`. Measured on
+  the harness bot: 5.1 blocs sovereign per run before, 3.5 after, with the
+  founder still reaching all eight at market or infrastructure.
+- **The nemesis has an objective** (§A14). `S.market.nemesis.season` is a goal
+  from `GOALS` in `data/nemesis.js`, chosen every `NEMESIS.SEASON_DAYS`,
+  telegraphed in the Wire in their founder's voice, weighted into the move draw
+  at `GOAL_WEIGHT` (a weight and nothing else — every legal move stays legal),
+  and closed with a written verdict either way. Intelligence agents on
+  Operations reveal it outright; without them the founder has the telegraph and
+  the pattern. And **the feud no longer ends because you got large**: `threat`
+  is a ratio against your own scale, so `DROP_THREAT` used to retire the one
+  antagonist with a face in the act he mattered most. It is silence that ends a
+  rivalry now — `DROP_PATIENCE` days without a single move — and a scripted
+  rival never fades while it is alive.
+- **Act V has a clock** (§F2). `tickWorld` tracks an EMA of the four numbers a
+  gate can drift on (`WORLD.DRIFT_EMA`) and `gateClock(S, id)` turns that into
+  "closes in ~N days" on the Ascension panel — alignment falls while the company
+  is pointed at the frontier and approval falls as GDP share rises, and both of
+  those were always true and were never once shown next to the gate they close.
+  Past `ENDINGS_FORCED.ACT5_WINDOW` days *inside* the act, shortened by the doom
+  clock, one of three cards in `data/events_race.js` draws and closes a gate for
+  good through `sealEnding`. Which gate is the founder's answer, so the card is
+  a decision about what to lose. `sealEnding` resets the window, so a very long
+  Act V loses a second door eventually and never all of them at once, and
+  `triggerEnding` refuses a sealed ending rather than trusting a disabled button.
+- **The world remembers, when asked** (§F8). `settings.ngWorld` and nothing
+  else: `lastWorld(S)` in `keep.js` answers null without it, so every consumer
+  is one `if`. The lab that crossed last timeline opens ahead (`RACE.MEMORY_*`),
+  Aperture opens at the size of the company you learned to run
+  (`RIVALCO.MEMORY_ROSTER_*`), and Dorne opens as cold as last run's closing
+  heat (`NGPLUS.MEMORY_DORNE_*`). Three cards in `events_race.js` are the
+  loved half of the cards the deck only had the betrayed versions of.
+- **Speed does not thin the deck** (§A22). `EVENTS.MIN_REAL_SECONDS` is divided
+  by the speed multiplier with `MIN_REAL_SECONDS_FLOOR` underneath, so the
+  density per *game day* is the same at 1× and 5× — at a flat 26 seconds a
+  player at 5× met about 40% of the deck a player at 1× met, and the pacing pass
+  was measured headless where that gate does not run at all. The other half is
+  `Transport.throttle`/`release`: a card, a ring or a thread that opens at 3× or
+  5× drops the clock to 1× and hands the speed back when it is answered. Six
+  one-liners in `main.js` on `event:present`, `event:dismissed`, `call:start`,
+  `call:end`, `feed` and `thread:resolved`; `settings.autoThrottle` is the
+  switch and every transport control clears the hold, so a speed set *during* a
+  card is the speed that stays.
+
+## The surfaces that arrived last
+
+Everything below shipped in one pass and each one is documented in its own file
+header. These are the paragraphs that only make sense from outside a single
+file: what bit, or the rule that holds it in place.
+
+- **The scarcity line is one function, and it is `expenseBreakdown`** (§A1,
+  §A11, §A17). Serving cost per category, upkeep on megaprojects and regions,
+  wages scaled by model tier and level, a research spend line, marketing and
+  infrastructure. `marketingBudget` and `infraSpend` had been in the ledger with
+  no writer for months and are dials now. Two of those lines are the whole
+  reason anything is scarce after Act II, so anything new that costs money goes
+  in that one function — a cost added anywhere else is invisible to the Today
+  ledger, to the "why" panel and to `balance.mjs`'s ledger row at once.
+- **The compute split is three shares of one number.** Research, serving and the
+  frontier. The frontier share reaches the race through `frontierComputeMult`
+  and is one of the terms in Frontier Commitment; the serving share is a floor
+  under reliability. Anything written straight onto `computeCap` is still erased
+  on the next tick — that rule did not move, the split sits on top of it.
+- **The board is a body, not a modifier** (§A6, §A7). `systems/board.js` sets
+  flags in the day hook and `data/events_board.js` gates five cards on those
+  flags rather than on a date, so a long offline stretch cannot skip a vote. A
+  motion from the board seat lands as a card with `author: 'board'`, bounded by
+  `validateCard` like anything the world writes — and a motion whose card is
+  refused still *applies*, because the decision is a fact about the board and
+  the card is only the founder hearing about it. Four of the five cards need a
+  priced round; the quarterly review belongs to every run, including a
+  bootstrapped one, which is why the quarter is the door out of Act II that a
+  founder who never raises uses.
+- **The quarter is nine intentions and a reading-back.** `data/quarters.js` holds
+  them; `S.stats.lastIntentionKeptDay` is what Act IV's deed counts, and it is
+  counted from `actStartedDay`, so a promise kept in the garage cannot close the
+  last act.
+- **Four labs, one curve** (§A3). `systems/labs.js` plays a week for the
+  Consortium, Obsidian and the Commons the way `rivalco.js` has always played
+  one for Aperture, and Aperture feeds the same curve 1:1 through
+  `apertureCapability`. A lab's rate is `labDrive(labCapabilityOf(...))` and
+  nothing in it reads the founder's progress. If you ever find yourself wanting
+  a catch-up term, that is the bug being reintroduced: the one legitimate
+  coupling is `RACE.DIFFUSION_MAX`, bounded and one-directional, and it is
+  printed on the panel in the words that make it true.
+- **The region board has an occupant** (§A10). `S.world.regionRivals`, one
+  holder per bloc. Past `REGION_BOARD.EXCLUSIVE_FROM` a bloc runs on one
+  supplier and `canEngage` answers `rival`, so the only door is `displaceRival`.
+  Measured on the harness bot: 5.1 blocs sovereign per run before, 3.5 after.
+- **The nemesis has a season** (§A14). One goal from `data/nemesis.js`, chosen
+  every `NEMESIS.SEASON_DAYS`, telegraphed in the founder's own voice, weighted
+  into the move draw at `GOAL_WEIGHT` — a weight and nothing else, so every
+  legal move stays legal — and closed with a written verdict either way.
+- **Research closes doors** (§A12). `excludes` is checked in `isAvailable`, so
+  the queue, a self-directing researcher and the world layer all obey it without
+  knowing it exists. `lint.mjs` enforces the rule that keeps the pairs honest:
+  an exclusion may never sit on the required chain of a node an act gate or an
+  ending names.
+- **Attention is the roster's real cap** (§A4). `reviewLoad` is pure, called
+  from `founderOutput`, cached on `S._review` by `tickFounder` and stripped by
+  `save.js` beside `_specFx`. `_review.ids` is an array and not a Set because
+  `forecast` and `preview` deep-copy through JSON and a Set comes back as an
+  empty object with no `has` on it. All three bots hire on `canReview` beside
+  the runway check — a harness that hires on cash alone measures its own
+  ignorance the moment attention becomes the scarce thing.
+- **The post is a correspondence** (§G16, §G17, §G20). `repeat` on a letter
+  makes a correspondent who writes for the rest of the run; `replyTo: { id,
+  days }` on a chosen answer queues the reply that answer promised, through
+  `queueLetter`, so a thread continues rather than ending at the button. `quiet`
+  marks the post that is only post — receipts, spam, a renewal notice — and
+  `tickMail` prefers an urgent letter, then a promised one, then anything not
+  marked quiet. One a day still holds, in all four cases.
+- **The Wire has regulars, and the founder is in it** (§G7, §G31, §G33).
+  `data/handles.js` is six handles whose lines belong to *them* rather than to a
+  shared pool, each appearing at most twice a fortnight. `data/nullptr.js` is
+  the other half of a joke the deck had told five times and never shown: the
+  founder's own `R` post now lands in the feed under their own name, and nullptr
+  answers it ninety seconds later. Before this, a founder could press R four
+  hundred times and never see the thing their bio claims.
+- **The roster talks where you can read it** (§G24). `systems/channel.js` is a
+  pure function of `S` salted by the day, read as a Record folder and as
+  `tail channel` in the Terminal, built from the `S.agentsLog` ring buffer.
+  Both of its readers are render paths, so it may not draw from the RNG — the
+  same rule `askAria` broke. `data/activity.js` is the sibling of that on the
+  roster itself: one line per lane per shift, picked from the day and the
+  agent's id, because the rack repaints seven times a second.
+- **The Terminal reads the Record** (§G34, §G35). `ls`, `cat` and `tail` walk
+  the same generated filesystem `systems/record.js` renders, so a folder with no
+  reader is dead in two surfaces rather than one — the Record's rule that every
+  path needs a reader now costs double. On a second timeline `ls` finds
+  `../timeline-1/` and it is readable.
+- **A card may carry `chars[]`** (§E15). `char` is still who the card is *from*
+  and decides the plate; `chars` renders up to three small faces beside it, and
+  renders nothing at all when it is absent, which is every card written before
+  `events15.js`. That file exists because measured across three seeded runs no
+  two cast members were ever in the same scene — twelve people and twelve dyads
+  with the founder in the middle, which is a switchboard and not a cast.
+- **Jo has no phone key, on purpose** (§E28). `noPhone` is one more refusal in
+  `canCall` — `nophone`, `NOT A PHONE THING` — so Jo is *in* Contacts with the
+  key greyed and the reason in mono, which is the rule every blocked verb in
+  this game follows. You do not ring the person you live with; you come home or
+  you do not. Jo is the thirteenth face and the only one with the flag, and a
+  second one would need to be a person the founder sees rather than calls, or
+  the flag becomes a way of writing somebody out.
+- **The last act is about the path you took** (§F1). `data/events_paths.js` is
+  gated on `narrative.pathLocked` and spaced off `pathLockedDay`, so the three
+  cards per path arrive as a sequence. Before it, grepping the deck for
+  `pathLocked` returned nothing: the morning after the biggest decision in the
+  game, the deck had not noticed.
+- **Losing has a second half** (§A24). `data/events_second.js` is Act V when
+  somebody else crossed — the road the `counterweight` flag opens — because
+  "race anyway" and "build the counterweight" were both six hundred more days in
+  a game that had stopped being about anything.
+- **The opening choice reaches the deck** (§E22, and `events16.js`). Three cards
+  per category, Acts I–III, gated on `catIs(S, …)` and nothing else. The first
+  screen offers eight answers with different economics and the deck used to deal
+  all eight the same run.
+- **The campaign is a brief, not a script** (§H21). `data/campaign.js` is four
+  beats an assistant is *asked* to write, handed over on the briefing beside the
+  beat sheet — both answer "what does the run want next" and the payload has
+  1,500 characters for everything, so they share one block. Each carries a
+  `fallback` card and a deadline: miss it and the written deck plays the same
+  moment its own way, which is why a campaign an assistant ignores costs
+  nothing.
+- **Three chrome systems that must not write to the DOM.** `ui/alarm.js` (§I12)
+  lights the panel that owns a problem, `ui/actchrome.js` (§I5) puts one class
+  and one token on `#app` when the act turns, and `ui/os/saver.js` (§I7) draws
+  the run after `OS.SCREENSAVER_S` idle. All three are read *in the render*:
+  `render()` patches and `syncAttrs` removes attributes the new HTML does not
+  mention, so a class added by hand to a rendered node is gone on the next
+  repaint. The screensaver is a child of `#desktop` and never `position: fixed`,
+  for the reason everything else in this file is not fixed either.
+- **Two ledgers, and neither is the save.** `systems/ledger.js` (§B4) keeps two
+  snapshots on `S.company.today` and reads its causes from the same pure
+  functions the views print; `systems/todo.js` (§I4) generates the founder's
+  list every morning out of things that already exist and throws it away at
+  midnight. Neither invents a number, which is the only way either of them can
+  fail to disagree with the simulation.
+- **`ui/why.js` is one panel, two hosts and five blocks** (§B1). Valuation and
+  what it is applied to on the Market view; alignment, its drift, regulatory
+  heat and public approval on the World view. `S.ui.whyShut` remembers which the
+  founder folded away, keyed by the panel id (`valuation`, `standing`). A new
+  explanation builds `whyBlock` rows for `whyPanel` rather than writing its own
+  table, or the game grows two vocabularies for the same sentence.
+- **Three slots, one player.** `SLOTS` is `[1, 2, 3]` in `save.js` and slot 1 is
+  the original key, so an existing save is slot 1 and nothing migrates.
+  Switching writes the run on screen first and then reloads: the page is the
+  whole of the game's state and half a reload is a corrupt slot.
+- **A deck travels as `#deck=`.** `Keep.encodeDeck` / `decodeDeck` in
+  `systems/keep.js`, read before the game boots, and every card in an imported
+  deck is dealt under `boundEffects` exactly like one the world wrote. It is the
+  same JSON the Legacy screen exports, so there is one format and not two.
 
 ## Pacing, measured
 
-The deck is 202 cards and the only way to know what a *run* feels like is to
+The deck is 327 cards and the only way to know what a *run* feels like is to
 play one and write down the order. `drawEvent` is weighted, most cards are
 `once`, and the good ones are gated — so what a player actually meets is not
 what the deck contains. Three seeded 1,800-day runs, pooled, is the instrument.

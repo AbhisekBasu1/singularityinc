@@ -17,13 +17,39 @@ import { esc, md, render } from '../dom.js';
 import { threadOptions } from '../../systems/feed.js';
 import { CHARACTERS } from '../../data/characters.js';
 import { OS } from './config.js';
+import { APP_MAP, isLocked } from './apps.js';
 
 let root = null;             // #toast-root — banners stack with the toasts
 let centre = null;           // the Notification Center slide-over
-const history = [];
 let centreOpen = false;
 let onCount = null;
 let bannersOn = true;
+
+// The record lives in the save, at `S.ui.os.nc`, the way the window layout
+// does: a Center that emptied itself on every reload was a Center that never
+// held the one thing a founder opens it for, which is what happened while they
+// were away. Forty entries, newest first.
+function history() {
+  if (!S) return [];
+  S.ui ??= {};
+  S.ui.os ??= {};
+  if (!Array.isArray(S.ui.os.nc)) S.ui.os.nc = [];
+  return S.ui.os.nc;
+}
+
+// Which window a notification is about, when the toast did not say. The icons
+// are conventional here — ⌬ is research, ◉ an agent, ✉ a letter — and a wrong
+// guess only costs a Show key that opens a neighbouring app, so the table is
+// short and the toasts that matter carry `show` themselves.
+const SHOW_BY_ICON = {
+  '⌬': 'research', '◉': 'agents', '▨': 'agents', '◈': 'product', '⚠': 'product',
+  '$': 'market', '⌗': 'market', '⚔': 'market', '⇄': 'market', '☎': 'contacts',
+  '✉': 'mail', '⊕': 'world', '⌁': 'wire', '∞': 'legacy', '⛨': 'legacy', '★': 'story',
+};
+function showFor(t) {
+  const id = t.show || SHOW_BY_ICON[t.icon] || null;
+  return id && APP_MAP[id] ? id : null;
+}
 
 const reduced = () => {
   try {
@@ -34,9 +60,10 @@ const reduced = () => {
 
 export function mount({ toasts, center, onCountChange }) {
   root = toasts; centre = center; onCount = onCountChange || null;
-  history.length = 0;
   centreOpen = false;
   root?.classList?.remove('nc-open');
+  // The badge reflects what the save brought back, not what this session saw.
+  onCount?.(history().length);
 }
 
 export function setBanners(on) { bannersOn = !!on; }
@@ -44,24 +71,35 @@ export function setBanners(on) { bannersOn = !!on; }
 // ── The record ──────────────────────────────────────────────────────────────
 
 export function record(t) {
-  history.unshift({ ...t, day: S ? Math.floor(S.time.day) : 0 });
-  if (history.length > OS.NC_KEEP) history.length = OS.NC_KEEP;
-  onCount?.(history.length);
+  if (!S) return;
+  const h = history();
+  h.unshift({
+    icon: t.icon || '◈', title: String(t.title || ''), sub: t.sub ? String(t.sub) : '',
+    kind: t.kind || '', day: Math.floor(S.time.day), show: showFor(t),
+  });
+  if (h.length > OS.NC_KEEP) h.length = OS.NC_KEEP;
+  onCount?.(h.length);
   if (centreOpen) paintCenter();
 }
 
 export function centerHtml() {
-  if (!history.length) {
+  const h = history();
+  if (!h.length) {
     return `<div class="nc-empty">Nothing yet.<br/>The machine has not had to interrupt you.</div>`;
   }
   let lastDay = null;
   const rows = [];
-  for (const n of history) {
+  for (const n of h) {
     if (n.day !== lastDay) { lastDay = n.day; rows.push(`<div class="nc-day">DAY ${n.day}</div>`); }
+    // The Show key is offered only for a window this run can open: a module
+    // still locked is a door that would visibly do nothing.
+    const app = n.show ? APP_MAP[n.show] : null;
+    const canShow = !!app && !(app.module && isLocked(S, app));
     rows.push(`<div class="nc-item ${esc(n.kind || '')}">
       <span class="nc-icon">${esc(n.icon || '◈')}</span>
       <span class="nc-text"><span class="nc-title">${md(n.title || '')}</span>
       ${n.sub ? `<span class="nc-sub">${md(n.sub)}</span>` : ''}</span>
+      ${canShow ? `<button class="nc-show" data-act="os-nc-show" data-v="${esc(n.show)}" aria-label="Show ${esc(app.title)}">SHOW</button>` : ''}
     </div>`);
   }
   return rows.join('');
@@ -100,7 +138,7 @@ export function toggleCenter(next) {
   return centreOpen;
 }
 export function centerIsOpen() { return centreOpen; }
-export function clearCenter() { history.length = 0; onCount?.(0); paintCenter(); }
+export function clearCenter() { history().length = 0; onCount?.(0); paintCenter(); }
 
 // ── Banners ─────────────────────────────────────────────────────────────────
 

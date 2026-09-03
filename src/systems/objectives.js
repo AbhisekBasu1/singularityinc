@@ -7,9 +7,18 @@ import { emit } from '../engine/bus.js';
 
 const LIVE = 3;
 
+// An objective may carry `arch`, and then it belongs to that founder and to no
+// other. It is filtered in three places rather than one: `activeObjectives` so
+// the Ghost is never shown the Hacker's goal, `checkObjectives` so the Ghost is
+// never quietly *paid* for it, and `objectiveProgress` so the count at the
+// bottom of the Log is out of the number this founder could ever finish.
+// A missing `arch` means everybody, which is every objective written before
+// this one.
+const mine = (S, o) => !o.arch || o.arch === (S.founder?.archetype || 'hacker');
+
 export function activeObjectives(S) {
   const done = S.objectivesDone || (S.objectivesDone = {});
-  const pool = OBJECTIVES.filter((o) => !done[o.id] && (o.act ?? 1) <= S.company.act);
+  const pool = OBJECTIVES.filter((o) => !done[o.id] && (o.act ?? 1) <= S.company.act && mine(S, o));
   // Prioritise the current act, then earlier acts (catch-up), required before optional.
   pool.sort((a, b) => {
     const ao = a.optional ? 1 : 0, bo = b.optional ? 1 : 0;
@@ -27,6 +36,7 @@ export function checkObjectives(S) {
   for (const o of OBJECTIVES) {
     if (done[o.id]) continue;
     if ((o.act ?? 1) > S.company.act) continue;
+    if (!mine(S, o)) continue;
     let ok = false;
     try { ok = o.test(S); } catch (e) { ok = false; }
     if (!ok) continue;
@@ -45,5 +55,5 @@ export function checkObjectives(S) {
 
 export function objectiveProgress(S) {
   const done = Object.keys(S.objectivesDone || {}).length;
-  return { done, total: OBJECTIVES.length };
+  return { done, total: OBJECTIVES.filter((o) => mine(S, o)).length };
 }

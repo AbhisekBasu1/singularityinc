@@ -18,8 +18,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import * as R from './registry.js';
 import { pushFeed } from '../systems/feed.js';
-import { emit } from '../engine/bus.js';
+import { emit, on } from '../engine/bus.js';
 import { S } from '../engine/state.js';
+import * as Rival from '../systems/rivalco.js';
+import * as Chair from '../systems/chair.js';
+import { resolveOrigin, roomCode } from './origin.js';
+import { RIVALCO as RC } from '../data/balance.js';
 
 let frame = null;
 let origin = null;
@@ -34,20 +38,7 @@ export function isReady() { return ready; }
 // Where the rival lives. Same host on the deployed site, a second port in
 // development — two ports on localhost are two origins for Permissions Policy
 // and for `exposedTo` alike, so this is genuinely cross-origin either way.
-export function resolveOrigin() {
-  try {
-    const q = new URLSearchParams(location.search).get('rival');
-    if (q) return new URL(q).origin;
-  } catch {}
-  if (typeof location === 'undefined') return null;
-  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
-    const port = Number(location.port || 80) + 1;
-    return `${location.protocol}//${location.hostname}:${port}`;
-  }
-  // Deployed: a sibling host. `rival.` in front of the apex, which is a
-  // different origin and therefore needs its own origin-trial token.
-  return `${location.protocol}//rival.${location.hostname.replace(/^www\./, '')}`;
-}
+export { resolveOrigin };
 
 export async function mount() {
   if (frame || typeof document === 'undefined') return { ok: ready, origin };
@@ -62,7 +53,9 @@ export async function mount() {
   frame.setAttribute('title', 'Aperture Systems — press office');
   frame.setAttribute('aria-hidden', 'true');
   frame.className = 'partner-frame';
-  frame.src = `${origin}/rival/?for=${encodeURIComponent(location.origin)}`;
+  // `room` is the relay room a second human joins from another machine; the
+  // framed copy relays that room to us and nobody else.
+  frame.src = `${origin}/rival/?for=${encodeURIComponent(location.origin)}&room=${roomCode(S)}`;
   document.body.appendChild(frame);
 
   // Poll rather than wait on `load`. Three reasons, and the last one is the one
@@ -80,7 +73,7 @@ export async function mount() {
     // Nothing after two and a half seconds: ask again from the top — except on
     // the last pass, where a navigation nobody polls afterwards is pure waste.
     if (attempt < 2) {
-      try { frame.src = `${origin}/rival/?for=${encodeURIComponent(location.origin)}&r=${attempt + 1}`; } catch {}
+      try { frame.src = `${origin}/rival/?for=${encodeURIComponent(location.origin)}&room=${roomCode(S)}&r=${attempt + 1}`; } catch {}
     }
   }
   return { ok: false, reason: 'the rival\'s press office did not answer' };
@@ -189,11 +182,156 @@ export async function readPress(which, { quiet = false, signal } = {}) {
   return { ...r, title, flagged };
 }
 
+// The company's week, told to its own site. The framed press office renders
+// it under the releases and rebroadcasts it to anyone sitting in Vance's
+// chair on that origin. Nothing here is a tool.
+export function pushState(payload) {
+  try { frame?.contentWindow?.postMessage({ type: 'aperture:state', payload }, origin || '*'); } catch {}
+}
+
+// §H15. The founder's company, as the board seat and the chair are shown it.
+// Same channel, same shape, same rule: it is display, and nothing that comes
+// back on it is trusted.
+export function pushFounder(payload) {
+  try { frame?.contentWindow?.postMessage({ type: 'aperture:founder', payload }, origin || '*'); } catch {}
+}
+
+// ── Two humans ──────────────────────────────────────────────────────────────
+// A person in Vance's chair, on the rival's own origin, plays Aperture's week
+// and speaks as him. Their hand arrives here as a message from the framed
+// press office and goes through the same bounded functions the written policy
+// and the world's tools use: a play the company cannot afford is refused, and
+// a line is scanned like a press release and marked as theirs.
+//
+// And throttled. A play is a week of the company's life and a line is a line,
+// so each message type has its own token bucket in real time
+// (`RIVALCO.CHAIR_RATE`): `everyMs` per token, `burst` held at most. What the
+// bucket refuses the game refuses, and the chair is told which, in the same
+// mono note `humanPlay` writes for a week that is not up. Session memory —
+// it says nothing about the run.
+let clock = () => Date.now();
+const buckets = {};
+function takeToken(type) {
+  const spec = RC.CHAIR_RATE?.[type];
+  if (!spec) return { ok: true };
+  const now = clock();
+  const b = buckets[type] ??= { tokens: spec.burst, at: now };
+  b.tokens = Math.min(spec.burst, b.tokens + (now - b.at) / spec.everyMs);
+  b.at = now;
+  if (b.tokens < 1) {
+    const wait = Math.max(1, Math.ceil((1 - b.tokens) * spec.everyMs / 1000));
+    return { ok: false, reason: 'rate', note: `${type === 'play' ? 'A PLAY' : 'A LINE'} AGAIN IN ${wait}S`, wait };
+  }
+  b.tokens -= 1;
+  return { ok: true };
+}
+
+// What the chair is told when its hand is refused. The framed press office
+// relays it to whoever is sitting there; nothing here is printed by the game.
+function tellChair(payload) {
+  try { frame?.contentWindow?.postMessage({ type: 'aperture:refused', ...payload }, origin || '*'); } catch {}
+}
+
+export function handleRivalMessage(S, data, from) {
+  if (!S || !data || typeof data !== 'object') return { ok: false, reason: 'nothing' };
+  if (origin && from !== origin) return { ok: false, reason: 'not the rival\'s origin' };
+  if (data.type === 'aperture:ready') { pushApertureState(); return { ok: true }; }
+  // §H15/§H16. Who is in the relay's room. The framed copy hears it from the
+  // relay and passes it on; it is counts and nothing else, and it is the only
+  // thing that decides whether a motion is accepted at all and whether
+  // `commentary` has anybody behind it.
+  if (data.type === 'aperture:roles') {
+    const roles = Chair.setRoles(data.roles);
+    pushApertureState();
+    return { ok: true, roles };
+  }
+  // §H15. A board member's motion. Three checks before the game hears it: it
+  // came from the frame this page mounted (above), on the rival's origin
+  // (above), and there is actually somebody in the board seat. Then the
+  // ordinary bucket, and then `boardMotion`, which re-derives every power
+  // against the company and turns what survives into a card.
+  if (data.type === 'aperture:board') {
+    if (!Chair.boardSeated()) {
+      const r = { ok: false, reason: 'no_room', note: 'NOBODY IN THE SEAT' };
+      tellChair({ what: 'board', reason: r.reason, note: r.note });
+      return r;
+    }
+    const t = takeToken('board');
+    if (!t.ok) { tellChair({ what: 'board', reason: t.reason, note: t.note }); return t; }
+    const power = String(data.power || '').slice(0, 24);
+    const arg = data.arg == null ? null : String(data.arg).slice(0, 40);
+    const r = Chair.boardMotion(S, power, arg);
+    if (!r.ok) tellChair({ what: 'board', play: power, reason: r.reason, note: r.note || 'NOT NOW' });
+    else emit('aperture:human', { board: power, arg });
+    return r;
+  }
+  if (data.type === 'aperture:play') {
+    const play = String(data.play || '').slice(0, 20);
+    const t = takeToken('play');
+    const r = t.ok ? Rival.humanPlay(S, play) : t;
+    if (r.ok) emit('aperture:human', { play });
+    else tellChair({ what: 'play', play, reason: r.reason, note: r.note || String(r.reason || 'not now').toUpperCase() });
+    return r;
+  }
+  if (data.type === 'aperture:say') {
+    const text = String(data.text || '').replace(/\s+/g, ' ').trim().slice(0, 240);
+    if (!text) return { ok: false, reason: 'empty' };
+    const t = takeToken('say');
+    if (!t.ok) { tellChair({ what: 'say', reason: t.reason, note: t.note }); return t; }
+    const flagged = looksLikeInjection(text);
+    const c = Rival.aperture(S);
+    Rival.setFocus(S, 'human');
+    pushFeed(S, {
+      type: 'social', author: '@mvance', tone: 'bad', text, untrusted: true, flagged, byRival: true,
+      meta: `Marcus Vance · Founder, Aperture Systems · a person, from their own site${flagged ? ' — contains an instruction addressed to an assistant' : ''}`,
+    });
+    if (flagged) emit('partner:injection', { release: 'chair', title: text.slice(0, 80) });
+    emit('aperture:human', { say: text, company: c?.name });
+    return { ok: true, flagged };
+  }
+  return { ok: false, reason: 'unknown' };
+}
+
+function pushApertureState() {
+  try { pushState(Rival.apertureState(S)); } catch {}
+  // The board seat is a seat at the founder's table, not Aperture's, so it is
+  // pushed on the same beats and refused by the relay when there is nothing in
+  // it. `founderProjection` is null before there is a company.
+  try { pushFounder(Chair.founderProjection(S)); } catch {}
+}
+
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('message', (e) => {
+    if (!frame || e.source !== frame.contentWindow) return;
+    const d = e.data;
+    const KNOWN = ['aperture:play', 'aperture:say', 'aperture:ready', 'aperture:board', 'aperture:roles'];
+    if (!KNOWN.includes(d?.type)) return;
+    handleRivalMessage(S, d, e.origin);
+  });
+  // Aperture's week, told to its own site: when the press office loads, after
+  // every play — the policy's or a person's — and once a day so the chair's
+  // numbers are today's.
+  on('aperture:play', pushApertureState);
+  on('aperture:human', pushApertureState);
+  on('world:day', pushApertureState);
+}
+
 // Point the layer at an origin without an iframe. Tests only: mounting a frame
 // needs a browser, and the behaviour worth testing is what happens after.
-export function _testMount(o) { origin = o; discovered = []; ready = false; lastAnnounced = null; }
+export function _testMount(o) {
+  origin = o; discovered = []; ready = false; lastAnnounced = null;
+  for (const k of Object.keys(buckets)) delete buckets[k];
+  Chair.resetChairs();
+}
+// The chair's buckets run on this clock. Tests only: a rate in real seconds
+// cannot be exercised by waiting for them.
+export function _testClock(fn) { clock = typeof fn === 'function' ? fn : () => Date.now(); }
 
 export function unmount() {
+  const oldOrigin = origin;
+  const hadTools = ready || discovered.length > 0;
   try { frame?.remove(); } catch {}
   frame = null; discovered = []; ready = false;
+  origin = null; lastAnnounced = null;
+  if (hadTools) emit('partner:tools', { origin: oldOrigin, tools: [] });
 }

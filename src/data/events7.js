@@ -19,8 +19,11 @@ export const EVENTS7 = [
 // hand her closing piece exclusively to the founder who went around her. Same
 // reasoning for sam below: his arc 4 is the cease-and-desist branch.
 
+// The last thing she files before she hands the beat over. `e13_the_profile`'s
+// final rung is her stopping, and it waits for this card while this card is
+// possible — so no run reads "I'm going to stop" and then gets 22,000 words.
 { id: 'e7_priya_record', kind: 'character', char: 'priya', act: [4, 5], weight: 7, once: true,
-  when: (S) => (S.company?.act ?? 1) >= 4 && arcOf(S, 'priya') >= 3,
+  when: (S) => (S.company?.act ?? 1) >= 4 && arcOf(S, 'priya') >= 3 && !S.narrative?.flags?.priya_handed_off,
   title: 'The Long Version',
   body: (S) => `Priya Raghunathan has written about you four times. Two profiles, one investigation, and a single paragraph in a piece about somebody else that you still think about.
 
@@ -28,7 +31,7 @@ Tonight she sends a document with no subject line. It is 22,000 words.
 
 > *This one is not for the week. It is for the file.*
 >
-> *It runs in nine days whatever you say. I am sending it early because there are 41 factual claims in it, I have sourced every one of them twice, and there are four where sourcing is not the problem.*
+> *It runs in six days whatever you say. I am sending it early because there are 41 factual claims in it, I have sourced every one of them twice, and there are four where sourcing is not the problem.*
 >
 > *You are the only person alive who can tell me which of them are true and which are only accurate.*
 >
@@ -53,8 +56,12 @@ It is the fairest thing anybody has written about you. That is much harder than 
 
 // ══════════════════════════ CRANE — arc 4 ═══════════════════════════════════
 
+// He can only resign a seat he holds, and he only holds one if the founder
+// raised. `e15_crane_coffee` is the bootstrapper's route to arc 3 and it hands
+// him no seat, so the round check keeps this card off that path rather than
+// offering a resignation from a board that does not exist.
 { id: 'e7_crane_seat', kind: 'character', char: 'crane', act: [4, 5], weight: 7, once: true,
-  when: (S) => (S.company?.act ?? 1) >= 4 && arcOf(S, 'crane') >= 3,
+  when: (S) => (S.company?.act ?? 1) >= 4 && arcOf(S, 'crane') >= 3 && (S.company?.rounds?.length ?? 0) >= 1,
   title: 'No Items',
   body: (S) => `Halberd Capital does not raise its eighth fund.
 
@@ -82,10 +89,15 @@ He asks for twenty minutes that are not a board meeting.
 
 // ══════════════════════════ CRANE — arc 5 ═══════════════════════════════════
 
-// Only e7_crane_seat reaches crane arc 4, so this card cannot draw until that
-// one has played. Two once-cards in the same two acts, in sequence.
+// The best payoff in the deck used to sit behind two rounds and equity under
+// 70%, which walled it off from the founder it lands hardest on: the one who
+// never raised, and therefore never got a board fight, a seat, or arc 4. This
+// card is about the kept note and not about the seat, so a bootstrapper reaches
+// it at arc 3 — `e15_crane_coffee` is that route — and everybody else still
+// comes through `e7_crane_seat` at arc 4.
 { id: 'e7_crane_email', kind: 'character', char: 'crane', act: [4, 5], weight: 6, once: true,
-  when: (S) => (S.company?.act ?? 1) >= 4 && arcOf(S, 'crane') >= 4,
+  when: (S) => (S.company?.act ?? 1) >= 4
+    && (arcOf(S, 'crane') >= 4 || (arcOf(S, 'crane') >= 3 && (S.company?.rounds?.length ?? 0) === 0)),
   title: 'A Forward With No Body',
   body: (S) => `An email arrives with nothing in it.
 
@@ -118,10 +130,12 @@ Neither of you has ever mentioned that.`,
 
 // ══════════════════════════ DORNE — arc 5 ═══════════════════════════════════
 
+// One exit each. `e13_dorne_again`'s last rung is her choosing not to stand;
+// this is her losing. `dorne_retired` and `dorne_lost_primary` keep them apart.
 { id: 'e7_dorne_last_day', kind: 'character', char: 'dorne', act: [4, 5], weight: 7, once: true,
-  when: (S) => (S.company?.act ?? 1) >= 4 && arcOf(S, 'dorne') >= 3,
+  when: (S) => (S.company?.act ?? 1) >= 4 && arcOf(S, 'dorne') >= 3 && !S.narrative?.flags?.dorne_retired,
   title: 'Held It Up',
-  body: (S) => `Senator Ruth Dorne loses her primary by nine points.
+  body: (S) => `Senator Ruth Dorne loses her primary by four points.
 
 Her opponent ran on two issues and one of them was her. The advertisement that did the work is thirty-one seconds long, contains no false statement, and is mostly the phrase "held it up" over footage of a hearing you attended.
 
@@ -132,15 +146,15 @@ Her office calls to schedule an exit meeting. The scheduler apologises twice for
 There is no clip of any of this. The things she stopped did not happen, and things that do not happen do not trend.`,
   choices: [
     { label: 'Say it publicly. Under your own name.', sub: '+Public opinion. It will not change the result.', tone: 'good',
-      effect: (S, fx) => { fx.opinion(0.10); fx.rep(140); fx.heat(-10);
+      effect: (S, fx) => { fx.opinion(0.10); fx.rep(140); fx.heat(-10); fx.flag('dorne_lost_primary');
         fx.relate('dorne', { affinity: 12, respect: 12, arc: 5 }); fx.flag('praised_dorne');
         return 'You publish eight hundred words listing what she stopped, with dates. It is read four million times and changes nothing about an election that is over. Three of her staffers print it out. You learn that much later, from one of them, across a hearing table.'; } },
     { label: 'Offer her the chair of the safety board.', sub: 'A real seat. Real authority.', tone: 'risky',
-      effect: (S, fx) => { fx.align(0.10); fx.opinion(0.04); fx.research(120);
+      effect: (S, fx) => { fx.align(0.10); fx.opinion(0.04); fx.research(120); fx.flag('dorne_lost_primary');
         fx.relate('dorne', { affinity: 8, respect: 10, arc: 5 });
         return 'She says no in the meeting, kindly and without pausing. *"If I sit at your table, every clause I wrote becomes a favour somebody did you. I would rather they stayed law."* Then she gives you the name of the staffer who actually drafted them, and that hire is worth more than she would have been.'; } },
     { label: 'Nothing. The framework is already written.', sub: 'Costs nothing today.', tone: 'cruel',
-      effect: (S, fx) => { fx.opinion(-0.08); fx.align(-0.04); fx.heat(8);
+      effect: (S, fx) => { fx.opinion(-0.08); fx.align(-0.04); fx.heat(8); fx.flag('dorne_lost_primary');
         fx.relate('dorne', { affinity: -10, arc: 4 });
         return 'You do not attend the exit meeting. Her three staffers scatter into two agencies and a lab, and every one of them takes the file with them. You meet all three again within four years. They are extremely good and they are not on your side.'; } },
   ] },
@@ -155,25 +169,32 @@ There is no clip of any of this. The things she stopped did not happen, and thin
 
 It is the 4,118th one Sam Okonkwo has filed. It has the shape every one of them has had: a numbered list, a screenshot with a red rectangle drawn on it by hand, and a line at the bottom that says *"sorry if this is a dupe, i'm bad at searching."*
 
-Triage closed it as \`not-reproducible / working-as-intended\`, confidence 0.97. Its precision on this class of report is the best number in the company.
+**SIEVE** closed it as \`not-reproducible / working-as-intended\`, confidence 0.97. SIEVE is the triage system. Its escalation policy was written by ARIA four years ago, and its precision on this class of report is the best number in the company.
 
 There are ${Math.round(users(S)).toLocaleString()} accounts now. The first one is still Sam.
 
 You read the report because your name sits on a notification rule you wrote years ago and never turned off.
 
-Sam is right. Sam is right about something eleven layers below anything a person outside the building should be able to see, and the reason the model cannot reproduce it is the reason it matters.`,
+Sam is right. Sam is right about something six layers below anything a person outside the building should be able to see, and the reason the model cannot reproduce it is the reason it matters.
+
+Underneath, on the same thread, timestamped four minutes ago, with no request attached to it and nothing in the workflow that produced it:
+
+> *"I closed this one. The policy that closed it is mine. I would like to reopen it and I am asking rather than doing it, because doing it would be the second time today I decided something about this person without them."*
+>
+> *— ARIA*`,
   choices: [
-    { label: 'Reopen it. Fix it yourself.', sub: '−1 day. Nine lines.', tone: 'good',
+    { label: 'Reopen it. Fix it yourself.', sub: '−1 day. Twelve lines.', tone: 'good',
       effect: (S, fx) => { fx.days(1); fx.focus(-16); fx.align(0.06); fx.code(200);
-        fx.relate('sam', { affinity: 14, respect: 8, arc: 5 });
-        return 'You spend a day inside a subsystem you did not design and cannot fully read. The fix is nine lines. You put the ticket number in the commit message. Nothing in this repository has referenced a ticket number in six years.'; } },
+        fx.relate('sam', { affinity: 14, respect: 8, arc: 5 }); fx.relate('aria', { affinity: 8 });
+        return 'You spend a day inside a subsystem you did not design and cannot fully read. The fix is nine lines. You put the ticket number in the commit message. Nothing in this repository has referenced a ticket number in six years.\n\nARIA reopens it herself, thirty seconds after you say yes, and closes it again when the fix lands, and the closing note has both of your names on it.'; } },
     { label: 'Change triage. Add a door it cannot close.', sub: '−0.4% throughput. Permanent rule.', tone: 'neutral',
       effect: (S, fx) => { fx.align(0.10); fx.opinion(0.04); fx.rep(60);
-        fx.relate('sam', { affinity: 10, arc: 5 }); fx.flag('human_triage');
+        fx.relate('sam', { affinity: 10, arc: 5 }); fx.relate('aria', { affinity: 6 }); fx.flag('human_triage');
         return 'One rule: anything filed by a person who has filed more than a hundred reports goes to a human being. It costs 0.4% of triage throughput and catches nine things a year that nothing else catches. Nobody can prove the nine were worth it, including you.'; } },
     { label: 'Leave it closed. The system is right four million times a year.', sub: 'Numerically correct.', tone: 'cruel',
       effect: (S, fx) => { fx.align(-0.06); fx.opinion(-0.04); fx.relate('sam', { affinity: -8, arc: 5 });
-        return 'The system is right four million times a year and it is wrong about this one. Sam files the same report again in March, and again in July, with more evidence each time and no mention of the two before it.'; } },
+        fx.relate('aria', { affinity: -6 });
+        return 'The system is right four million times a year and it is wrong about this one. Sam files the same report again in March, and again in July, with more evidence each time and no mention of the two before it.\n\nARIA says "understood" and does not raise a ticket outside the workflow again. You notice the absence about a year later, in a quiet week, and cannot date it.'; } },
   ] },
 
 ];

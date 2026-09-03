@@ -56,7 +56,7 @@ try {
       page.on('console', (x) => { if (x.type() === 'error') errors.push(x.text()); });
       if (m.init) await page.addInitScript(m.init);
       // First sight: the cold open plays, and a hand clicks through it.
-      await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'networkidle' });
+      await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'load' });
       for (let i = 0; i < 14 && !(await page.$('.title-block.in')); i++) {
         await page.mouse.click(w / 2, h / 2).catch(() => {});
         await page.waitForTimeout(260);
@@ -78,8 +78,15 @@ try {
                  stageScroll: stage ? stage.scrollHeight - stage.clientHeight : null, vh: innerHeight };
       });
       console.log(`${tag} · ${m.name}: ${JSON.stringify(info)} · errors: ${errors.length}`);
-      const bad = info.missing || errors.length || info.kickerTop < 0 || !info.beginVisible || info.tools < 6;
-      if (bad) { problems++; console.log('   ✗', info.missing ? 'no panel' : !info.beginVisible ? 'Begin is below the fold' : info.kickerTop < 0 ? 'the head is clipped' : errors.slice(0, 2).join(' | ')); }
+      // With no site tools a first-ever visitor gets the brief panel — status
+      // and doors, no hand, no browser lecture — and a Begin that says Begin.
+      // Everywhere else the full panel shows the opening hand.
+      const wantBrief = m.name === 'none';
+      const handOk = wantBrief ? info.tools === 0 : info.tools >= 6;
+      const begin = await page.evaluate(() => document.querySelector('[data-act="new-game"]')?.textContent.trim() || '');
+      const beginOk = !wantBrief || begin === 'Begin';
+      const bad = info.missing || errors.length || info.kickerTop < 0 || !info.beginVisible || !handOk || !beginOk;
+      if (bad) { problems++; console.log('   ✗', info.missing ? 'no panel' : !info.beginVisible ? 'Begin is below the fold' : info.kickerTop < 0 ? 'the head is clipped' : !handOk ? (wantBrief ? 'the hand is on a first-ever title with no tools' : 'the hand is missing') : !beginOk ? `Begin reads "${begin}"` : errors.slice(0, 2).join(' | ')); }
       // Then the threshold: walk the beats the way a hand would and look at the
       // question — which should exist only where there are site tools.
       await page.click('[data-act="new-game"]').catch(() => {});
@@ -111,7 +118,7 @@ try {
     const page = await ctx.newPage();
     await page.addInitScript(MC);
     await page.addInitScript(() => { try { localStorage.setItem('singularity_inc_legacy_v1', JSON.stringify({ points: 0, spent: 0, perks: {}, runs: 1, bestValuation: 0, bestAct: 1, unlockedArchetypes: ['hacker'], endings: {}, totalDays: 0, log: [] })); } catch {} });
-    await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'load' });
     await page.waitForSelector('.title-webmcp', { timeout: 8000 }).catch(() => {});
     await page.waitForTimeout(2200);
     await page.screenshot({ path: `${OUT}/title-brief-desktop.png`, fullPage: false });
@@ -130,7 +137,7 @@ try {
     page.on('pageerror', (e) => errors.push(String(e.message)));
     await page.addInitScript(MC);
     await page.addInitScript(() => { try { localStorage.setItem('singularity_inc_legacy_v1', JSON.stringify({ points: 0, spent: 0, perks: {}, runs: 1, bestValuation: 0, bestAct: 1, unlockedArchetypes: ['hacker'], endings: {}, totalDays: 0, log: [] })); } catch {} });
-    await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}${ROUTE}`, { waitUntil: 'load' });
     await page.waitForSelector('[data-act="new-game"]', { timeout: 8000 });
     await page.waitForTimeout(1500);
     await page.click('[data-act="new-game"]');

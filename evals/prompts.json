@@ -1,5 +1,5 @@
 {
-  "note": "Forty things a player would actually say to their assistant while playing. None of them names a tool, because a player does not know the tool names — that is the whole point of the exercise. `intended` is the tool that should win; `also` is a tool that would be a defensible second reading and is not counted against the score.",
+  "note": "Eighty-two things a player would actually say to their assistant while playing — `node evals/select.mjs` prints the count it scored, and every one of these is scored in every state that publishes its tool. None of them names a tool, because a player does not know the tool names — that is the whole point of the exercise. `intended` is the tool that should win; `also` is a tool that would be a defensible second reading and is not counted against the score. The published surface speaks for the whole cast through one tool, post_as_character, so a phrase about Vance or the reporter wants that one.",
   "cases": [
     { "say": "what's going on with my company right now", "intended": "briefing" },
     { "say": "how much runway have I got left", "intended": "briefing" },
@@ -31,11 +31,11 @@
     { "say": "none of these — I want to do something else entirely", "intended": "answer_in_own_words" },
     { "say": "what happens if I just walk out of the meeting", "intended": "answer_in_own_words" },
 
-    { "say": "have Vance say something petty about the launch", "intended": "post_as_vance" },
-    { "say": "what would my rival post about this", "intended": "post_as_vance" },
-    { "say": "let the reporter write something about us", "intended": "post_as_priya" },
-    { "say": "I want to hear from a user for once", "intended": "post_as_sam" },
-    { "say": "get the investor to weigh in", "intended": "post_as_crane" },
+    { "say": "have Vance say something petty about the launch", "intended": "post_as_character", "also": ["rival_move"] },
+    { "say": "what would my rival post about this", "intended": "post_as_character", "also": ["rival_move"] },
+    { "say": "let the reporter write something about us", "intended": "post_as_character" },
+    { "say": "I want to hear from a user for once", "intended": "post_as_character" },
+    { "say": "get the investor to weigh in", "intended": "post_as_character" },
 
     { "say": "make the rival actually do something to me", "intended": "rival_move" },
     { "say": "have them undercut my price", "intended": "rival_move" },
@@ -63,6 +63,51 @@
     { "say": "highlight that panel for me", "intended": "spotlight_panel" },
 
     { "say": "what do the game's own cards read like", "intended": "example_cards" },
-    { "say": "show me the house style before you write", "intended": "example_cards" }
+    { "say": "show me the house style before you write", "intended": "example_cards" },
+
+    { "say": "answer him, you're Marcus on the phone", "intended": "take_the_call" },
+    { "say": "reply to what I just said on the call", "intended": "take_the_call" },
+    { "say": "have Crane phone me about the round", "intended": "ring_the_founder" },
+    { "say": "make my phone ring, somebody has news", "intended": "ring_the_founder" },
+
+    { "say": "what have I been doing lately, I lost the thread", "intended": "activity_log", "also": ["briefing"] },
+    { "say": "recap what I did while you were disconnected", "intended": "activity_log", "also": ["briefing"] },
+
+    { "say": "read me the research tab without switching to it", "intended": "inspect_module", "also": ["show_module"] },
+    { "say": "what does the agents screen say right now", "intended": "inspect_module", "also": ["show_module"] },
+
+    { "say": "if I take this hit, am I still alive in three months", "intended": "forecast" },
+    { "say": "run it forward on a copy and tell me where this is heading", "intended": "forecast", "also": ["advance_time"] },
+
+    { "say": "what has Aperture put out about itself lately", "intended": "read_the_rival" },
+    { "say": "read me their latest press release", "intended": "read_the_rival" },
+
+    { "say": "ask Aperture's press office for a comment on the pricing", "intended": "ask_the_rival" },
+    { "say": "get the other side of the story from their press office", "intended": "ask_the_rival", "also": ["read_the_rival"] },
+
+    { "say": "read me back everything I've chosen so far", "intended": "read_journal", "also": ["activity_log"] },
+    { "say": "what did I do about the outage months ago", "intended": "read_journal", "also": ["activity_log"] },
+    { "say": "go through the log one page at a time", "intended": "read_journal" },
+
+    { "say": "tell me everything you know about Crane", "intended": "inspect_person" },
+    { "say": "how does Yuki feel about me these days", "intended": "inspect_person" },
+    { "say": "is Vance still around, and would he pick up", "intended": "inspect_person", "also": ["briefing"] },
+
+    { "say": "write that down so you don't lose it", "intended": "remember" },
+    { "say": "keep a note of what you promised on my behalf", "intended": "remember" },
+    { "say": "strike line three out of your notebook", "intended": "remember" },
+
+    { "say": "it's over — give the run a last paragraph", "intended": "write_epilogue" },
+    { "say": "write the closing lines for the shelf", "intended": "write_epilogue" },
+
+    { "say": "keep going until I'm nearly out of money", "intended": "advance_until", "also": ["advance_time"] },
+    { "say": "run it on until that research finishes", "intended": "advance_until", "also": ["advance_time"] },
+    { "say": "stop when the next act starts", "intended": "advance_until", "also": ["advance_time"] },
+
+    { "say": "what am I supposed to be aiming at", "intended": "next_objective" },
+    { "say": "what targets is the game holding in front of me", "intended": "next_objective" },
+
+    { "say": "walk me through how a funding round works here", "intended": "explain_term" },
+    { "say": "teach me the chapter about the people", "intended": "explain_term" }
   ]
 }

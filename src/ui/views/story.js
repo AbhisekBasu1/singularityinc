@@ -4,12 +4,14 @@ import { esc, md, bar } from '../dom.js';
 import { runChart } from '../chart.js';
 import { fmt, money, gameDateShort, pct } from '../../engine/format.js';
 import { CHARACTERS, arcLabel } from '../../data/characters.js';
-import { ACTS } from '../../data/balance.js';
+import { ACTS, CALLS } from '../../data/balance.js';
+import { canCall, busyLine } from '../../systems/calls.js';
+import { kept, memoryOf } from '../../systems/keep.js';
 
 const KIND_COLOR = { story: 'var(--violet)', crisis: 'var(--red)', opportunity: 'var(--green)',
-  character: 'var(--cyan)', milestone: 'var(--amber)' };
+  character: 'var(--cyan)', milestone: 'var(--amber)', call: 'var(--cyan)' };
 const KIND_LABEL = { story: 'story', crisis: 'crisis', opportunity: 'opportunity',
-  character: 'character', milestone: 'milestone' };
+  character: 'character', milestone: 'milestone', call: 'call' };
 
 // Rough act boundaries, reconstructed from the journal's day stamps.
 function actOf(day, S) {
@@ -62,6 +64,9 @@ export function render(S) {
                 </span>
                 ${c ? `<span class="tiny" style="color:${c.color}">${c.icon} ${esc(c.name)}</span>` : ''}
                 ${e.author === 'world' ? `<span class="by-world-tag" data-tip="Your assistant wrote this card and the game applied its costs, inside the ceilings in <b>balance.js</b>.">written by the world</span>` : ''}
+                ${e.author === 'kept' ? `<span class="by-world-tag kept-tag" data-tip="A card you kept from an earlier timeline, dealt by the written deck.">kept</span>` : ''}
+                ${e.author === 'board' ? `<span class="by-world-tag board-tag" data-tip="A motion carried in the boardroom. Somebody in the chair moved it and the game applied it, inside the same ceilings a card from the world gets.">board</span>` : ''}
+                ${keepableEntry(S, e) ? `<button class="btn btn-sm btn-ghost keep-small" data-act="keep-card" data-v="${esc(e.id)}@${e.day}" data-tip="${e.runtime ? 'Keep it: the written deck deals it in every timeline after this.' : 'Keep the memory: a later timeline is dealt this moment back, with the road you did not take beside it.'}" data-tip-title="${e.runtime ? 'Keep this card' : 'Keep this memory'}">⊕ keep</button>` : ''}
               </div>
               <div class="tl-title">${esc(e.title)}</div>
               <div class="tl-choice">▸ ${esc(e.choice)}</div>
@@ -110,11 +115,39 @@ export function render(S) {
                   <span class="tiny dim" style="margin-left:6px">${c.affinity >= 0 ? '+' : ''}${Math.round(c.affinity)}</span>
                 </div>
               </div>
+              ${callKey(S, c.id)}
             </div>`).join('')}
         </div>
       </div>
     </div>
   </div>`;
+}
+
+function isKept(S, shape) {
+  return kept(S).some((k) => k.title === shape?.title && k.body === shape?.body);
+}
+
+// Every closed card in the Log offers a Keep, not only the ones an assistant
+// wrote: a world card is kept whole, a written one as the memory of what you
+// did with it. `memoryOf` is the same builder the outcome plate uses, and a
+// card whose memory is already in the deck offers nothing.
+function keepableEntry(S, e) {
+  if (e.author === 'kept') return false;
+  const shape = e.runtime || memoryOf(S, e);
+  return !!shape && !isKept(S, shape);
+}
+
+// The phone, on every face. A greyed key says what it needs — the same note
+// the Contacts app and the context menu print — and ARIA has no key, because
+// she has a window.
+function callKey(S, id) {
+  if (id === 'aria') return '';
+  const can = canCall(S, id);
+  const busy = !can.ok && (can.reason === 'cooldown' || can.reason === 'cold') ? busyLine(S, id) : '';
+  return `<span class="action-slot char-call" data-ctx="contact" data-id="${esc(id)}">
+    <button class="btn btn-sm ${can.ok ? 'btn-primary' : 'btn-ghost'}" data-act="call" data-v="${esc(id)}" ${can.ok ? '' : 'disabled'}
+      data-tip="${esc(busy || (can.ok ? `Costs ${CALLS.FOCUS_COST} focus. They remember what you say.` : can.note))}" data-tip-title="Call">☎<span class="char-call-note">${esc(can.ok ? '' : can.note)}</span></button>
+  </span>`;
 }
 
 // Affinity is unbounded; the display is a saturating curve so late-game

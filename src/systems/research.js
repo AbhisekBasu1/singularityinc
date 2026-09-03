@@ -3,13 +3,35 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { RESEARCH, RESEARCH_MAP } from '../data/research.js';
 import { RESEARCH as RB } from '../data/balance.js';
+import { computeSplitFx } from './compute.js';
 import { computeMods, markDirty } from './modifiers.js';
 import { emit } from '../engine/bus.js';
 import { clamp } from '../engine/format.js';
 
+// §A12a. A door that a finished node closes. `excludes` is symmetric by
+// convention — both halves of a pair name the other — and it is checked here
+// rather than in the view, so a queued node, a self-directing researcher and
+// the world layer all obey it without knowing it exists.
+//
+// The rule that keeps it honest: an exclusion may never sit on the required
+// chain of a node a gate names or an ending needs. `tools/lint.mjs` walks it.
+export function excludedBy(S, node) {
+  for (const x of node.excludes || []) if (S.research.done[x]) return x;
+  return null;
+}
+
+// Every node either finished or closed by a door this run walked through. This
+// is what "the whole tree" means once there are doors in it: `researchDone >=
+// 85` was a count of a tree nobody can finish any more, and an achievement that
+// cannot be earned is worse than one that is hard.
+export function treeComplete(S) {
+  return RESEARCH.every((n) => S.research.done[n.id] || excludedBy(S, n));
+}
+
 export function isAvailable(S, node) {
   if (S.research.done[node.id]) return false;
   if (node.act && S.company.act < node.act) return false;
+  if (excludedBy(S, node)) return false;
   for (const r of node.reqs) if (!S.research.done[r]) return false;
   if (node.gate?.compute && S.resources.computeCap < node.gate.compute) return false;
   return true;
@@ -40,7 +62,10 @@ export function researchRatePerDay(S, laneOutput = 0, m = computeMods(S)) {
   let base = RB.BASE_RATE;
   base += (S.founder.allocation.learn || 0) * (1.4 + S.founder.skills.vision * 0.28);
   base += laneOutput * 0.85;
-  base += Math.pow(S.resources.compute || 0, 0.82) * 0.030;
+  // §A9: the research share of the compute split. At the default share this
+  // multiplier is exactly 1, which is why a save with no split — and every
+  // build before there was one — computes the identical number.
+  base += Math.pow(S.resources.compute || 0, 0.82) * 0.030 * computeSplitFx(S).research;
   base += Math.pow(S.resources.data || 0, 0.7) * 0.004;
   base *= m.researchRate;
   if (m.researchCompound) base *= 1 + Math.log10(1 + Object.keys(S.research.done).length) * 0.6;
@@ -94,8 +119,32 @@ export function tickResearch(S, days, laneOutput, m = computeMods(S)) {
   return null;
 }
 
+// ── §A12c What a node was worth on the day it landed ────────────────────────
+// The three readers a `scaleWith` may name. Deliberately read inline rather
+// than through `systems/product.js`: this module is imported by `agents.js`,
+// which product.js's own chain reaches, and a cycle here leaves a binding
+// undefined at evaluation time in exactly the way `ui/author.js` documents.
+const SCALE_READ = {
+  users: (S) => S.products.reduce((a, p) => a + (p.launched ? p.users : 0), 0),
+  features: (S) => S.stats?.featuresShipped || 0,
+  roster: (S) => (S.agents || []).filter((a) => a.status === 'active').length,
+};
+
+// Par is what the card is written for. Below it the node still does what it
+// says, quieter; above it, more. Bounded both ways — a mistimed node is a worse
+// buy, never a wasted one.
+export function scaleStrength(S, node) {
+  const r = node?.scaleWith;
+  if (!r || !SCALE_READ[r.read]) return 1;
+  const v = Math.max(0, SCALE_READ[r.read](S));
+  const k = 1 + Math.log10(Math.max(1, v) / Math.max(1, r.at)) * RB.SCALE_RATE;
+  return clamp(k, RB.SCALE_MIN, RB.SCALE_MAX);
+}
+
 export function completeResearch(S, node) {
   S.research.done[node.id] = true;
+  // §A12c. Fixed here, once, and never recomputed: `computeMods` reads it.
+  if (node.scaleWith) (S.research.scale ??= {})[node.id] = scaleStrength(S, node);
   // The day it landed, so the record can be a dated one. `done` has only ever
   // held `true`, which makes a finished tree a set with no history in it — and
   // a save made before this simply has no days, which every reader must

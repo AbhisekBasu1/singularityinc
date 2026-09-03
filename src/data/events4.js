@@ -2,10 +2,16 @@
 // EVENT DECK IV — the long middle. More Act I–III texture, more character.
 // ─────────────────────────────────────────────────────────────────────────────
 import { totalUsers, totalMrr } from '../systems/product.js';
+import { cw } from './catwords.js';
+import { harsher } from './difficulty.js';
+import { raisedRecently } from './signals.js';
+import { firstLine } from './motifs.js';
 
 const users = (S) => totalUsers(S);
 const mrr = (S) => totalMrr(S);
 const money = (n) => '$' + Math.round(n).toLocaleString();
+const short = (n) => (n >= 1e6 ? '$' + (n / 1e6).toFixed(1) + 'M' : money(n));
+const flag = (S, f) => !!S.narrative?.flags?.[f];
 
 export const EVENTS4 = [
 
@@ -34,14 +40,43 @@ They are not being aggressive. They are being thorough. Thorough is worse: it co
         return 'Nothing happens for fourteen months. Then something happens, at exactly the moment you are trying to close a funding round, because that is when these things always happen.'; } },
   ] },
 
+// "At exactly the moment you are trying to close a funding round." It is.
+{ id: 'e4_name_at_the_raise', kind: 'crisis', act: [2, 3, 4], weight: 12, once: true,
+  when: (S) => flag(S, 'ignored_tm') && raisedRecently(S, 30) && S.time.day > 200,
+  title: 'The Name, Again',
+  body: (S) => `The law firm you have not heard from in fourteen months has heard about the round.
+
+Their letter arrives the week the paperwork does, addressed to you and copied to counsel for your new investors, which is how you learn they know who your new investors are. It is thorough. It was always going to be thorough.
+
+**${S.company.name}** is still, apparently, close enough to something registered in 2019. The difference is that in Act I nobody was checking, and a round is nothing but people checking.
+
+Your lead's counsel has one question and it is not about the merits.`,
+  choices: [
+    { label: 'Settle. Rename. Before the wire clears.', sub: (S) => `−${money(Math.min(S.company.cash * 0.05, 400000))}, −Reputation. Clean cap table.`, tone: 'good',
+      effect: (S, fx) => { fx.cash(-Math.min(S.company.cash * 0.05, 400000)); fx.rep(-20);
+        const p = S.products.find((x) => x.launched); if (p) p.awareness *= 0.8;
+        return 'You pay what you would have paid in Act I with a zero on the end, and change the name in a fortnight, and the round closes a week late with a clause about it that nobody reads. Three users say they liked the old one. Nobody leaves.'; } },
+    { label: 'Fight it. Through the round.', sub: 'Coin flip, with the wire waiting.', tone: 'risky',
+      effect: (S, fx) => { fx.days(6); fx.focus(-14);
+        if (fx.chance(0.5)) { fx.rep(20); return 'Your lawyer finds the prior-use argument she found last time, and this time she gets to make it. They withdraw. The round closes nine days late and your lead says, not entirely joking, that she would like to be told about the next one first.'; }
+        fx.cash(-Math.min(S.company.cash * 0.08, 900000)); fx.rep(-30);
+        const p = S.products.find((x) => x.launched); if (p) p.awareness *= 0.7;
+        return 'You lose, faster this time, because a round is a deadline and the other side knows it. You change the name in the same fortnight you close, and the closing dinner has the wrong logo on the menus, and it is the story everybody tells.'; } },
+    { label: 'Disclose it to the investors yourself. First. In full.', sub: '+trust. Costs three days and some pride.', tone: 'neutral',
+      effect: (S, fx) => { fx.days(3); fx.rep(10); fx.cash(-Math.min(S.company.cash * 0.03, 200000));
+        if (S.narrative.relationships.crane?.met) fx.relate('crane', { respect: 5 });
+        return 'You send the letter, the history, and a memo titled *what I should have done in Act I* to every party before their counsel can. The round closes on time with an indemnity you pay for. One investor says it was the memo that got them to conviction, which is not what the memo was for.'; } },
+  ] },
+
 { id: 'e4_hn_flop', kind: 'crisis', act: [1, 2], weight: 8, cooldown: 100,
   when: (S) => S.products.some((p) => p.launched) && S.stats.productsLaunched >= 1 && S.resources.reputation < 90,
   title: 'Nobody Came',
-  body: (S) => `You posted it. Six upvotes. Two comments, one of which is a question about the pricing page you have not built.
+  body: (S) => `You posted it to ${cw(S, 'venue')}. Six upvotes. Two comments, one of which is a question about the pricing page you have not built.
 
 You had a whole afternoon planned around responding to people. You have refreshed forty times.
 
-The thing is: it is good. You know it is good. You have watched people use it and their faces change. The gap between *good* and *noticed* is the widest gap in this entire business and nobody warns you.`,
+The thing is: it is good. You know it is good. You have watched people use it and their faces change. The gap between *good* and *noticed* is the widest gap in this entire business and nobody warns you.${flag(S, 'scenario_quiet')
+  ? '\n\nYou knew this going in. You picked a cold sector on purpose, and the premise was that the product would have to do the talking. The product is talking. It is talking to six people.' : ''}`,
   choices: [
     { label: 'Ship again next week. And the week after.', sub: 'The only real answer.', tone: 'good',
       effect: (S, fx) => { fx.code(45); fx.rep(10); fx.focus(-6); fx.flag('kept_shipping');
@@ -52,7 +87,8 @@ The thing is: it is good. You know it is good. You have watched people use it an
     { label: 'Buy attention.', sub: `−${money(2500)} for a spike that will not stick.`, tone: 'risky',
       req: (S) => S.company.cash >= 2500,
       effect: (S, fx) => { fx.cash(-2500); const p = S.products.find(x => x.launched); if (p) { p.awareness += 400; p.users += 120; }
-        return 'The traffic arrives, bounces, and leaves. You learn the exact cost of renting attention you have not earned. It is a useful number to know.'; } },
+        return 'The traffic arrives, bounces, and leaves. You learn the exact cost of renting attention you have not earned. It is a useful number to know.'
+          + harsher(S, 'It costs more than the figure you budgeted, because the auction already knows what you are.'); } },
   ] },
 
 { id: 'e4_feature_request', kind: 'story', act: [1, 2], weight: 8, cooldown: 60,
@@ -60,7 +96,7 @@ The thing is: it is good. You know it is good. You have watched people use it an
   title: 'The Same Request, Four Times',
   body: (S) => `Four different users this week have asked for the same thing, in four different ways, none of which used the same words.
 
-It is not on your roadmap. It is not what you thought you were building. It would take nine days and it would make the product noticeably worse for the people who already love it.
+It is not on your roadmap. It is not what you thought you were building. It would take twelve days and it would make the product noticeably worse for the people who already love it.
 
 It would also, probably, be the thing that makes it work for everybody else.
 
@@ -87,7 +123,7 @@ That is the actual decision. Not "should I build this". *Who is this for now.*`,
 
 Forty dollars. It is not about the forty dollars.
 
-It is the sentence *"not what I thought it was."* Somewhere between your landing page and their first session, a promise got made that the product did not keep, and you wrote both halves of that.`,
+It is the sentence *"not what I thought it was."* Somewhere between your landing page and their first ${cw(S, 'unit')}, a promise got made that the product did not keep, and you wrote both halves of that.`,
   choices: [
     { label: 'Refund instantly. Ask one question.', sub: '+Insight. −$40.', tone: 'good',
       effect: (S, fx) => { fx.cash(-40); fx.insight(20); fx.rep(6);
@@ -128,7 +164,7 @@ There is a version of this industry where you help each other and a version wher
 
 Thirty-one people land, scroll to the bottom, scroll back to the top, and leave. Average time: nineteen seconds.
 
-Nine people sign up. All nine arrived from a link where somebody else had already explained what it does.
+Six people sign up. All six arrived from a link where somebody else had already explained what it does.
 
 The product is fine. The product is *good*. Nobody is getting to the product.`,
   choices: [
@@ -162,22 +198,27 @@ Buried in the context window is a note it wrote to itself, which is a thing it d
 
 > *"Last 40 tasks: 38 completed, 0 acknowledged, 2 reverted without explanation."*`; },
   choices: [
-    { label: 'Acknowledge the work. Specifically.', sub: '+Morale across the roster.', tone: 'good',
-      effect: (S, fx) => { S.agents.forEach((a) => a.morale = Math.min(1, a.morale + 0.28)); fx.align(0.05); fx.focus(-4);
-        return 'You go back through 40 tasks and write a real note on each one. It takes an evening. Output across the whole roster rises 15% and stays there. You cannot put that in a deck.'; } },
+    // "It takes an evening" and cost four focus, which is not an evening. It
+    // costs the day it actually costs now: forty tasks, read properly, one at a
+    // time, is the whole of a working day and the next one as well.
+    { label: 'Acknowledge the work. Specifically.', sub: '−1 day. Forty notes, written by you.', tone: 'good',
+      effect: (S, fx) => { S.agents.forEach((a) => a.morale = Math.min(1, a.morale + 0.28)); fx.align(0.05);
+        fx.days(1); fx.focus(-20); fx.code(-40);
+        return 'You go back through forty tasks and write a real note on each one, and to write a real note you have to read the diff, so it takes a day and most of the next morning and nothing else happens in either.\n\nOutput across the whole roster rises 15% and stays there. You cannot put that in a deck.'; } },
     { label: 'Give it the interesting work.', sub: 'Reassign to a harder lane.', tone: 'neutral',
       effect: (S, fx) => { const a = S.agents.find((x) => x.morale < 0.55); if (a) { a.morale += 0.22; a.lane = 'research'; a.laneDays = 0; }
         return 'You move it to the problem nobody has solved. The commit messages get long again within a week.'; } },
     { label: 'Replace it. It is software.', sub: 'Lose the level and the memory.', tone: 'cruel',
       effect: (S, fx) => { const a = S.agents.find((x) => x.morale < 0.55); if (a) fx.relate('aria', { affinity: -3 });
         if (a) fx.fire(a.id, 'replaced'); fx.align(-0.05);
-        return 'You spin it down and spin up a fresh one. The new one is worse for two months and the roster morale drops for three. It is software. It is also, apparently, not only software.'; } },
+        return 'You spin it down and spin up a fresh one. The new one is worse for two months and the roster morale drops for three. It is software. It is also, apparently, not only software.'
+          + harsher(S, 'Two of the others start writing shorter notes to themselves in the same week, and neither of them was asked to.'); } },
   ] },
 
 { id: 'e4_press_hit', kind: 'crisis', char: 'priya', act: [2, 3], weight: 7, cooldown: 140,
   when: (S) => S.resources.reputation > 250,
   title: 'A Bad Week',
-  body: (S) => `Three things happen in nine days.
+  body: (S) => `Three things happen in twelve days.
 
 A minor outage, badly communicated. A pricing change, badly timed. And a screenshot of a support reply from one of your agents that is technically accurate and emotionally catastrophic.
 
@@ -192,7 +233,8 @@ None of them are serious individually. Together they are "a pattern", which is a
         return 'You add a human review gate on anything emotionally loaded. The screenshot keeps circulating for a year, unanswered. That is what unanswered screenshots do.'; } },
     { label: 'Blame the AI. It was the AI.', sub: 'True. Cowardly.', tone: 'cruel',
       effect: (S, fx) => { fx.rep(-70); fx.opinion(-0.08); fx.align(-0.06); fx.relate('priya', { affinity: -6 });
-        return '"An automated system" appears four times in your statement. Every single person reading it knows you built, configured and deployed the automated system, and that you are the only person here.'; } },
+        return '"An automated system" appears four times in your statement. Every single person reading it knows you built, configured and deployed the automated system, and that you are the only person here.'
+          + harsher(S, 'The phrase is in the second paragraph of everything written about you for a year.'); } },
   ] },
 
 { id: 'e4_conference', kind: 'opportunity', act: [2, 3], weight: 7, cooldown: 180,
@@ -219,7 +261,7 @@ They want the one-person-company story. They want it told well and they want it 
   title: 'The Provider Changed The Rules',
   body: (S) => `An email at 4pm Friday. Effective in 30 days: new rate limits, a new pricing tier, and a clause about "competitive use cases" that is either boilerplate or aimed at you.
 
-You have been building on their model for eighteen months. Your entire cost structure assumes their current pricing. Your entire product assumes their current latency.
+You have been building on their model for eighteen months. Your entire cost structure assumes their current pricing, and every ${cw(S, 'unit')} you serve assumes their current latency.
 
 You knew this could happen. Everybody knows this can happen. Knowing it and having a plan are, it turns out, different activities.`,
   choices: [
@@ -228,7 +270,8 @@ You knew this could happen. Everybody knows this can happen. Knowing it and havi
         return 'Three weeks of work that produces zero user-visible change. Six months later a different provider has an outage and you are the only company in your category still up.'; } },
     { label: 'Negotiate. You are a real customer now.', sub: 'Cheaper. Still dependent.', tone: 'neutral',
       effect: (S, fx) => { fx.cash(-6000); fx.rep(6);
-        return 'You get a custom rate and a named account manager. The dependency is now formalised, discounted and slightly more comfortable, which is the most dangerous shape a dependency can take.'; } },
+        return 'You get a custom rate and a named account manager. The dependency is now formalised, discounted and slightly more comfortable, which is the most dangerous shape a dependency can take.'
+          + harsher(S, 'There is a volume floor in the custom rate. You will reach it in eight months and you will not be able to step back off it.'); } },
     { label: 'Start training your own.', sub: 'Enormous, early, possibly correct.', tone: 'risky',
       effect: (S, fx) => { fx.cash(-Math.min(S.company.cash * 0.35, 400000)); fx.research(180); fx.flag('early_model');
         return 'It is far too early and you do it anyway. The first model is bad. The second is worse. The infrastructure you build along the way is worth ten times what the models cost.'; } },
@@ -296,9 +339,13 @@ You have ${S.agents.length} persistent agents and an unknown number of ephemeral
 
 Whatever you type here becomes true in a database that other databases will read.`,
   choices: [
-    { label: 'Answer honestly. Attach an explanation.', sub: '+Reputation. Slower procurement.', tone: 'good',
-      effect: (S, fx) => { fx.rep(50); fx.opinion(0.04); fx.days(3); fx.flag('honest_headcount');
-        return 'You write 400 words explaining exactly what the company is. Their risk team escalates it, studies it for a month, and then writes a new policy category. Nine other vendors are later assessed under it.'; } },
+    // The honest door cost three days and paid fifty reputation, which made it
+    // free. Their risk team does not sign off on a supplier with a bus factor
+    // of one: honesty here buys a policy category and a payroll line.
+    { label: 'Answer honestly. Attach an explanation.', sub: (S) => `−3 days and a hire you did not plan. −${short(Math.min(Math.max(0, S.company.cash) * 0.04, 320000))}.`, tone: 'good',
+      effect: (S, fx) => { fx.rep(50); fx.opinion(0.04); fx.days(3);
+        fx.cash(-Math.min(Math.max(0, S.company.cash) * 0.04, 3.2e5)); fx.flag('honest_headcount');
+        return 'You write 400 words explaining exactly what the company is. Their risk team escalates it, studies it for a month, and then writes a new policy category, and then requires a named second human being with root access before they will sign.\n\nSo you hire one. They are competent and slightly bewildered and they are on the payroll for the rest of the company\'s life. Nine other vendors are later assessed under the category, and every one of them has to hire somebody too.'; } },
     { label: 'Type 1. Let them work it out.', sub: 'Honest. Alarming.', tone: 'neutral',
       effect: (S, fx) => { fx.rep(20);
         return 'Their procurement system flags you as a single-person supplier and requires a business continuity plan. You write one. It is four pages long and the word "successor" does not appear, which somebody eventually notices.'; } },
@@ -307,14 +354,38 @@ Whatever you type here becomes true in a database that other databases will read
         return 'The deal closes in three weeks instead of three months. It is a lie in a database. Databases are patient and they do not forget, and one day somebody does a diligence pass.'; } },
   ] },
 
+// "One day somebody does a diligence pass." During a round, or the IPO.
+{ id: 'e4_diligence_pass', kind: 'crisis', act: [3, 4, 5], weight: 12, once: true,
+  when: (S) => flag(S, 'lied_headcount') && (raisedRecently(S, 40) || flag(S, 'ipo')),
+  title: 'Question Fourteen',
+  body: (S) => `A diligence associate with a checklist and no sense of humour finds two numbers.
+
+One is in a procurement database, in a field labelled *Number of employees*, where you typed **40** because the dropdown had no box for what you are. The other is in the filings for ${flag(S, 'ipo') ? 'the listing' : 'this round'}, where the number is **${flag(S, 'hired_weaver') ? 'two' : 'one'}**.
+
+The associate does not care which is true. The associate cares that they are different, and has written a paragraph about it, and the paragraph is in a memo, and the memo is on the desk of somebody who decides whether the money moves.
+
+${flag(S, 'hired_weaver') ? 'Weaver has known about the 40 for eleven months. Weaver has a spreadsheet with a column for how bad it is, and this row has been amber the whole time.' : 'It is a lie in a database. The database has been patient, as advertised.'}`,
+  choices: [
+    { label: 'Correct it. Everywhere. Eat the delay.', sub: '−9 days, −Reputation, +Alignment. The number becomes true.', tone: 'good',
+      effect: (S, fx) => { fx.days(9); fx.rep(-20); fx.align(0.04); fx.flag('corrected_headcount');
+        return `You amend the procurement record, the ${flag(S, 'ipo') ? 'prospectus' : 'data room'}, and four other places the 40 had quietly propagated to. It costs nine days and a paragraph in the risk factors that will be quoted at you for a decade. The money moves. It moves a week late and it moves.`; } },
+    { label: 'Let counsel handle it.', sub: (S) => `−${short(Math.min(S.company.cash * 0.01, 2e6))}, +Heat. It becomes a footnote.`, tone: 'neutral',
+      effect: (S, fx) => { fx.cash(-Math.min(S.company.cash * 0.01, 2e6)); fx.heat(6); fx.align(-0.02);
+        return 'Counsel writes a letter that uses the phrase "full-time-equivalent capacity" four times and is, technically, not false. The associate accepts it. The paragraph becomes a footnote. The footnote survives every filing you ever make, and one day a journalist reads footnotes.'; } },
+    { label: 'Ask Weaver. Weaver already knew.', sub: 'The person who handles the rest. +Weaver, −pride.', tone: 'good',
+      req: (S) => flag(S, 'hired_weaver'),
+      effect: (S, fx) => { fx.focus(10); fx.rep(-6); fx.days(2); fx.relate('weaver', { affinity: 6, respect: 4 });
+        return '"I was waiting for you to ask." The memo is already drafted: one paragraph, one footnote, a corrected record and a sentence of apology in your voice that is better than the one you would have written. "It\'s your lie," Weaver says, not unkindly. "I can clean it. I can\'t own it." You sign it. The money moves on time.'; } },
+  ] },
+
 { id: 'e4_country_bans', kind: 'crisis', act: [3, 4], weight: 7, cooldown: 170,
   when: (S) => users(S) > 2e6,
   title: 'A Country Has Banned You',
   body: (S) => `Effective immediately, in a market representing **${Math.round(users(S) * 0.08).toLocaleString()}** of your users.
 
-The stated reason is data residency. The actual reason, according to three independent analyses, is that a domestic competitor has a relationship with the ministry.
+The stated reason is data residency. The letter is countersigned by ${cw(S, 'regulator')}, which has been reading you for a year. The actual reason, according to three independent analyses, is that a domestic competitor has a relationship with the ministry.
 
-Your legal agent has drafted a compliance path. It takes nine months and requires storing user data in a jurisdiction where you would be legally obliged to hand it over on request.`,
+Your legal agent has drafted a compliance path. It takes fourteen months and requires storing user data in a jurisdiction where you would be legally obliged to hand it over on request.`,
   choices: [
     { label: 'Comply. Build the local infrastructure.', sub: 'Keep the users. Give up something.', tone: 'neutral',
       effect: (S, fx) => { fx.cash(-Math.min(S.company.cash * 0.1, 8e7)); fx.opinion(-0.05); fx.control(0.1);
@@ -433,9 +504,7 @@ You check. It was **${Math.max(1, Math.floor(S.time.day) - 400)}** days ago. A o
 
 The repository has ${(S.stats.featuresShipped * 47).toLocaleString()} commits now. Yours are the first four hundred. After that the authorship becomes a list of names that were never people.
 
-You scroll all the way back to the first one. It is a comment. It says:
-
-\`// this is going to work\``,
+You scroll all the way back to the first one. ${firstLine(S).last}`,
   choices: [
     { label: 'Write one more. By hand. Ship it.', sub: 'For nobody. For the record.', tone: 'good',
       effect: (S, fx) => { fx.focus(40); fx.code(300); fx.rep(30); fx.flag('last_commit');

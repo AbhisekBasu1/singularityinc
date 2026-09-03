@@ -33,6 +33,34 @@ for (const n of research.RESEARCH) {
     else if ((rmap[r].tier || 1) > (n.tier || 1)) fail('research.js', `${n.id} (tier ${n.tier}) requires higher-tier ${r} (tier ${rmap[r].tier})`);
   }
   if (n.unlock && typeof n.unlock !== 'string') fail('research.js', `${n.id} unlock must be a string`);
+  // §A12c. A `scaleWith` names one of three readers and a par worth reading.
+  if (n.scaleWith) {
+    if (!['users', 'features', 'roster'].includes(n.scaleWith.read)) {
+      fail('research.js', `${n.id} scaleWith reads unknown ${n.scaleWith.read}`);
+    }
+    if (!(n.scaleWith.at > 0)) fail('research.js', `${n.id} scaleWith needs a par above zero`);
+  }
+}
+
+// 3b. §A12a. Exclusions are symmetric, and never sit on the required chain of a
+// node an act gate or an ending names — a door that closes an ending is not a
+// choice, it is a dead run, and nothing else in the tree would say so.
+{
+  const chain = new Set();
+  const walk = (id) => { if (!id || chain.has(id)) return; chain.add(id);
+    for (const r of rmap[id]?.reqs || []) walk(r); };
+  ['own_foundation_model', 'model_frontier', 'recursive_self_improvement',
+   'mind_uploading', 'stellar_engineering', 'the_question'].forEach(walk);
+  for (const n of research.RESEARCH) {
+    for (const x of n.excludes || []) {
+      if (!rmap[x]) { fail('research.js', `${n.id} excludes missing node ${x}`); continue; }
+      if (!(rmap[x].excludes || []).includes(n.id)) {
+        fail('research.js', `${n.id} excludes ${x} but ${x} does not exclude it back`);
+      }
+      if (chain.has(n.id)) fail('research.js', `${n.id} is on a gate or ending chain and may not carry excludes`);
+      if (chain.has(x)) fail('research.js', `${n.id} excludes ${x}, which a gate or an ending needs`);
+    }
+  }
 }
 
 // 4. Unlock keys referenced by agents/products/projects must be produced somewhere.
@@ -74,7 +102,7 @@ for (const e of events.EVENTS) {
 
 // 6b. Live threads: valid options and known effect keys.
 const threads = await import('../src/data/threads.js');
-const FX_KEYS = new Set(['rep','cash','code','insight','research','debt','focus','align','heat','opinion','awareness','sentiment']);
+const FX_KEYS = new Set(['rep','cash','code','insight','research','debt','focus','align','heat','opinion','awareness','sentiment','autonomy','flag']);
 for (const t of threads.THREADS) {
   if (!t.text) fail('threads.js', `${t.id} has no text`);
   if (!t.opts?.length || t.opts.length < 2) fail('threads.js', `${t.id} needs at least two options`);
@@ -89,6 +117,57 @@ for (const t of threads.THREADS) {
 { const ids = threads.THREADS.map((t) => t.id);
   const dup = ids.filter((x, i) => ids.indexOf(x) !== i);
   if (dup.length) fail('threads.js', `duplicate ids: ${[...new Set(dup)].join(', ')}`); }
+
+// 6b2. Mail: every letter has a sender, a subject, a body and known reply keys.
+const mail = await import('../src/data/mail.js');
+{ const ids = mail.LETTERS.map((l) => l.id);
+  const dup = ids.filter((x, i) => ids.indexOf(x) !== i);
+  if (dup.length) fail('mail.js', `duplicate ids: ${[...new Set(dup)].join(', ')}`);
+  for (const l of mail.LETTERS) {
+    if (!l.from?.name) fail('mail.js', `${l.id} has no sender`);
+    if (l.from?.char && !chars.CHARACTERS[l.from.char]) fail('mail.js', `${l.id} is from unknown character ${l.from.char}`);
+    if (!l.subject) fail('mail.js', `${l.id} has no subject`);
+    if (typeof l.body !== 'function' || typeof l.when !== 'function') fail('mail.js', `${l.id} needs body(S) and when(S)`);
+    for (const o of l.ask || []) {
+      if (!o.label || !o.out) fail('mail.js', `${l.id} reply missing label or outcome`);
+      for (const k of Object.keys(o.fx || {})) if (!FX_KEYS.has(k)) fail('mail.js', `${l.id} reply "${o.label}" uses unknown effect key "${k}"`);
+    }
+    if (threads.THREADS.some((t) => t.id === l.id)) fail('mail.js', `${l.id} collides with a thread id`);
+  } }
+
+// 6b3. The phone: every topic has a line, a reply and a noun; every effect key
+// is one the collector knows; ids are unique per person across the whole tree.
+{ const { CALLS } = await import('../src/data/calls.js');
+  const { newGame } = await import('../src/engine/state.js');
+  const probe = newGame({});
+  const CALL_FX = new Set([...FX_KEYS, 'affinity', 'respect', 'fear', 'flags', 'sleep', 'users', 'influence', 'equity', 'compute']);
+  const rel = { met: true, affinity: 0, arc: 0 };
+  for (const [id, tree] of Object.entries(CALLS)) {
+    for (const k of ['pickup', 'busy', 'bye']) if (typeof tree[k] !== 'function') fail('calls.js', `${id} has no ${k}()`);
+    if (typeof tree.recall !== 'function') fail('calls.js', `${id} has no recall() — the phone would not remember`);
+    const seen = new Set();
+    const walk = (t, where) => {
+      if (!t.id) fail('calls.js', `${where} topic has no id`);
+      if (seen.has(t.id)) fail('calls.js', `${id}: topic id "${t.id}" is used twice`);
+      seen.add(t.id);
+      if (!t.label) fail('calls.js', `${id}.${t.id} has no label`);
+      if (!t.reply) fail('calls.js', `${id}.${t.id} has no reply`);
+      if (!t.about) fail('calls.js', `${id}.${t.id} has no about — recall() has nothing to name`);
+      let fx = t.fx || {};
+      if (typeof fx === 'function') { try { fx = fx(probe, rel) || {}; } catch (e) { fail('calls.js', `${id}.${t.id}.fx threw: ${e.message}`); fx = {}; } }
+      for (const k of Object.keys(fx)) if (!CALL_FX.has(k)) fail('calls.js', `${id}.${t.id} uses unknown effect key "${k}"`);
+      for (const f of t.follow || []) walk(f, `${id}.${t.id}.follow`);
+    };
+    for (const t of tree.topics || []) walk(t, id);
+    const ringIds = new Set();
+    for (const g of tree.rings || []) {
+      if (!g.id || ringIds.has(g.id)) fail('calls.js', `${id} ring id missing or duplicated: ${g.id}`);
+      ringIds.add(g.id);
+      if (typeof g.when !== 'function' || typeof g.opening !== 'function') fail('calls.js', `${id}.${g.id} needs when(S, r) and opening(S, r)`);
+      if (!g.topics?.length) fail('calls.js', `${id}.${g.id} has nothing to say back`);
+      for (const t of g.topics || []) walk(t, `${id}.${g.id}`);
+    }
+  } }
 
 // 6c. Prompt approaches: bands must sum to ~1.
 const approaches = await import('../src/data/approaches.js');

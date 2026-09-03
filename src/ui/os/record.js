@@ -238,13 +238,43 @@ function listHtml(shown, rows, sel, doc) {
     </div>
     <div class="rec-rule"></div>
     ${shown.blurb ? `<div class="rec-blurb">${esc(shown.blurb)}</div>` : ''}
-    ${count === 0 ? emptyPane(shown.empty || line('folder'), 'NOTHING FILED HERE') : `
+    ${count === 0 ? emptyPane(shown.empty || line('folder'), 'NOTHING FILED HERE')
+      : pictures(rows) ? `
+    <div class="rec-grid">
+      ${cut.map((r) => tileHtml(shown, r, sel, doc)).join('')}
+      ${count > cut.length ? `<div class="rec-more">${count - cut.length} more · use Find</div>` : ''}
+    </div>` : `
     <div class="rec-legend"><span>Day</span><span>File</span><span>Detail</span></div>
     <div class="rec-rows">
       ${cut.map((r) => rowHtml(shown, r, sel, doc)).join('')}
       ${count > cut.length ? `<div class="rec-more">${count - cut.length} more · use Find</div>` : ''}
     </div>`}
   </div>`;
+}
+
+// A folder whose files are photographs is drawn as photographs. It is decided
+// by what the reader returned rather than by the folder's name, so a second
+// picture folder would need no change here — and a mixed folder, which no
+// reader produces today, falls back to the list rather than to half a grid.
+function pictures(rows) {
+  return rows.length > 0 && rows.every((r) => r && typeof r.img === 'string' && r.img);
+}
+
+function tileHtml(folder, r, sel, doc) {
+  const id = String(r.id == null ? '' : r.id);
+  const on = !!doc && sel.id === id;
+  const name = String(r.name || id);
+  const day = dayStamp(r.day);
+  return `<button class="rec-tile${on ? ' on' : ''}${r.wide ? ' wide' : ''}" type="button" data-act="record-open"
+    data-ctx="record-file" data-path="${esc(folder.path)}" data-id="${esc(id)}"
+    data-name="${esc(name)}" data-kind="${esc(String(r.kind || ''))}" data-day="${esc(day)}"
+    aria-current="${on ? 'true' : 'false'}">
+    <span class="rec-shot" style="background-image:url('${esc(r.img)}')" aria-hidden="true"></span>
+    <span class="rec-cap">
+      <span class="rec-cap-n">${esc(String(r.meta || r.kind || ''))}</span>
+      <span class="rec-cap-d mono">${esc(day)}</span>
+    </span>
+  </button>`;
 }
 
 function rowHtml(folder, r, sel, doc) {
@@ -299,6 +329,8 @@ function readHtml(shown, doc, sel, gone) {
           <div class="rec-doc-name">${esc(name)}</div>
           ${date ? `<div class="rec-doc-day">${esc(date)}</div>` : ''}
         </div>
+        ${doc.img ? `<div class="rec-shot-full${doc.wide ? ' wide' : ''}"
+          style="background-image:url('${esc(doc.img)}')" role="img" aria-label="${esc(name)}"></div>` : ''}
         ${meta.length ? `<div class="rec-meta">${meta.map(([k, v]) =>
           `<span class="rec-mk">${esc(String(k == null ? '' : k))}</span><span class="rec-mv">${esc(String(v == null ? '—' : v))}</span>`).join('')}</div>` : ''}
         ${doc.body ? `<div class="rec-prose">${prose(doc.body)}</div>` : ''}

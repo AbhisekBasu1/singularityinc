@@ -47,6 +47,11 @@ if (cap.tier !== 'none') {
   whether it resolves on success or stays pending until the signal aborts, and
   awaiting the second kind hangs for ever. `mint` races it against a macrotask,
   which is long enough for a duplicate-name rejection to land.
+- **Treat descriptor snapshots as scarce.** The desktop bridge currently
+  disables a document after more than 10 distinct registration snapshots (and
+  also caps the surface at 100 tools / 65,536 serialised descriptor bytes).
+  Publish a stable superset in one batch and enforce changing authority inside
+  `execute`; do not revoke and re-mint around selections, submissions or turns.
 - **A rejected `execute` has its reason discarded** — the caller gets a bare
   `UnknownError`. Nothing here ever rejects; the wrapper is abort → parse → try →
   resolve, and a crash comes back as a structured `{status:'error'}`.
@@ -71,8 +76,8 @@ if (cap.tier !== 'none') {
 It is not a framework and it does not want to be. There is no schema library
 (`parseInput` handles the subset these schemas use, because native validation is
 still spec issue #92), no transport, no state management, and no opinion about
-your UI. `surface.js` in the same directory — state in, tools out, revoke before
-mint — is thirty lines and is where the actual idea lives; it is not portable
-because the interesting half of it is what *your* state means.
+your UI. `surface.js` in the same directory — one stable capability index with
+live validation at execution — is where the actual idea lives; it is not
+portable because the interesting half of it is what *your* state means.
 
 MIT, like the rest of this.

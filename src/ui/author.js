@@ -20,8 +20,10 @@ import { on } from '../engine/bus.js';
 import { S } from '../engine/state.js';
 import * as MCP from '../webmcp/index.js';
 import * as Demo from '../webmcp/demo.js';
+import * as Resident from '../webmcp/resident.js';
 import * as World from '../world/author.js';
 import { typeInto, skipActive } from './typewriter.js';
+import { PLATFORM } from '../data/platform.js';
 
 const HARD_CAP = 1500;
 let lastAria = '';
@@ -55,6 +57,15 @@ function statusOf() {
   const muted = !!S?.world?.author?.muted;
   if (muted) return { key: 'muted', label: 'MUTED', tone: 'muted', sub: 'the written world has it' };
   if (st.tier === 'none') return { key: 'none', label: 'UNAVAILABLE', tone: 'off', sub: st.reason };
+  // A model in this browser, playing the same tools a visiting assistant would.
+  // It reads LOCAL rather than PLAYING, because which of the two is holding the
+  // world is the first thing a player is owed. The sub-line says what it *is*;
+  // the readout beside the stop key says what it is *doing* — both of them
+  // saying "thinking" was one line doing one job twice.
+  if (Resident.isRunning()) {
+    return { key: 'local', label: 'LOCAL', tone: 'live',
+      sub: 'a model in this browser is playing the world' };
+  }
   if (st.tier === 'legacy') return { key: 'legacy', label: 'LEGACY', tone: 'warn', sub: st.reason };
   if (st.waiting) return { key: 'listening', label: 'ON DUTY', tone: 'live', sub: 'waiting for the world to owe a card' };
   if (st.mode === 'agent') return { key: 'agent', label: 'PLAYING', tone: 'live', sub: 'an assistant is playing the world' };
@@ -106,9 +117,13 @@ export function panelBody({ full = false } = {}) {
     </div>
     ${terse ? '' : `<div class="wc-sub">${esc(s.sub || '')}</div>`}`;
 
+  // The consolation and the requirements live here, in the Uplink, and not on
+  // the title: a new player's second paragraph should not be the name of a
+  // browser standard. The full panel is the one place that says both.
   const plug = st.tier === 'none' ? `
       <button class="wc-plug hire" data-act="assistant-link">PLAY WITH YOUR ASSISTANT</button>
-      <div class="wc-note">The game plays in full without one — this is the written world.</div>`
+      <div class="wc-note">The game plays in full without one — this is the written world.${full
+        ? ` For the version with an opponent, open it in <b>${esc(PLATFORM.browser)}</b> or in <b>${esc(PLATFORM.app)}</b> on ${esc(PLATFORM.presets)}.` : ''}</div>`
     : muted ? `
       <button class="wc-plug back" data-act="unmute-world">UNMUTE THE WORLD</button>`
     : `
@@ -119,11 +134,20 @@ export function panelBody({ full = false } = {}) {
     : st.tier === 'none' ? ''
     : `<div class="wc-empty">Nothing has been asked of the world yet.</div>`;
 
-  const tally = (w.cards || w.posts || w.refused)
+  // The tally is what the world has done to this run. `voiceNotes` is the
+  // house style, counted: `src/world/voice.js` runs `copylint`'s rules over
+  // prose the linter never sees because it was written at run time, and every
+  // one of them is advice rather than a refusal — so the only place a player
+  // ever finds out the world is writing in a voice the game does not use is
+  // here, next to the cards it wrote.
+  const q = S?.world?.author?.queue?.length || 0;
+  const tally = (w.cards || w.posts || w.refused || q)
     ? `<div class="wc-tally">
          <span>${w.cards || 0} card${w.cards === 1 ? '' : 's'}</span>
          <span>${w.posts || 0} posted</span>
+         ${q ? `<span data-tip="Cards the world post-dated. Each is judged again on the day it lands, and the plug drops them all.">${q} waiting</span>` : ''}
          ${w.refused ? `<span class="refused">${w.refused} refused</span>` : ''}
+         ${w.voiceNotes ? `<span class="voice" data-tip="Places the world's prose broke the house style — an exclamation mark, a contraction in narration, a count written as a digit. Advice, never a refusal.">${w.voiceNotes} voice note${w.voiceNotes === 1 ? '' : 's'}</span>` : ''}
          ${w.ownWords ? `<span class="human">${w.ownWords} in your own words</span>` : ''}
        </div>` : '';
 
@@ -173,7 +197,27 @@ export function panelBody({ full = false } = {}) {
          data-tip="A fixed sequence of calls, made through <b>getTools()</b> and <b>executeTool()</b> exactly as a visiting agent would.<br>Not a model. For seeing what this does without one.">
          ▷ RUN THE SCRIPTED WORLD</button>`;
 
-  return head + plug + demo + tally + log + tools + offer + partner + aria;
+  // And the other half of that answer. When the browser has a model of its own,
+  // it can drive the same loop for real — same discovery, same tools, same
+  // bounds, nothing leaving the tab. Drawn only when there is one to press it:
+  // a browser without the Prompt API is the ordinary case, and the ordinary
+  // case does not want a disabled button and an apology under it.
+  const rs = Resident.state();
+  const resident = st.tier === 'none' || muted || !Resident.offered() ? ''
+    : rs.running
+    ? `<div class="wc-local">
+         <div class="wc-local-say">${esc(rs.text || 'thinking')}</div>
+         ${rs.lastRefusal ? `<div class="wc-local-ref">REFUSED &middot; ${esc(rs.lastRefusal)}</div>` : ''}
+         <div class="wc-local-n">${rs.calls} CALL${rs.calls === 1 ? '' : 'S'}${
+             rs.refused ? ` &middot; ${rs.refused} REFUSED` : ''}${
+             rs.benched.length ? ` &middot; ${rs.benched.length} BENCHED` : ''}</div>
+         <button class="wc-demo-btn stop" data-act="resident-stop">STOP THE LOCAL MODEL</button>
+       </div>`
+    : `<button class="wc-demo-btn local" data-act="resident-run"
+         data-tip="This browser has a model built into it. It plays the world through the same <b>getTools()</b> and <b>executeTool()</b> calls a visiting assistant makes, under every rule in this console.<br>Nothing leaves the tab.">
+         ▷ LET A LOCAL MODEL PLAY THE WORLD</button>`;
+
+  return head + plug + demo + resident + tally + log + tools + offer + partner + aria;
 }
 
 export function paintAuthor() {
@@ -230,6 +274,11 @@ export function mountAuthor({ dialog, onPaint } = {}) {
   on('world:mute', repaint);
   on('world:unmute', repaint);
   on('world:card', repaint);
+  // The notebook and the post-dated queue both show in the tally, and the plug
+  // empties the queue — a count that does not change when the founder pulls it
+  // is the console lying about what it just did.
+  on('world:queue', repaint);
+  on('world:note', repaint);
   on('aria:says', (line) => {
     // Finish whatever is mid-reveal before starting another, or the longer of
     // two consecutive lines lands last and overwrites the newer one.
@@ -243,6 +292,11 @@ export function mountAuthor({ dialog, onPaint } = {}) {
   on('demo:beat', ({ say }) => { demoLine = say; repaint(); });
   on('demo:waiting', ({ label }) => { demoLine = label; repaint(); });
   on('demo:end', () => { demoLine = ''; repaint(); });
+  // The resident model keeps its own line — what it is doing, what was refused,
+  // how many calls in — so the console repaints on every step of its loop.
+  on('resident:start', repaint);
+  on('resident:step', repaint);
+  on('resident:end', repaint);
   on('webmcp:partner', repaint);
   on('partner:tools', repaint);
   return { repaint, dialog };

@@ -27,10 +27,19 @@ import { availableCounters, nemesisOf } from '../../systems/nemesis.js';
 import { raceStandings, playerRank } from '../../systems/agirace.js';
 import { openThreadCount } from '../../systems/feed.js';
 import { promptCost, currentApproach } from '../../systems/founder.js';
-import { CODE, FOUNDER } from '../../data/balance.js';
 import { rel } from '../../engine/state.js';
+import { actionNote, shipNote, launchNote, recruitNote, priceNote } from '../notes.js';
 import * as MCP from '../../webmcp/index.js';
 import * as RecordApp from './record.js';
+import * as ContactsApp from './contacts.js';
+import * as MailApp from './mail.js';
+import * as JournalApp from './journal.js';
+import * as CalendarApp from './calendar.js';
+import * as TerminalApp from './terminal.js';
+import * as BrowserApp from './browser.js';
+import * as ListApp from './list.js';
+import * as PlayerApp from './player.js';
+import { plan as spendPlan } from '../../systems/spend.js';
 
 const safe = (fn, dflt = '') => { try { const v = fn(); return v == null ? dflt : v; } catch { return dflt; } };
 const up = (s) => String(s).toUpperCase();
@@ -42,17 +51,20 @@ const up = (s) => String(s).toUpperCase();
 
 // A greyed row says what it needs. The context menus made this the rule and
 // the menu bar shows the same rows, so they cannot disagree: chrome, in mono
-// uppercase, computed where the row is built.
-const focusNote = (S, need) =>
-  `FOCUS ${Math.round(S.founder.focus)} OF ${Math.round(need)}`;
-const promptNote = (S, m) => {
-  const c = safe(() => promptCost(S, m), 0);
-  if (S.company.cash < c) return `${money(c - S.company.cash)} SHORT`;
-  return `FOCUS ${Math.round(S.founder.focus)} OF ${Math.round(FOUNDER.PROMPT_FOCUS_COST)}`;
-};
+// uppercase, computed where the row is built. The notes themselves live in
+// `src/ui/notes.js` now, because the console's disabled buttons print the same
+// strings as tooltips and the console must not import the workstation.
 
 const READOUT = {
   record: (S) => RecordApp.readoutFor(S),
+  contacts: (S) => ContactsApp.readoutFor(S),
+  mail: (S) => MailApp.readoutFor(S),
+  journal: (S) => JournalApp.readoutFor(S),
+  calendar: (S) => CalendarApp.readoutFor(S),
+  terminal: (S) => TerminalApp.readoutFor(S),
+  browser: (S) => BrowserApp.readoutFor(S),
+  todo: (S) => ListApp.readoutFor(S),
+  player: (S) => PlayerApp.readoutFor(S),
   desk: (S) => `FOCUS ${Math.round(S.founder.focus)}/${Math.round(S.founder.focusMax)} · LV ${S.founder.level}`,
   product: (S) => {
     const p = activeProduct(S);
@@ -107,6 +119,16 @@ const READOUT = {
 
 function ordinal(n) { return ['—', '1ST', '2ND', '3RD', '4TH', '5TH', '6TH'][n] || `${n}TH`; }
 
+// §C9. The Desk's strip, as a menu row: the same hand, the same reason when it
+// is blocked, and the key it answers to.
+const SPEND_VERB = { code: 'Write code', prompt: 'Prompt', users: 'Talk to users', post: 'Post' };
+function spendItem(S) {
+  const hand = S.ui?.spendHand && SPEND_VERB[S.ui.spendHand] ? S.ui.spendHand : 'prompt';
+  const p = safe(() => spendPlan(S, hand), { ok: false, note: 'NOT NOW' });
+  return { label: `${SPEND_VERB[hand]} until it is done`, key: 'G', act: 'spend-bar', v: hand,
+    disabled: !p.ok, note: p.ok ? undefined : (p.note || 'NOT NOW') };
+}
+
 export function readoutFor(S, id) { return safe(() => READOUT[id]?.(S) || '', ''); }
 
 // ── Menus ───────────────────────────────────────────────────────────────────
@@ -120,6 +142,14 @@ export function readoutFor(S, id) { return safe(() => READOUT[id]?.(S) || '', ''
 
 const MENU = {
   record: (S) => RecordApp.menuFor(S),
+  contacts: (S) => ContactsApp.menuFor(S),
+  mail: (S) => MailApp.menuFor(S),
+  journal: (S) => JournalApp.menuFor(S),
+  calendar: (S) => CalendarApp.menuFor(S),
+  terminal: (S) => TerminalApp.menuFor(S),
+  browser: (S) => BrowserApp.menuFor(S),
+  todo: (S) => ListApp.menuFor(S),
+  player: (S) => PlayerApp.menuFor(S),
   desk: (S) => {
     const m = computeMods(S);
     const ap = currentApproach(S);
@@ -128,21 +158,22 @@ const MENU = {
     const cost = p ? featureCost(S, p) : 0;
     const canPrompt = S.founder.focus >= pc.focus && S.company.cash >= pc.cash
       && (!pc.insight || S.resources.insight >= pc.insight);
+    const hand = (label, key, v) => {
+      const note = actionNote(S, v, m);
+      return { label, key, act: 'do', v, disabled: !!note, note: note || undefined };
+    };
+    const ship = shipNote(S, p, cost);
+    const launch = p ? launchNote(p) : null;
     return [
-      { label: 'Write code', key: 'Q', act: 'do', v: 'code', disabled: S.founder.focus < CODE.MANUAL_FOCUS_COST,
-        note: S.founder.focus < CODE.MANUAL_FOCUS_COST ? focusNote(S, CODE.MANUAL_FOCUS_COST) : undefined },
-      { label: 'Prompt the machine', key: 'W', act: 'do', v: 'prompt', disabled: !canPrompt,
-        note: canPrompt ? undefined : promptNote(S, m) },
-      { label: 'Talk to users', key: 'E', act: 'do', v: 'users', disabled: S.founder.focus < FOUNDER.TALK_FOCUS_COST,
-        note: S.founder.focus < FOUNDER.TALK_FOCUS_COST ? focusNote(S, FOUNDER.TALK_FOCUS_COST) : undefined },
-      { label: 'Post publicly', key: 'R', act: 'do', v: 'post', disabled: S.founder.focus < FOUNDER.POST_FOCUS_COST,
-        note: S.founder.focus < FOUNDER.POST_FOCUS_COST ? focusNote(S, FOUNDER.POST_FOCUS_COST) : undefined },
+      hand('Write code', 'Q', 'code'),
+      { ...hand('Prompt the machine', 'W', 'prompt'), disabled: !canPrompt },
+      hand('Talk to users', 'E', 'users'),
+      hand('Post publicly', 'R', 'post'),
+      { ...spendItem(S) },
       { sep: true },
-      { label: 'Ship a feature', key: 'S', act: 'ship', disabled: !p || S.resources.code < cost,
-        note: !p ? 'NO PRODUCT' : S.resources.code < cost ? `${fmt(Math.ceil(cost - S.resources.code))} CODE SHORT` : undefined },
+      { label: 'Ship a feature', key: 'S', act: 'ship', disabled: !!ship, note: ship || undefined },
       { label: 'Auto-ship', act: 'toggle-autoship', checked: S.settings.autoShip !== false },
-      ...(p && !p.launched ? [{ label: `Launch ${p.name}…`, act: 'launch', disabled: p.features.length < 1,
-        note: p.features.length < 1 ? 'NOTHING SHIPPED' : undefined }] : []),
+      ...(p && !p.launched ? [{ label: `Launch ${p.name}…`, act: 'launch', disabled: !!launch, note: launch || undefined }] : []),
       { sep: true },
       { label: 'Ask ARIA', key: 'A', act: 'ask-aria' },
     ];
@@ -153,11 +184,10 @@ const MENU = {
     if (!p) return [{ label: 'No product', disabled: true }];
     const out = [];
     if (S.company.act >= 2) out.push({ label: 'New product line…', act: 'new-product' });
-    if (!p.launched) out.push({ label: `Launch ${p.name}…`, act: 'launch', disabled: p.features.length < 1,
-      note: p.features.length < 1 ? 'NOTHING SHIPPED' : undefined });
+    if (!p.launched) { const l = launchNote(p); out.push({ label: `Launch ${p.name}…`, act: 'launch', disabled: !!l, note: l || undefined }); }
     if (out.length) out.push({ sep: true });
     out.push({ head: 'PRICE' });
-    const unlaunched = !p.launched ? 'NOT LAUNCHED' : undefined;
+    const unlaunched = priceNote(p) || undefined;
     out.push({ label: 'Down 25%', act: 'price', v: '0.75', disabled: !p.launched, note: unlaunched });
     out.push({ label: 'Down 10%', act: 'price', v: '0.9', disabled: !p.launched, note: unlaunched });
     out.push({ label: 'Up 10%', act: 'price', v: '1.1', disabled: !p.launched, note: unlaunched });
@@ -172,11 +202,10 @@ const MENU = {
 
   agents: (S) => {
     const cost = hireCost(S);
-    const full = S.agents.length >= maxAgents(S);
     const lanes = Object.values(LANES).filter((l) => !l.req || S.unlocks[l.req] || S.research.done[l.req]);
+    const recruit = recruitNote(S);
     const out = [
-      { label: `Recruit an agent… · ${money(cost)}`, act: 'recruit', disabled: full || S.company.cash < cost,
-        note: full ? 'ROSTER FULL' : S.company.cash < cost ? `${money(cost - S.company.cash)} SHORT` : undefined },
+      { label: `Recruit an agent… · ${money(cost)}`, act: 'recruit', disabled: !!recruit, note: recruit || undefined },
     ];
     if (S.agents.length) {
       out.push({ sep: true }, { head: 'ASSIGN EVERY AGENT TO' });
@@ -264,7 +293,10 @@ const MENU = {
 
   settings: () => [
     { label: 'Copy save to clipboard', act: 'os-save-export' },
-    { label: 'Import a save…', act: 'os-save-import' },
+    { label: 'Paste a save…', act: 'os-save-import' },
+    { sep: true },
+    { label: 'Download the file', act: 'os-save-download' },
+    { label: 'Open a file…', act: 'os-save-upload' },
     { sep: true },
     { label: 'Abandon this run…', act: 'os-save-reset', danger: true },
   ],
@@ -297,6 +329,30 @@ const SYSTEM_APPS = [
   { id: 'wire', title: 'Wire', navName: 'Wire', glyph: '⌁', accent: 'var(--amber)',
     section: 'The world', blurb: 'Users, press, rivals, and your own agents.',
     def: [0.70, 0.02, 0.28, 0.94], min: [280, 320] },
+  { id: 'contacts', title: 'Contacts', navName: 'Contacts', glyph: '☎', accent: 'var(--cyan)',
+    section: 'The world', blurb: 'Everyone you have met, and a number for each of them.',
+    def: [0.16, 0.06, 0.56, 0.84], min: [520, 380] },
+  { id: 'mail', title: 'Mail', navName: 'Mail', glyph: '✉', accent: 'var(--amber)',
+    section: 'The world', blurb: 'The post: the bank, a committee, a mother forwarding an article.',
+    def: [0.12, 0.05, 0.62, 0.86], min: [520, 380] },
+  { id: 'browser', title: 'Browser', navName: 'Browser', glyph: '⊛', accent: 'var(--blue)',
+    section: 'The world', blurb: 'The rival\'s site, the paper, and your own front page.',
+    def: [0.10, 0.05, 0.66, 0.86], min: [520, 400] },
+  { id: 'todo', title: 'List', navName: 'List', glyph: '✓', accent: 'var(--green)',
+    section: 'Machine', blurb: 'What the company is still asking for. It resets at midnight.',
+    def: [0.22, 0.09, 0.46, 0.78], min: [400, 340] },
+  { id: 'player', title: 'Player', navName: 'Player', glyph: '♪', accent: 'var(--pink)',
+    section: 'Machine', blurb: 'Whatever you have on while you work. It changes with the act.',
+    def: [0.30, 0.13, 0.36, 0.70], min: [340, 340] },
+  { id: 'journal', title: 'Journal', navName: 'Journal', glyph: '✎', accent: 'var(--ink-2)',
+    section: 'Machine', blurb: 'Your own words, on the days you wrote any.',
+    def: [0.24, 0.10, 0.44, 0.76], min: [400, 360] },
+  { id: 'calendar', title: 'Calendar', navName: 'Calendar', glyph: '▦', accent: 'var(--amber)',
+    section: 'Machine', blurb: 'The run on a month grid, and what is due.',
+    def: [0.14, 0.06, 0.60, 0.82], min: [520, 400] },
+  { id: 'terminal', title: 'Terminal', navName: 'Terminal', glyph: '>_', accent: 'var(--green)',
+    section: 'Machine', blurb: 'A prompt. The machine answers to a few words.',
+    def: [0.20, 0.12, 0.52, 0.66], min: [420, 300] },
   { id: 'uplink', title: 'Uplink', navName: 'Uplink', glyph: '⊚', accent: 'var(--violet)',
     section: 'The world', blurb: 'What the world is allowed to do to you, and the plug.',
     def: [0.36, 0.14, 0.32, 0.66], min: [330, 300] },

@@ -9,6 +9,7 @@
 import * as R from './registry.js';
 import { REMEDY } from '../data/platform.js';
 import * as Surface from './surface.js';
+import { partnerTools, founderPublicTool } from './tools.js';
 import { capability, deepLinks as makeLinks } from './detect.js';
 import * as World from '../world/author.js';
 import * as Partners from './partners.js';
@@ -59,9 +60,21 @@ function setBusy(busy) { setToolBusy(busy); }
 export async function boot({ screen } = {}) {
   cap = capability();
   emit('webmcp:capability', cap);
-  if (cap.tier === 'none') { booted = false; return cap; }
+  if (cap.tier === 'none') {
+    booted = false;
+    // No site tools, but the rival's origin is still worth framing: the press
+    // office is the channel a second human's chair speaks through, and it
+    // renders Aperture's week whether or not anything can call a tool.
+    Partners.mount().catch(() => {});
+    return cap;
+  }
 
   if (screen) Surface.configureScreen(screen);
+  // Publish the bridge names in the initial batch. Discovery may finish later;
+  // the wrappers read the partner's live state when called and return a clean
+  // `unreachable` refusal until then. Adding them after discovery used to be
+  // one more registration snapshot in an already long-running document.
+  Surface.configurePartner(partnerTools(Partners));
   R.setEmitter(emit);          // the registry has no opinion about our bus
   R.init(cap.mc, { setBusy });
   booted = true;
@@ -75,11 +88,15 @@ export async function boot({ screen } = {}) {
 
   // The other origin. Best effort and entirely optional: if the rival's press
   // office is not there, the game does not notice and nothing here waits on it.
-  Partners.mount().then(async (r) => {
+  Partners.mount().then((r) => {
     if (!r?.ok) return;
-    Surface.configurePartner((await import('./tools.js')).partnerTools(Partners));
-    await Surface.reconcile(LIVE, 'the rival is answering');
     emit('webmcp:partner', r);
+    // §H12. And one tool pointing the other way. `exposedTo` publishes it to
+    // the rival's origin and to nobody else — the founder's own assistant
+    // never sees it in its list, which is what makes the information
+    // asymmetric rather than merely themed. It is minted here rather than in
+    // `desiredTools` for exactly that reason: that list is this page's hand.
+    mintFounderPublic(r.origin);
   }).catch(() => {});
   if (typeof window !== 'undefined') {
     // `pagehide` also fires on the way into the back-forward cache, where the
@@ -93,48 +110,38 @@ export async function boot({ screen } = {}) {
   return cap;
 }
 
-// Every trigger that can change what the world is allowed to do. The daily one
-// is a safety net, not the mechanism — the bus events are the mechanism.
+// Authority changes continuously, but registration does not. Every executor
+// validates live state, so routine game events must never touch the surface:
+// the browser disables WebMCP after ten distinct descriptor snapshots.
 function wire() {
   for (const off of unwire) off();
   unwire = [];
   const re = (why) => () => { if (booted) Surface.reconcile(LIVE, why); };
 
-  unwire.push(on('act:advance', re('act')));
-  unwire.push(on('nemesis:named', re('rival')));
-  unwire.push(on('event:present', re('card')));
-  // A resolved card can also introduce somebody — relationships change inside
-  // event effects — and one reconcile covers both, because the surface is
-  // recomputed whole: `desiredTools(S)` does not care why it was asked.
-  unwire.push(on('event:resolved', re('answered')));
-  unwire.push(on('event:proposal', re('proposal')));
-  unwire.push(on('event:proposal_declined', re('declined')));
-  unwire.push(on('event:dismissed', re('dismissed')));
-  // A sentence typed on the card reshapes answer_in_own_words around that
-  // exact submission id and text. Re-publish it before the waiting turn calls.
-  unwire.push(on('world:founder-input', re('founder input')));
+  // A new save may replace a muted run with an unmuted one. Unmute is the only
+  // other intentional transition from an empty surface back to the fixed set.
   unwire.push(on('load', re('load')));
   unwire.push(on('world:unmute', re('unmute')));
 
-  // A doctrine can take a tool out of the world's hand for the rest of the run.
+  // A doctrine still takes authority away, but the stable capability remains
+  // visible and explains the earned immunity if called.
   unwire.push(on('doctrine', (doc) => {
     if (!booted) return;
     const im = Surface.immunityFor(doc?.id);
-    Surface.reconcile(LIVE, 'doctrine:' + doc?.id).then(() => {
-      if (!im) return;
-      const a = World.authorState(LIVE);
-      a.stats.revokedByDoctrine = (a.stats.revokedByDoctrine || 0) + 1;
-      emit('world:immunity', { doctrine: doc, ...im });
-    });
+    if (!im) return;
+    const a = World.authorState(LIVE);
+    a.stats.revokedByDoctrine = (a.stats.revokedByDoctrine || 0) + 1;
+    emit('world:immunity', { doctrine: doc, ...im });
   }));
-
-  unwire.push(on('world:day', re('day')));
 }
 
 // ── The plug ────────────────────────────────────────────────────────────────
 
 export async function mute() {
   World.mute(LIVE);
+  // The framed origin owns two registrations of its own. Removing the frame is
+  // the only way the plug can truthfully mean every origin, not just this one.
+  Partners.unmount();
   // Queue behind anything already reconciling. `desiredTools` is empty once
   // muted, so this revokes the whole surface in order rather than racing a
   // mint that was computed a moment before the plug came out.
@@ -146,9 +153,33 @@ export async function mute() {
 export async function unmute() {
   World.unmute(LIVE);
   if (!booted) await boot();
-  else await Surface.reconcile(LIVE, 'unmute');
+  else {
+    await Surface.reconcile(LIVE, 'unmute');
+    Partners.mount().then((r) => { if (r?.ok) emit('webmcp:partner', r); }).catch(() => {});
+  }
   return status();
 }
+
+// One extra registration, once, when the second origin answers. Failures are
+// not fatal and are not reported to the player: a browser without `exposedTo`
+// support simply does not publish it, and the rival's page falls back to what
+// the relay carries.
+let mintedPublic = false;
+async function mintFounderPublic(origin) {
+  if (mintedPublic || !origin || !R.ready()) return null;
+  mintedPublic = true;
+  const t = founderPublicTool(origin);
+  Surface.keepExternal(t.name);
+  const r = await R.mint({
+    name: t.name, title: t.title,
+    description: typeof t.description === 'function' ? t.description(LIVE) : t.description,
+    inputSchema: typeof t.inputSchema === 'function' ? t.inputSchema(LIVE) : t.inputSchema,
+    annotations: t.annotations, execute: t.execute, exposedTo: t.exposedTo,
+  });
+  emit('webmcp:exposed', { name: t.name, to: origin, ok: !!r?.ok });
+  return r;
+}
+export function _testExposeFounderPublic(origin) { mintedPublic = false; return mintFounderPublic(origin); }
 
 export function isBooted() { return booted; }
 export { R as registry, Surface as surface, Partners as partners };

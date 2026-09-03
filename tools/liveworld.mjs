@@ -209,9 +209,11 @@ const shoot = async (name) => {
 };
 
 try {
-  await page.goto(`${BASE}${ROUTE}?notut=1`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}${ROUTE}?notut=1`, { waitUntil: 'load' });
+  await page.waitForTimeout(1400);   // `load` fires before the app has booted; give it a beat
   await page.evaluate(() => { try { localStorage.clear(); } catch {} });
-  await page.goto(`${BASE}${ROUTE}?notut=1`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}${ROUTE}?notut=1`, { waitUntil: 'load' });
+  await page.waitForTimeout(1400);   // `load` fires before the app has booted; give it a beat
   await page.waitForTimeout(400);
 
   console.log('\n── the opening ──');
@@ -329,19 +331,13 @@ try {
   ok('word for word', heard.founder_words === founderMove, heard.founder_words);
   ok('the card becomes a live waiting state', await page.$('.own-words-pending'));
 
-  // The typed move reshapes answer_in_own_words — its schema now names the
-  // submission — and a call that lands while the registry is swapping it is
-  // told, by design, to call again. Do what the result says, once or twice.
-  let proposed = null;
-  for (let i = 0; i < 4; i++) {
-    proposed = await page.evaluate((submissionId) => window.__mcp.call('answer_in_own_words', {
-      submission_id: submissionId,
-      outcome: 'You reply at 2am with a numbered list of your own. The author edits their post to link it.',
-      tone: 'risky', effects: { rep: 5, focus: -6 },
-    }), heard.submission_id);
-    if (!(proposed?.status === 'refused' && proposed?.rule === 'stale' && /replaced/.test(proposed?.next || ''))) break;
-    await page.waitForTimeout(150);
-  }
+  // The descriptor stays put; the executor checks this id against the live
+  // sentence, so there is no revoke/register window to race.
+  const proposed = await page.evaluate((submissionId) => window.__mcp.call('answer_in_own_words', {
+    submission_id: submissionId,
+    outcome: 'You reply at 2am with a numbered list of your own. The author edits their post to link it.',
+    tone: 'risky', effects: { rep: 5, focus: -6 },
+  }), heard.submission_id);
   ok('it needs a human hand', proposed.status === 'needs_human', JSON.stringify(proposed).slice(0, 180));
   await page.waitForTimeout(600);
   const prop = await page.evaluate(() => ({
@@ -402,6 +398,58 @@ try {
     !!document.querySelector('.wc-call.refused'));
   ok('and the console marks it', marked);
   await shoot('world-05-refused');
+
+  console.log('\n── a saved card waits behind the welcome-back briefing ──');
+  const restoreTitle = 'The card behind the briefing';
+  // The harness writes two cards seconds apart. Age only the real-time floor;
+  // the rolling in-game card budget remains live and is part of this check.
+  await page.evaluate(() => { window.S.narrative.lastEventReal = 0; });
+  const restoreWrite = await page.evaluate((title) => window.__mcp.call('write_event', {
+    title, kind: 'story',
+    body: 'The browser comes back with two things to tell you. One of them must wait its turn.',
+    choices: [
+      { label: 'Read the card', tone: 'neutral', sub: 'The state and the glass agree',
+        outcome: 'You finish the decision that was already waiting for you.', effects: { code: 2 } },
+      { label: 'Leave it open', tone: 'good', sub: 'Nothing is lost',
+        outcome: 'The decision stays yours until you make it.', effects: {} },
+    ],
+  }), restoreTitle);
+  ok('the card to restore is accepted', restoreWrite.status === 'ok', JSON.stringify(restoreWrite).slice(0, 160));
+  await page.waitForTimeout(700);
+  ok('and is visible before the reload', !!(await page.$('#event-modal')));
+
+  // `beforeunload` saves the open card. Once the title is back, age that save
+  // enough for Continue to open its welcome-back briefing first — the exact
+  // collision that used to strand activeEvent with no card on the glass.
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForTimeout(1400);
+  await page.evaluate(() => {
+    const key = 'singularity_inc_save_v1';
+    const saved = JSON.parse(localStorage.getItem(key));
+    saved.meta.lastRealTime = Date.now() - 5 * 60 * 1000;
+    localStorage.setItem(key, JSON.stringify(saved));
+  });
+  ok('the saved run is available to continue', !!(await page.$('[data-act="continue-game"]')));
+  await page.click('[data-act="continue-game"]');
+  await page.waitForTimeout(650);
+  ok('the welcome-back briefing gets the modal slot first', !!(await page.$('#generic-modal')));
+  ok('the card waits instead of replacing it', !(await page.$('#event-modal')));
+  await page.click('#generic-modal [data-dlg="0"]');
+  await page.waitForTimeout(800);
+  const restoredCard = await page.evaluate(() => ({
+    shown: !!document.querySelector('#event-modal'),
+    title: document.querySelector('#event-modal .event-title')?.textContent || '',
+    active: window.S.narrative.activeEvent?.title || '',
+  }));
+  ok('the same card opens when the modal slot is free',
+     restoredCard.shown && restoredCard.title === restoreTitle && restoredCard.active === restoreTitle,
+     JSON.stringify(restoredCard));
+  await page.click('#event-choices .choice:not(.choice-free)');
+  await page.waitForTimeout(300);
+  await page.click('#event-continue');
+  await page.waitForTimeout(500);
+  ok('and resolving it releases the clock state',
+     await page.evaluate(() => !window.S.narrative.activeEvent));
 
   console.log('\n── another origin, publishing to this one ──');
   // getTools({fromOrigins}) + executeTool across an <iframe allow="tools">.
@@ -638,6 +686,8 @@ try {
   await page.waitForTimeout(300);
   const after = await page.evaluate(() => window.__mcp.count());
   ok('every tool is revoked', after === 0, `${before} → ${after}`);
+  ok('the rival tool frame is removed with the rest of the world',
+     !(await page.$('iframe.partner-frame')));
   const muted = await page.evaluate(() => ({
     label: document.querySelector('#world-console .wc-label')?.textContent
         || document.querySelector('.wc-label')?.textContent,
@@ -717,9 +767,11 @@ try {
       }
     });
     const t0 = Date.now();
-    await p2.goto(`${BASE}${ROUTE}?notut=1${q}`, { waitUntil: 'networkidle' });
+    await p2.goto(`${BASE}${ROUTE}?notut=1${q}`, { waitUntil: 'load' });
+    await p2.waitForTimeout(1400);   // `load` fires before the app has booted; give it a beat
     await p2.evaluate(() => { try { localStorage.clear(); } catch {} });
-    await p2.goto(`${BASE}${ROUTE}?notut=1${q}`, { waitUntil: 'networkidle' });
+    await p2.goto(`${BASE}${ROUTE}?notut=1${q}`, { waitUntil: 'load' });
+    await p2.waitForTimeout(1400);   // `load` fires before the app has booted; give it a beat
     for (let i = 0; i < 10; i++) {
       const b = await p2.$('[data-act="start-game"], [data-act="beat-next"], [data-act="choose-arch"], [data-act="choose-cat"], [data-act="new-game"]');
       if (!b) break;
@@ -738,8 +790,12 @@ try {
     ok(`  briefing still answers`, (await p2.evaluate(() => window.__mcp.call('briefing', {}))).status === 'ok');
     await p2.waitForTimeout(1450);
     ok(`  no other origin is claimed`, !(await p2.$('.wc-partner')));
-    ok(`  and its tools are not published`,
-       !(await p2.evaluate(() => window.__mcp.names())).some((n) => n.includes('rival')));
+    const stable = await p2.evaluate(() => window.__mcp.names());
+    ok(`  the stable rival wrappers remain published`,
+       stable.includes('read_the_rival') && stable.includes('ask_the_rival'), stable.join(','));
+    const unavailable = await p2.evaluate(() => window.__mcp.call('read_the_rival', {}));
+    ok(`  and refuse cleanly while that origin is absent`, unavailable.status === 'refused',
+       JSON.stringify(unavailable).slice(0, 140));
     await p2.evaluate(() => { window.S.settings.speed = 4; window.S.settings.paused = false; });
     const d0 = await p2.evaluate(() => window.S.time.day);
     await p2.waitForTimeout(1800);

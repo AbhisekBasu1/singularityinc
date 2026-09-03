@@ -196,29 +196,82 @@ const RESERVED = new Set([
   'tip', 'tipTitle', 'tut', 'slider', 'value',
 ]);
 
-document.addEventListener('contextmenu', (e) => {
-  if (!hostEl) return;
-  // Text you can select, edit or spellcheck keeps the browser's menu. The Find
-  // palette has a field in it and copy has to work there.
-  if (e.target?.closest?.('input, textarea, select, [contenteditable=""], [contenteditable="true"]')) return;
-
-  const host = e.target?.closest?.('[data-ctx]') || null;
+// What the pointer is over, in the menu's terms: the nearest `data-ctx`, or
+// the bare desktop, or nothing. Shared by the right-click and the long press.
+function targetOf(node) {
+  if (node?.closest?.('input, textarea, select, [contenteditable=""], [contenteditable="true"]')) return null;
+  const host = node?.closest?.('[data-ctx]') || null;
   let kind = host?.dataset?.ctx || null;
-  const data = host ? { ...host.dataset } : {};
   // Bare desktop — the wallpaper, the widgets, the gap between windows. Inside
   // a window with nothing to say, the browser's menu is still the honest one:
   // `.desktop` is an ancestor of every window as well.
-  if (!kind && e.target?.closest?.('.desktop') && !e.target?.closest?.('.win')) kind = 'desktop';
-  if (!kind) { close(); return; }
+  if (!kind && node?.closest?.('.desktop') && !node?.closest?.('.win')) kind = 'desktop';
+  return kind ? { kind, host, data: host ? { ...host.dataset } : {} } : null;
+}
 
-  const items = itemsFor(kind, host, data);
+document.addEventListener('contextmenu', (e) => {
+  if (!hostEl) return;
+  // A finger that held long enough already has its menu (below); the browser's
+  // own contextmenu arrives a moment later and must not reopen it over itself.
+  if (performance.now() - pressOpenedAt < 900) { e.preventDefault(); return; }
+  // Text you can select, edit or spellcheck keeps the browser's menu. The Find
+  // palette has a field in it and copy has to work there.
+  const t = targetOf(e.target);
+  if (!t) { if (!e.target?.closest?.('input, textarea, select, [contenteditable=""], [contenteditable="true"]')) close(); return; }
+
+  const items = itemsFor(t.kind, t.host, t.data);
   if (!items.length) { close(); return; }
 
   // Only now. A menu that is not going to appear must never swallow the one
   // that would have.
   e.preventDefault();
-  const label = host?.dataset?.ctxLabel || kind;
-  if (openAt(items, e.clientX, e.clientY, label)) stamp(data);
+  const label = t.host?.dataset?.ctxLabel || t.kind;
+  if (openAt(items, e.clientX, e.clientY, label)) stamp(t.data);
+}, true);
+
+// ── The long press ──────────────────────────────────────────────────────────
+// A finger has no right button. Held still on something for half a second, it
+// opens the same menu the right-click would, from the same provider; moving
+// or lifting first is a scroll or a tap and opens nothing. The tap that the
+// hold releases is swallowed once, or it would land on the thing under the
+// finger — a dock tile, an action — and close the menu it just opened.
+const PRESS_MS = 500;
+const PRESS_SLOP = 8;
+let press = null;
+let pressOpenedAt = -1e9;
+let swallowTap = false;
+
+function endPress() { if (press) { clearTimeout(press.t); press = null; } }
+
+document.addEventListener('pointerdown', (e) => {
+  if (e.pointerType !== 'touch' || !hostEl) return;
+  swallowTap = false;
+  endPress();
+  if (e.target?.closest?.('.ctx-menu')) return;
+  const t = targetOf(e.target);
+  if (!t) return;
+  const x = e.clientX, y = e.clientY;
+  press = { x, y, t: setTimeout(() => {
+    press = null;
+    const items = itemsFor(t.kind, t.host, t.data);
+    if (!items.length) return;
+    if (openAt(items, x, y, t.host?.dataset?.ctxLabel || t.kind)) {
+      stamp(t.data);
+      pressOpenedAt = performance.now();
+      swallowTap = true;
+    }
+  }, PRESS_MS) };
+}, true);
+document.addEventListener('pointermove', (e) => {
+  if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > PRESS_SLOP) endPress();
+}, true);
+document.addEventListener('pointerup', endPress, true);
+document.addEventListener('pointercancel', endPress, true);
+document.addEventListener('click', (e) => {
+  if (!swallowTap) return;
+  swallowTap = false;
+  e.preventDefault();
+  e.stopImmediatePropagation();
 }, true);
 
 function stamp(data) {

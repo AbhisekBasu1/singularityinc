@@ -1,12 +1,25 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // MEGAPROJECTS — the Act III–V cash sink. Enormous, slow, world-shaping.
 // Each takes real in-game time. Some can only be built once.
+//
+// Two fields serve §A11. `frontier` is what having built the thing is worth to
+// Frontier Commitment *above* the ceiling everything else saturates at — the
+// only way past it — summed and clamped by `frontierProjectBonus`. `loud` is
+// how much attention the build itself draws, charged as regulatory heat per day
+// while it is in flight rather than in one lump at the ribbon-cutting: a
+// nineteen-launch constellation and forty-one jurisdictions of planetary grid
+// are noticed while they are happening, which is when they can be answered.
+//
+// Every one of them also carries upkeep now — `ECON.PROJECT_UPKEEP_DAILY` of
+// the capital it consumed, every day, for ever. A megaproject was a payment and
+// then a permanent free bonus; it is a thing you own now.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const PROJECTS = [
   // ── Act III
   { id: 'campus', name: 'Datacenter Campus', icon: '▦', act: 3, cost: 3.5e8, days: 90,
     req: 'compute_cluster', repeatable: true, costGrowth: 2.3,
+    frontier: 0.012, loud: 0.5,
     desc: 'Seventy acres, four halls, its own substation.',
     flavor: 'The tour guide says "and this is only phase one" and you realise she believes it.',
     effects: { computeCap: 900, opinion: -0.01 } },
@@ -29,16 +42,19 @@ export const PROJECTS = [
   // ── Act IV
   { id: 'fusion_plant', name: 'Fusion Plant', icon: '☀', act: 4, cost: 1.4e10, days: 180,
     req: 'fusion', repeatable: true, costGrowth: 1.9,
+    frontier: 0.02, loud: 0.8,
     desc: 'Net-positive, grid-connected, yours.',
     flavor: 'The first commercial plant in history and it exists to run inference.',
     effects: { energyCap: 25000, computeCap: 6000, opinion: 0.04 } },
   { id: 'fab', name: 'Sovereign Fab', icon: '⌗', act: 4, cost: 2.2e10, days: 210,
     req: 'custom_silicon', repeatable: true, costGrowth: 2.0,
+    frontier: 0.028, loud: 1.0,
     desc: 'You stop buying chips. −45% compute cost, +compute.',
     flavor: 'Three years and a hundred billion to stop being a customer.',
     effects: { computeCap: 12000, computeCostMult: 0.55 } },
   { id: 'constellation', name: 'Orbital Constellation', icon: '✦', act: 4, cost: 8e10, days: 260,
     req: 'orbital_compute', repeatable: true, costGrowth: 2.1,
+    frontier: 0.035, loud: 2.2,
     desc: 'Compute above the weather. Cooling is free; so is the sunlight.',
     flavor: 'Nineteen launches. Astronomers write an open letter. It is a good letter.',
     effects: { computeCap: 120000, control: 0.3, opinion: -0.03 } },
@@ -61,16 +77,19 @@ export const PROJECTS = [
   // ── Act V
   { id: 'lunar_fab', name: 'Lunar Fabrication', icon: '☾', act: 5, cost: 9e11, days: 300,
     req: 'self_replication', repeatable: true, costGrowth: 2.2,
+    frontier: 0.04, loud: 1.6,
     desc: 'Manufacturing that does not need Earth. Compute ×2.',
     flavor: 'The first seed lands in Mare Imbrium. Ninety days later there are thirty of them.',
     effects: { computeCapMult: 2.0, control: 0.5 } },
   { id: 'swarm_phase', name: 'Collector Swarm Phase', icon: '☀', act: 5, cost: 4e12, days: 400,
     req: 'dyson_swarm', repeatable: true, costGrowth: 2.6,
+    frontier: 0.045, loud: 1.4,
     desc: 'Statite collectors at L1. Energy ×4, compute ×1.8.',
     flavor: 'Solar output captured this quarter: 0.0009%. The graph is a straight line on a log axis.',
     effects: { energyCapMult: 4.0, computeCapMult: 1.8, control: 0.4 } },
   { id: 'world_grid', name: 'Planetary Compute Grid', icon: '⊕', act: 5, cost: 1.6e12, days: 280,
     req: 'shadow_government', repeatable: false,
+    frontier: 0.03, loud: 2.6,
     desc: 'Every jurisdiction, one substrate. +1.5 control, +GDP mediation.',
     flavor: 'Forty-one nations. One API. Their courts, their currencies, their elections.',
     effects: { control: 1.5, opinion: -0.08 } },

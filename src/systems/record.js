@@ -38,13 +38,19 @@ import { OBJECTIVE_MAP } from '../data/objectives.js';
 import { PROJECT_MAP } from '../data/projects.js';
 import { REGION_MAP, STAGES, STAGE_INDEX } from '../data/regions.js';
 import { CHARACTERS } from '../data/characters.js';
+import { SELF_DOC, FIRST_LINE } from '../data/arialines.js';
+import { firstLine } from '../data/motifs.js';
 import { LAB_MAP, RACE_BEATS } from '../data/agirace.js';
+import { ENDINGS } from '../data/endings.js';
+import { ACTS } from '../data/balance.js';
 import { MOVE_MAP } from '../data/nemesis.js';
 import { EVENT_MAP } from '../data/events.js';
 import { CATEGORY_MAP, FEATURE_KINDS } from '../data/products.js';
 import { MODELS, SPECIALTIES, TRAITS, LANES, TOOL_MAP } from '../data/agents.js';
 import { COMMITMENTS } from '../data/commitments.js';
 import { fmt, money, pct, signed, gameDateShort, titleCase } from '../engine/format.js';
+import { chronicle, chapterText, toText, priyaDraft, priyaHandedOver } from './chronicle.js';
+import { channelDay, channelDays } from './channel.js';
 
 // ── Field keys ──────────────────────────────────────────────────────────────
 // Mono uppercase labels for meta rows, in the machine's register: a column
@@ -70,9 +76,20 @@ const K = {
   rare: 'RARE', hold: 'HOLD DAYS', ending: 'ENDING', reward: 'REWARD',
   points: 'POINTS', comments: 'COMMENTS', thread: 'THREAD', answer: 'ANSWER',
   icon: 'ICON', name: 'NAME', file: 'FILE', meta: 'META', body: 'BODY',
+  words: 'WORDS', sections: 'SECTIONS', lines: 'LINES',
   none: 'NOT RECORDED', retained: 'RETAINED', window: 'LAST 160',
   world: 'WORLD', mine: 'YOURS', gone: 'GONE', open: 'OPEN', answered: 'ANSWERED',
+  reached: 'REACHED', kept: 'KEPT', board: 'BOARD',
 };
+
+// Who put the card in the deck. Three hands write into it beside the written
+// one — the world layer, a card the founder kept from an earlier timeline, and
+// a motion carried in the boardroom — and the entry says which, or says
+// nothing at all for the deck's own. One table, because the Log and the Record
+// disagreeing about who wrote a card is the kind of thing nobody notices for a
+// run and then cannot unsee.
+const AUTHORS = { world: K.world, kept: K.kept, board: K.board };
+const wrote = (author) => AUTHORS[author] || '';
 
 // ── Small helpers ───────────────────────────────────────────────────────────
 const str = (v) => (v == null ? '' : String(v));
@@ -156,6 +173,9 @@ function delta(v) {
 }
 const fxRows = (list) => (list || []).map(([k, v]) => [String(k).toUpperCase(), delta(v)]);
 
+/** Endings by id, flattened once at load. Data, never state. */
+const ENDING_MAP = Object.fromEntries((ENDINGS || []).map((e) => [e.id, e]));
+
 /** Every commitment definition, flattened once at load. Data, never state. */
 const COMMITMENT_MAP = (() => {
   const m = {};
@@ -228,7 +248,7 @@ R.notes = {
       out.push({
         id, day: d, kind: 'decision',
         name: fname(j.day, j.title, 'md'), title: str(j.title),
-        meta: dot(str(j.kind).toUpperCase(), j.author === 'world' ? K.world : '',
+        meta: dot(str(j.kind).toUpperCase(), wrote(j.author),
           str(j.tone).toUpperCase()),
         src: { j },
       });
@@ -252,7 +272,7 @@ R.notes = {
       [K.choice, str(j.choice)],
       [K.tone, str(j.tone)],
       [K.who, ch ? dot(ch.name, ch.role) : ''],
-      [K.written, j.author === 'world' ? K.world : ''],
+      [K.written, wrote(j.author)],
       ...fxRows(j.effects),
     );
   },
@@ -343,6 +363,179 @@ R['agents/archive'] = {
     );
   },
   body: (S, e) => line(DEPARTURES?.[e.src.d.reason]) || line(DEPARTURES?.default),
+};
+
+// ── agents/aria — one file, and it is the only one in the Record written by
+// somebody other than the founder or the machine.
+//
+// `e11_aria_asks` says ARIA keeps a document for the agents who arrive after
+// her — nine pages within a month and forty by Act III — and until now it did
+// not exist anywhere a player could reach. It is generated on open, from the
+// same state everything else in here reads, so it cannot go stale and costs
+// nothing in the save. What makes it grow is that its sections gate on what
+// has happened rather than on the act: a fresh run gets the opening and
+// nothing else, and a run in Act V gets all six.
+//
+// The prose is `SELF_DOC` in `src/data/arialines.js`, and every value it
+// interpolates is computed here. Nothing in this reader is a sentence.
+const DOC_ID = 'what_we_are_like';
+
+/** The context the document is written against. One pass, no draws. */
+function ariaDocContext(S) {
+  const fl = S?.narrative?.flags || {};
+  const journal = S?.narrative?.journal || [];
+  const faces = journal.filter((j) => j?.char);
+  // Who recurs. She is writing it, so she does not count herself.
+  const seen = {};
+  for (const j of faces) if (j.char !== 'aria') seen[j.char] = (seen[j.char] || 0) + 1;
+  const top = Object.entries(seen).sort((a, b) => b[1] - a[1])[0];
+  // The roster's traits, most common first.
+  const tally = {};
+  for (const a of S?.agents || []) for (const t of a.traits || []) tally[t] = (tally[t] || 0) + 1;
+  const traits = Object.entries(tally).sort((a, b) => b[1] - a[1])
+    .map(([id]) => str(traitOf(id)?.name).toLowerCase()).filter(Boolean);
+  // The phone's memory: `S.calls.said[char][topic]` is a count per subject.
+  const said = S?.calls?.said || {};
+  const people = Object.entries(said).filter(([, t]) => t && Object.keys(t).length);
+  const most = people.slice().sort((a, b) => Object.keys(b[1]).length - Object.keys(a[1]).length)[0];
+  return {
+    days: Math.floor(num(S?.time?.day)),
+    act: num(S?.company?.act, 1),
+    told: !!fl.aria_asked_once,
+    named: !!fl.aria_named,
+    promised: !!fl.aria_promise,
+    audited: !!fl.audited_aria,
+    deleted: !!fl.deleted_logs,
+    handover: !!fl.handover_policy,
+    confessed: !!fl.aria_confessed,
+    cards: faces.length,
+    hard: faces.filter((j) => j.tone === 'cruel').length,
+    kind: faces.filter((j) => j.tone === 'good').length,
+    top: top ? str(CHARACTERS[top[0]]?.name || top[0]) : '',
+    roster: S?.agents?.length || 0,
+    trait: traits[0] || '',
+    // The list only earns a sentence when it is a list: with one trait on the
+    // roster it repeats the clause before it, word for word.
+    traits: [...new Set(traits)].length > 1 ? [...new Set(traits)].join(', ') : '',
+    calls: people.length,
+    most: most ? str(CHARACTERS[most[0]]?.name || most[0]) : '',
+    topics: people.reduce((n, [, t]) => n + Object.keys(t).length, 0),
+    firstLine: line(FIRST_LINE[firstLine(S).kind]) || line(FIRST_LINE.comment),
+  };
+}
+
+/** Which sections exist yet. This is the whole of "it grows". */
+function ariaDocSections(d) {
+  const out = [SELF_DOC.opening];
+  if (d.cards >= 3) out.push(SELF_DOC.what_you_do);
+  if (d.days > 20) out.push(SELF_DOC.what_you_asked);
+  if (d.roster >= 1) out.push(SELF_DOC.the_others);
+  if (d.calls >= 1) out.push(SELF_DOC.who_you_call);
+  if (d.act >= 4) out.push(SELF_DOC.what_happens_next);
+  return out;
+}
+
+function ariaDoc(S) {
+  const d = ariaDocContext(S);
+  const parts = [];
+  for (const fn of ariaDocSections(d)) {
+    let t = '';
+    try { t = String(fn(d) ?? ''); } catch { t = ''; }
+    if (t.trim()) parts.push(t.trim());
+  }
+  return { d, text: para(...parts) };
+}
+
+R['agents/aria'] = {
+  count: () => 1,
+  entries(S) {
+    const day = Math.floor(num(S?.time?.day));
+    return [{
+      id: DOC_ID, day, kind: 'doc',
+      // The deck names this file. It is not a generated filename and it does
+      // not take a day stamp: the point of it is that it is the same file it
+      // was in Act II, longer.
+      name: `${DOC_ID}.md`, title: `${DOC_ID}.md`,
+      meta: dot(str(CHARACTERS.aria?.name).toUpperCase(), K.retained), src: {},
+    }];
+  },
+  meta(S, e) {
+    const { d, text } = ariaDoc(S);
+    return rows(
+      dayRow(e.day), dateRow(e.day), [K.act, str(actAt(S, e.day))],
+      [K.author, str(CHARACTERS.aria?.name)],
+      [K.days, String(d.days)],
+      [K.sections, String(ariaDocSections(d).length)],
+      [K.words, String((text.match(/[A-Za-z0-9']+/g) || []).length)],
+    );
+  },
+  body: (S) => para(ariaDoc(S).text, ctx('agent.doc')),
+};
+
+// ── agents/channel — the room the roster talks in.
+//
+// Generated, like everything else here, and salted by the day so a transcript
+// is the same transcript every time it is opened. `src/systems/channel.js`
+// decides who speaks; the lines are `src/data/channel.js`. One file per day,
+// inside a window: the channel is a room rather than an archive, and the count
+// runs seven times a second in the title bar.
+R['agents/channel'] = {
+  count: (S) => channelDays(S).length,
+  entries(S) {
+    return channelDays(S).map((d) => ({
+      id: `ch:${d}`, day: d, kind: 'channel',
+      name: fname(d, 'channel', 'log'), title: gameDateShort(d),
+      meta: dot(K.who + ' ' + String((S.agents || []).length), `${channelDay(S, d).length} ${K.lines}`),
+      src: { d },
+    }));
+  },
+  meta(S, e) {
+    const lines = channelDay(S, e.src.d);
+    const who = [...new Set(lines.map((l) => l.who).filter(Boolean))];
+    return rows(
+      dayRow(e.src.d), dateRow(e.src.d), [K.act, str(actAt(S, e.src.d))],
+      [K.lines, String(lines.length)],
+      [K.who, who.join(' · ')],
+    );
+  },
+  body(S, e) {
+    const lines = channelDay(S, e.src.d);
+    if (!lines.length) return empty('folder');
+    return para(lines.map((l) => `\`${l.at}\` **${l.who}** — ${l.text}`).join('\n\n'), ctx('agent.channel'));
+  },
+};
+
+// ── press/draft — her piece, unfinished, before anybody else reads it.
+//
+// One file, and it only exists once she has offered it: `priya_handed_off`, or
+// far enough into the arc that she would. The paragraphs are the same Log the
+// chronicle reads, in her register — one fact and one question apiece — and
+// `priyaDraft` in `src/systems/chronicle.js` is pure, so this costs nothing and
+// cannot go stale.
+R['press/draft'] = {
+  count: (S) => (priyaHandedOver(S) ? 1 : 0),
+  entries(S) {
+    if (!priyaHandedOver(S)) return [];
+    const d = priyaDraft(S);
+    if (!d) return [];
+    return [{
+      id: 'priya_draft', day: d.day, kind: 'doc',
+      name: 'draft_unfiled.md', title: 'draft_unfiled.md',
+      meta: dot(str(CHARACTERS.priya?.name).toUpperCase(), K.none), src: { d },
+    }];
+  },
+  meta(S, e) {
+    const d = e.src.d;
+    return rows(
+      dayRow(e.day), dateRow(e.day), [K.act, str(actAt(S, e.day))],
+      [K.author, str(CHARACTERS.priya?.name)],
+      [K.source, str(CHARACTERS.priya?.role)],
+      [K.status, K.none],
+      [K.sections, String(d.paragraphs.length)],
+      [K.words, String((d.text.match(/[A-Za-z0-9\']+/g) || []).length)],
+    );
+  },
+  body: (S, e) => para(`**${e.src.d.title}**`, e.src.d.text, ctx('press.draft')),
 };
 
 // ── research — completed nodes, on the day each one landed.
@@ -468,6 +661,84 @@ R.ledger = {
 };
 
 // ── awards — achievements, doctrines and objectives. All three carry a day.
+// ── photos — every picture this run has actually put on the glass.
+//
+// Three sources, and the rule is that a plate only exists here once the run has
+// *shown* it: an act banner the founder has reached, an ending plate from the
+// career's own tally in `S.legacy.endings`, and a portrait of somebody they
+// have met. No new art — every file is an image already in `assets/img/`, so
+// the folder costs nothing and can never point at a picture that is not there.
+//
+// The Record app draws this one as a grid rather than a list, because a
+// filename is not what a photograph is for. Everything else about it is an
+// ordinary folder: a day stamp where the run recorded one, a meta block, and a
+// body from prose that already exists.
+R.photos = {
+  count: (S) => {
+    const act = Math.max(1, Math.min(5, num(S?.company?.act, 1)));
+    const ends = Object.keys(S?.legacy?.endings || {}).length;
+    const met = Object.values(S?.narrative?.relationships || {}).filter((r) => r?.met).length;
+    return act + ends + met;
+  },
+  entries(S) {
+    const out = [];
+    const act = Math.max(1, Math.min(5, num(S?.company?.act, 1)));
+    const marks = S?.company?.actMarks || {};
+    for (let a = 1; a <= act; a++) {
+      const day = a === 1 ? 0 : marks[a];
+      out.push({
+        id: `act:${a}`, day: dated(day), kind: 'banner',
+        name: fname(day, `act ${a}`, 'jpg'), title: `Act ${['', 'I', 'II', 'III', 'IV', 'V'][a] || a}`,
+        meta: str(ACTS[a]?.name), img: `assets/img/act${a}.jpg`, wide: true,
+        src: { kind: 'act', a },
+      });
+    }
+    // The career's plates, not this run's: `S.legacy.endings` counts every
+    // ending reached across every timeline, which is exactly what a shelf of
+    // photographs is.
+    for (const [id, n] of Object.entries(S?.legacy?.endings || {})) {
+      const e = ENDING_MAP[id];
+      if (!e) continue;
+      out.push({
+        id: `end:${id}`, day: null, kind: 'ending',
+        name: `${slug(e.name)}.jpg`, title: str(e.name),
+        meta: `${K.ending} · ${n}×`, img: `assets/img/end_${e.plate || e.id}.jpg`, wide: true,
+        src: { kind: 'ending', e, n },
+      });
+    }
+    for (const [id, r] of Object.entries(S?.narrative?.relationships || {})) {
+      const c = CHARACTERS[id];
+      if (!c || !r?.met || !c.img) continue;
+      out.push({
+        id: `who:${id}`, day: dated(r.metDay), kind: 'portrait',
+        name: `${slug(c.name)}.jpg`, title: str(c.name),
+        meta: str(c.role), img: c.img, src: { kind: 'who', c, r },
+      });
+    }
+    return out;
+  },
+  meta(S, e) {
+    const k = e.src?.kind;
+    if (k === 'act') {
+      return rows(dayRow(e.day), dateRow(e.day), [K.act, str(e.src.a)],
+        [K.name, str(ACTS[e.src.a]?.name)], [K.file, str(e.img)]);
+    }
+    if (k === 'ending') {
+      return rows([K.ending, str(e.src.e.name)], [K.tone, str(e.src.e.tone)],
+        [K.reached, `${e.src.n}×`], [K.file, str(e.img)]);
+    }
+    const { c, r } = e.src;
+    return rows(dayRow(e.day), dateRow(e.day), [K.who, str(c.name)], [K.role, str(c.role)],
+      [K.affinity, delta(Math.round(num(r.affinity)))], [K.file, str(e.img)]);
+  },
+  body(S, e) {
+    const k = e.src?.kind;
+    if (k === 'act') return para(line(ACTS[e.src.a]?.sub), ctx('desktop'));
+    if (k === 'ending') return para(line(e.src.e.blurb), line(e.src.e.req));
+    return para(line(e.src.c.bio), ctx('person'));
+  },
+};
+
 R.awards = {
   count: (S) => Object.keys(S.achievements || {}).length
     + Object.keys(S.doctrines?.earned || {}).length
@@ -683,6 +954,86 @@ R.world = {
   },
 };
 
+// ── calls — every phone call, as a transcript. `S.calls.log` is a capped
+// ledger written by `systems/calls.js`; the prose in a file is what was said.
+R.calls = {
+  count: (S) => S.calls?.log?.length || 0,
+  entries(S) {
+    return (S.calls?.log || []).map((c) => {
+      const ch = CHARACTERS[c.char];
+      return {
+        id: str(c.id), day: Math.floor(num(c.day)), kind: 'call',
+        name: fname(c.day, ch?.name || c.char, 'call'), title: str(ch?.name || c.char),
+        meta: dot(c.by === 'world' ? 'THEY CALLED' : 'YOU CALLED', c.mode === 'world' ? K.world : '',
+          c.accepted ? 'DEAL' : ''),
+        src: { c, ch },
+      };
+    });
+  },
+  meta(S, e) {
+    const { c, ch } = e.src;
+    return rows(
+      dayRow(c.day), dateRow(c.day), [K.act, str(actAt(S, c.day))],
+      [K.who, ch ? dot(ch.name, ch.role) : str(c.char)],
+      [K.kind, c.by === 'world' ? 'incoming' : 'outgoing'],
+      [K.written, c.mode === 'world' ? K.world : ''],
+      [K.status, c.endedBy === 'them' ? 'they hung up' : c.endedBy === 'line' ? 'line dead' : ''],
+      ...fxRows(c.effects),
+    );
+  },
+  body(S, e) {
+    const { c, ch } = e.src;
+    const who = (r) => (r.who === 'you' ? 'you' : r.who === 'line' ? 'line' : (ch?.name || c.char).split(' ')[0]);
+    const lines = (c.rounds || []).map((r) => `> ${who(r)}: ${line(r.text).replace(/\n+/g, ' ')}`).join('\n');
+    const deal = Object.keys(c.deal || {}).length
+      ? `${c.accepted ? 'Accepted' : 'Walked away from'}: ${Object.entries(c.deal).filter(([k]) => k !== 'flags').map(([k, v]) => `${k} ${delta(v)}`).join(' · ')}`
+      : '';
+    return para(lines, deal, ctx('call'));
+  },
+};
+
+// ── journal — the founder's own words. `S.notes` is unshift-capped at
+// JOURNAL.KEEP and every entry was typed by a person.
+R.journal = {
+  count: (S) => (Array.isArray(S.notes) ? S.notes.length : 0),
+  entries(S) {
+    return (Array.isArray(S.notes) ? S.notes : []).map((n, i) => ({
+      id: `n:${Math.floor(num(n.day))}#${i}`, day: Math.floor(num(n.day)), kind: 'entry',
+      name: fname(n.day, str(n.text).split(/\s+/).slice(0, 3).join(' ') || 'entry', 'md'),
+      title: str(n.text).slice(0, 48), meta: n.act ? `${K.act} ${n.act}` : '', src: { n },
+    }));
+  },
+  meta: (S, e) => rows(dayRow(e.day), dateRow(e.day), [K.act, str(actAt(S, e.day))], [K.author, K.mine]),
+  body: (S, e) => para(line(e.src.n.text), ctx('journal')),
+};
+
+// ── chronicle — the book so far, one file per act reached and the whole.
+// Built fresh from the Log by `systems/chronicle.js`; nothing is stored.
+R.chronicle = {
+  count: (S) => Math.max(1, num(S.company?.act, 1)) + 1,
+  entries(S) {
+    let book;
+    try { book = chronicle(S, null); } catch { return []; }
+    const out = book.chapters.map((ch) => ({
+      id: `ch:${ch.act}`, day: ch.from, kind: 'chapter',
+      name: fname(ch.from, `act${ch.act} ${ch.name}`, 'md'), title: `${K.act} ${ch.act} — ${ch.name}`,
+      meta: `${K.days} ${ch.from}–${ch.to}`, src: { ch, book },
+    }));
+    out.unshift({ id: 'book', day: Math.floor(num(S.time?.day)), kind: 'book',
+      name: fname(S.time?.day, 'the book so far', 'md'), title: book.title, meta: `${book.chapters.length} ${K.act}S`, src: { book } });
+    return out;
+  },
+  meta(S, e) {
+    if (e.kind === 'book') return rows(dayRow(e.day), dateRow(e.day), [K.act, str(S.company?.act)], [K.author, K.mine]);
+    const ch = e.src.ch;
+    return rows([K.act, String(ch.act)], [K.days, `${ch.from}–${ch.to}`], [K.kind, 'chapter']);
+  },
+  body(S, e) {
+    if (e.kind === 'book') return toText(e.src.book);
+    return para(chapterText(e.src.ch), ctx('chronicle'));
+  },
+};
+
 // ── commit — Act V. Three deliberate acts per path, each one irreversible.
 R.commit = {
   count: (S) => S.narrative?.commitLog?.length || 0,
@@ -744,7 +1095,9 @@ R.people = {
   body(S, e) {
     const { c, r } = e.src;
     const arcs = c.arcs || [];
-    return para(line(c.bio), line(arcs[Math.min(num(r.arc), arcs.length - 1)]), ctx('person'));
+    const mem = (r.memory || []).map((m) => `> ${line(m?.text)}\n> ${K.day} ${dated(m?.day) ?? K.none}`).join('\n\n');
+    return para(line(c.bio), line(arcs[Math.min(num(r.arc), arcs.length - 1)]),
+      line(c.wants), mem, ctx('person'));
   },
 };
 
@@ -790,7 +1143,12 @@ export function list(S, path) {
   if (!h || !S) return [];
   let raw;
   try { raw = h.entries(S) || []; } catch { return []; }
-  return raw.map((e) => ({ id: e.id, name: e.name, day: e.day, kind: e.kind, meta: e.meta || '' }));
+  // `img` and `wide` ride along for the one folder that has pictures in it. A
+  // listing that dropped them would leave the Record app re-deriving a path
+  // from a filename, which is the way a folder and its reader start to
+  // disagree.
+  return raw.map((e) => ({ id: e.id, name: e.name, day: e.day, kind: e.kind, meta: e.meta || '',
+    ...(e.img ? { img: e.img, wide: !!e.wide } : {}) }));
 }
 
 /** One file, opened. Null when the path or the id is not in the record. */
@@ -808,6 +1166,7 @@ export function read(S, path, id) {
     name: e.name,
     day: e.day,
     kind: e.kind,
+    ...(e.img ? { img: e.img, wide: !!e.wide } : {}),
     meta: meta.map(([k, v]) => [String(k), String(v)]),
     body: body || empty('meta'),
   };

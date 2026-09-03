@@ -34,8 +34,28 @@ const ROUTE = (process.env.ROUTE || '/').replace(/\/?$/, '/');
 const EXPECTED = new Set([
   'topbar', 'nav', 'brand', 'statusline', 'feed-rail', 'feed-head', 'world-console',
   'time-block', 'view-head', 'modal-top', 'sinks', 'approach-strip', 'thread-out',
+  // §C9's strip sits under the four hands exactly as `approach-strip` sits
+  // under the prompting row: the same neutral rule between two regions.
+  'spend-strip',
   'ch-head', 'ch-foot', 'nem-moves', 'nem-move', 'nem-counters', 'quote', 'wm-status',
   'modal-act', 'act-head', 'own-words-footer',
+  // Aperture's week on the Market view: a hairline between rows, like `nem-move`,
+  // and the rule above the second human's invite link.
+  'ap-play', 'ap-invite',
+  // §A14's record of finished seasons, and §A10's rival strip: the first is a
+  // hairline between rows exactly like `nem-move`, the second the rule that
+  // separates the feud's own block from the season above it.
+  'nr-row', 'nem-season',
+  // §I10's day strip and the two app sheets: the strip's rule under the topbar
+  // is the same hairline `topbar` has, and the sheets divide a list column from
+  // a reading column and one row from the next. Structure, not accent.
+  'daystrip', 'ml-list', 'ct-list', 'ml-row', 'ct-row', 'ml-replies', 'ml-answered',
+  // §I6's Player and §I8's Sunday question: a rule above the track list, and
+  // the divider over the journal's field. The same kind of line again.
+  'pl-head', 'jn-ask', 'env-body',
+  // The ending is film, not interface (see CLAUDE.md), and a dev fast-forward
+  // can land a walk on it by chance.
+  'ending-coda',
   // The workstation's own dividers: chrome edges and the rules inside a window
   // title bar, a menu and the Notification Center. Structure, not accent.
   'menubar', 'dock', 'win-title', 'menu-sep', 'nc', 'nc-head', 'widget-head',
@@ -102,7 +122,7 @@ const found = new Map();
 
 for (const [name, q, setup] of VIEWS) {
   const page = await ctx.newPage();
-  await page.goto(`${BASE}${ROUTE}${q}`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}${ROUTE}${q}`, { waitUntil: 'load' });
   await page.waitForTimeout(2200);
   if (setup) await setup(page);
   const hits = await page.evaluate(() => {

@@ -169,6 +169,12 @@
 .cc-name { font-size: 16px; font-weight: 670; letter-spacing: -0.015em; position: relative; }
 .cc-tag { font-size: 12px; color: var(--ink-3); font-style: italic; position: relative; }
 .cc-desc { font-size: 12px; color: var(--ink-3); line-height: 1.55; position: relative; margin-top: 2px; }
+/* The one mechanic this founder has that the others do not. It is a rule, so
+   it prints as one: mono, small caps, in the card's own colour. */
+.cc-perk {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--cc); line-height: 1.5; position: relative; margin-top: 6px; opacity: 0.9;
+}
 .cc-stats { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; position: relative; }
 .cc-stat {
   font-family: var(--mono); font-size: 9.5px; padding: 2px 7px; border-radius: 5px;
@@ -191,6 +197,11 @@
   border: 1px solid var(--line-2);
 }
 .tc-row { display: flex; align-items: center; gap: 12px; font-size: 14.5px; color: var(--ink-2); }
+/* What each choice does to the run, under the row that names it: the same
+   chips the beats showed, indented past the icon so they read as its detail. */
+.tc-mods { display: flex; flex-wrap: wrap; gap: 5px; padding-left: 32px; margin-top: -6px; }
+.tc-mods:empty { display: none; }
+.threshold-beat .locked-strip { margin-top: 18px; }
 .tc-row b { color: var(--ink); font-weight: 650; }
 .tc-icon { width: 20px; text-align: center; font-size: 16px; }
 
@@ -285,6 +296,13 @@
   color: var(--violet);
 }
 .wm-mark { font-size: 12px; }
+/* §D6. The plain sentence, above the standard's name. It is the first thing a
+   new reader meets in this panel, so it is the largest thing in it — and the
+   kicker under it drops to the register of a byline. */
+.wm-plain {
+  font-size: 14.5px; line-height: 1.6; color: var(--ink); margin: 0 0 10px;
+  font-weight: 520; max-width: 62ch;
+}
 .wm-lead { font-size: 13.5px; line-height: 1.65; color: var(--ink-2); margin: 10px 0 0; }
 .wm-lead.dim { color: var(--ink-3); font-size: 12.5px; margin-top: 8px; }
 .wm-lead b { color: var(--ink); font-weight: 600; }
@@ -308,6 +326,8 @@
   font-family: var(--mono); font-size: 11px; color: var(--cyan); padding: 3px 7px;
   border: 1px solid rgba(77,208,225,0.28); background: rgba(77,208,225,0.06); cursor: default;
 }
+/* The rest of the hand, named in its note rather than given a chip each. */
+.wm-tool-more { color: var(--ink-4); border-color: var(--line-2); background: rgba(255,255,255,0.04); }
 .wm-laters { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; font-size: 11.5px; color: var(--ink-3); line-height: 1.5; }
 .wm-later b { font-family: var(--mono); font-weight: 500; color: var(--ink-2); }
 .wm-cta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
@@ -324,6 +344,7 @@
   .title-sub { margin-top: 14px; }
   .title-sub.dim2 { margin-top: 8px; }
   .title-webmcp { margin-top: 16px; padding: 12px 16px 12px 18px; }
+  .wm-plain { font-size: 13px; margin-bottom: 8px; line-height: 1.5; }
   .wm-lead { font-size: 12.5px; margin-top: 7px; line-height: 1.55; }
   .wm-lead.dim { margin-top: 5px; }
   .wm-status { margin-top: 10px; padding-top: 9px; }
@@ -388,6 +409,17 @@
 .title-webmcp.brief { padding-top: 12px; padding-bottom: 12px; }
 .title-webmcp.brief .wm-status { margin-top: 10px; padding-top: 0; border-top: 0; }
 .wm-say.dim { flex-basis: 100%; font-size: 11.5px; color: var(--ink-4); }
+
+/* ── One line to yourself ───────────────────────────────────────────────────
+   The only field at the threshold that is not a decision about the run, so it
+   is quieter than the two rows under it: the shared `.line-input` rule at its
+   smallest size, no label weight, and a hint that says it is optional rather
+   than an asterisk that says it is not. Blank is a real answer. */
+.self-letter { margin-top: 18px; text-align: left; }
+.self-letter-field {
+  font-size: 14px; font-weight: 500; letter-spacing: 0; line-height: 1.5;
+  resize: none; font-family: inherit; padding-top: 4px;
+}
 
 /* ── Where the run starts ───────────────────────────────────────────────────
    This is a real product choice, not an unexplained title-screen shortcut.

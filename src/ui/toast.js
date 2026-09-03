@@ -18,8 +18,10 @@ const watchers = new Set();
 export function onToast(fn) { watchers.add(fn); return () => watchers.delete(fn); }
 
 const recent = new Map();   // title → { el, count, t }
-export function toast({ icon = '◈', title, sub, kind = '', ms = 3600 }) {
-  for (const fn of watchers) { try { fn({ icon, title, sub, kind, ms, at: Date.now() }); } catch {} }
+// `show` names the window this is about — 'research', 'agents', 'wire' — so a
+// record of the toast can offer a way there. The toast itself never uses it.
+export function toast({ icon = '◈', title, sub, kind = '', ms = 3600, show = null }) {
+  for (const fn of watchers) { try { fn({ icon, title, sub, kind, ms, show, at: Date.now() }); } catch {} }
   // Coalesce repeats: the fourth "It made that up" should be a counter, not a stack.
   const queued = queue.find((q) => q.title === title);
   if (queued) { queued.count = (queued.count || 1) + 1; return; }

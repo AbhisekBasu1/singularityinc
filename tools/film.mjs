@@ -266,9 +266,9 @@ const toolCount = () => page.evaluate(() => window.__mcp.count());
 
 // ── getting into a running game ─────────────────────────────────────────────
 async function boot() {
-  await page.goto(`${BASE}/?notut=1`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/?notut=1`, { waitUntil: 'load' });
   await page.evaluate(() => { try { localStorage.clear(); } catch {} });
-  await page.goto(`${BASE}/?notut=1`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/?notut=1`, { waitUntil: 'load' });
   await hold(500);
   for (let i = 0; i < 60; i++) {
     const btn = await page.$('[data-act="start-game"], [data-act="beat-next"], [data-act="choose-arch"], [data-act="choose-cat"], [data-act="new-game"]');
@@ -366,9 +366,9 @@ const beat = (id, fn) => { BEATS[id] = fn; };
 
 beat('intro', async () => {
   mark('intro:in');
-  await page.goto(`${BASE}/?notut=1`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/?notut=1`, { waitUntil: 'load' });
   await page.evaluate(() => { try { localStorage.clear(); } catch {} });
-  await page.goto(`${BASE}/?notut=1`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/?notut=1`, { waitUntil: 'load' });
   await hold(6500);
   mark('intro:out');
 });
@@ -622,9 +622,9 @@ beat('diag', async () => {
 // fields says nobody has heard either of them yet.
 beat('onboard', async () => {
   mark('onboard:in');
-  await page.goto(`${BASE}/?notut=1`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/?notut=1`, { waitUntil: 'load' });
   await page.evaluate(() => { try { localStorage.clear(); } catch {} });
-  await page.goto(`${BASE}/?notut=1`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/?notut=1`, { waitUntil: 'load' });
 
   // The cold open writes itself out at reading pace. Let it.
   await hold(11000);

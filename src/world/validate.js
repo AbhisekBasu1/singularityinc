@@ -12,8 +12,9 @@
 // over its ceiling, prose too long) are all collected, so a card that is over
 // on three axes comes back with three fixes rather than three round trips.
 // ─────────────────────────────────────────────────────────────────────────────
-import { WORLD_AUTHOR as W, EVENTS as EV } from '../data/balance.js';
+import { WORLD_AUTHOR as W, EVENTS as EV, CALLS as C } from '../data/balance.js';
 import { EFFECT_KEYS, EFFECT_KEY_LIST, isAdverse } from './effects.js';
+import { cardVoiceWarnings, lineVoiceWarnings } from './voice.js';
 import { CHARACTERS } from '../data/characters.js';
 import { diffMods } from '../data/difficulty.js';
 import { rel, hasResearch } from '../engine/state.js';
@@ -29,6 +30,22 @@ const problem = (path, rule, fix, extra = {}) => ({ path, rule, fix, ...extra })
 // ── What the world may do, right now ────────────────────────────────────────
 
 export function actOf(S) { return Math.min(5, Math.max(1, S?.company?.act || 1)); }
+
+// ── The ending ──────────────────────────────────────────────────────────────
+// Once the run has an ending nothing more is written into it. Every validator
+// below asks this before anything else — a card over the credits, a post, a
+// turn of the weather, a ring, a line on a call — so the refusal is one shape
+// wherever the write came from, and `author.js` asks the same question on the
+// two paths that do not pass through a validator (the rival's move and focus).
+export function overProblem(S) {
+  if (!S?.ending) return null;
+  return problem('', 'over',
+    S.world?.author?.epilogue
+      ? 'the run is over and the last word is written — give the founder the ending its due in chat, then stop the live loop'
+      : 'the run is over — nothing more can be written into it. Read read_journal, then write_epilogue: one paragraph that goes on their ending screen and onto the shelf. Then stop the live loop',
+    { got: String(S.ending.name || S.ending.id || 'an ending') });
+}
+const overRefusal = (S) => { const p = overProblem(S); return p ? { ok: false, problems: [p] } : null; };
 
 export function worldHand(S) {
   const m = diffMods(S) || {};
@@ -79,11 +96,59 @@ export function capSummary(S, tone = 'neutral', keys = ['cash', 'rep', 'users', 
 
 // ── Who may be voiced ───────────────────────────────────────────────────────
 
+// ── Who has gone ────────────────────────────────────────────────────────────
+// The written deck retires people. Crane resigns the seat, Dorne does not
+// stand again, Priya hands the beat on, the account goes dark — and until this
+// existed the world could ring the founder as Crane the morning after, which
+// is the one kind of continuity error a player notices immediately, because
+// they read the card.
+//
+// One table, one function, and every door asks it: `metCharacters` drops them
+// from the cast the surface publishes, and the three validators that name a
+// person refuse by name with what happened. `back` is the flag that undoes it
+// — releasing Yuki from the agreement is a reconciliation, and she is
+// reachable again the moment it lands.
+//
+// Deliberately not in here: `vance_acquired`, which is the card where Vance
+// comes to work *for* the founder, and `kai_declined`, which is somebody
+// saying no to a job rather than leaving the story.
+export const DEPARTURES = {
+  crane:   [{ flag: 'crane_resigned', why: 'Ellis Crane resigned the board seat and stepped back' }],
+  dorne:   [{ flag: 'dorne_retired', why: 'Senator Dorne did not stand again' },
+            { flag: 'dorne_lost_primary', why: 'Senator Dorne lost her primary and left the committee' }],
+  priya:   [{ flag: 'priya_handed_off', why: 'Priya handed the beat to somebody else' }],
+  nullptr: [{ flag: 'nullptr_shut', why: 'the account went dark when the founder shut it down' }],
+  yuki:    [{ flag: 'suppressed_yuki', why: 'Dr Tanaka resigned, under an agreement she did not sign willingly',
+              back: 'released_yuki' },
+            { flag: 'hunted_yuki', why: 'Dr Tanaka went to ground after the founder went looking for her' }],
+};
+
+// Null, or what happened. Reads flags only, so a save from before any of this
+// answers null for everybody.
+export function departed(S, id) {
+  const flags = S?.narrative?.flags || {};
+  for (const d of DEPARTURES[id] || []) {
+    if (!flags[d.flag]) continue;
+    if (d.back && flags[d.back]) continue;
+    return { id, flag: d.flag, why: d.why };
+  }
+  return null;
+}
+
+function departedProblem(S, id, path = 'char') {
+  const gone = departed(S, id);
+  if (!gone) return null;
+  return problem(path, 'departed',
+    `${gone.why} — that is written, and the world does not get to undo it. Speak as somebody still in the story`,
+    { got: id, when: gone.flag });
+}
+
 export function metCharacters(S) {
   const out = [];
   for (const id of Object.keys(CHARACTERS)) {
     if (W.NEVER_VOICED.includes(id)) continue;
     if (id === 'helix' && !hasResearch('own_foundation_model', S)) continue;
+    if (departed(S, id)) continue;       // the deck wrote them out; the world honours it
     const met = !!rel(id, S)?.met;
     const always = W.ALWAYS_AVAILABLE.includes(id) && totalUsers(S) > 0;
     if (met || always) out.push(id);
@@ -364,19 +429,20 @@ function effectProblems(S, at, fx, tone, problems, { char = null, scale = 1, key
   return moved;
 }
 
-function styleWarnings(card) {
-  const out = [];
-  const all = [card.body, ...(card.choices || []).map((c) => `${c.label} ${c.sub || ''} ${c.outcome || ''}`)].join(' ');
-  if (/!/.test(all)) out.push('no exclamation marks — the game never raises its voice');
-  if (!/\d/.test(card.body || '')) out.push('one concrete number in the body makes a card land');
-  if (/\b(as an AI|language model|ChatGPT|I cannot)\b/i.test(all)) out.push('stay in the world; you are the market, not an assistant');
-  if (/\byou will\b/i.test(card.body || '')) out.push('present tense — the card is happening now');
-  return out;
-}
+// Style is advice, never a refusal. `src/world/voice.js` is `copylint`'s rules
+// on prose the linter never sees, because it was written at run time.
+const styleWarnings = (card) => cardVoiceWarnings(card);
 
 // ── The card ────────────────────────────────────────────────────────────────
 
-export function validateCard(S, card) {
+// `deferred` is a card the world post-dated with `in_days`: it is judged for
+// shape, prose, people and ceilings now, and for *timing* on the day it lands,
+// because "a card is already open" and "two cards in ten days" are facts about
+// a Tuesday three weeks from now that nobody can know today. Every deferred
+// card goes back through this same function, without the flag, at delivery.
+export function validateCard(S, card, { deferred = false } = {}) {
+  const over = overRefusal(S);
+  if (over) return over;
   const problems = [];
 
   // Structural: nothing else can be judged until the shape is right.
@@ -393,6 +459,8 @@ export function validateCard(S, card) {
       { limit: `${W.CHOICES_MIN}–${W.CHOICES_MAX}`, got: card.choices?.length ?? 0 })] };
   }
   if (card.char != null) {
+    const gone = departedProblem(S, card.char);
+    if (gone) return { ok: false, problems: [gone] };
     const cast = metCharacters(S);
     if (!cast.includes(card.char)) {
       return { ok: false, problems: [problem('char', 'unknown_character',
@@ -401,23 +469,26 @@ export function validateCard(S, card) {
     }
   }
 
-  // Timing: is a card legal at all right now?
-  if (S.narrative?.activeEvent) {
-    problems.push(problem('', 'card_open', 'the founder is already reading one — wait for them to answer it'));
-  }
-  if (S._offline) {
-    problems.push(problem('', 'offline', 'the founder is away and the game is catching up — wait'));
-  }
-  const left = cardsLeft(S);
-  if (left <= 0) {
-    const oldest = recent(S, 'cardDays').sort((a, b) => a - b)[0] ?? S.time.day;
-    problems.push(problem('', 'rate', 'post as someone, or let days pass with advance_time', {
-      limit: `${W.MAX_CARDS_PER_WINDOW} per ${W.CARD_WINDOW_DAYS} days`,
-      when: `day ${Math.ceil(oldest + W.CARD_WINDOW_DAYS)}`,
-    }));
-  }
-  if (!realFloorOk(S)) {
-    problems.push(problem('', 'too_soon', `wait ${EV.MIN_REAL_SECONDS}s of real time between cards`));
+  // Timing: is a card legal at all right now? A post-dated card skips this
+  // block and answers it on the day it lands instead.
+  if (!deferred) {
+    if (S.narrative?.activeEvent) {
+      problems.push(problem('', 'card_open', 'the founder is already reading one — wait for them to answer it'));
+    }
+    if (S._offline) {
+      problems.push(problem('', 'offline', 'the founder is away and the game is catching up — wait'));
+    }
+    const left = cardsLeft(S);
+    if (left <= 0) {
+      const oldest = recent(S, 'cardDays').sort((a, b) => a - b)[0] ?? S.time.day;
+      problems.push(problem('', 'rate', 'post as someone, or let days pass with advance_time', {
+        limit: `${W.MAX_CARDS_PER_WINDOW} per ${W.CARD_WINDOW_DAYS} days`,
+        when: `day ${Math.ceil(oldest + W.CARD_WINDOW_DAYS)}`,
+      }));
+    }
+    if (!realFloorOk(S)) {
+      problems.push(problem('', 'too_soon', `wait ${EV.MIN_REAL_SECONDS}s of real time between cards`));
+    }
   }
 
   // Prose.
@@ -494,14 +565,25 @@ export function validateCard(S, card) {
 
 // ── The smaller acts ────────────────────────────────────────────────────────
 
-export function validatePost(S, { char, text, ask } = {}) {
+export function validatePost(S, { char, text, ask, channel, subject } = {}) {
+  const over = overRefusal(S);
+  if (over) return over;
   const problems = [];
+  const gone = departedProblem(S, char);
+  if (gone) return { ok: false, problems: [gone] };
   const cast = metCharacters(S);
   if (!cast.includes(char)) {
     return { ok: false, problems: [problem('char', 'unknown_character',
       cast.length ? `the founder has met: ${cast.join(', ')}` : 'nobody has met the founder yet', { got: char })] };
   }
-  checkProse('text', text, W.POST_MAX, problems);
+  const mail = channel === 'mail';
+  if (channel != null && channel !== 'wire' && channel !== 'mail') {
+    problems.push(problem('channel', 'enum', 'wire or mail', { got: channel }));
+  }
+  // A letter may run longer than a post, and it carries a subject line.
+  checkProse('text', text, mail ? W.MAIL_MAX : W.POST_MAX, problems);
+  if (mail) checkProse('subject', subject, W.SUBJECT_MAX, problems, { tokens: false });
+  else if (subject != null) problems.push(problem('subject', 'unknown_key', 'a subject line belongs on mail — set channel to mail'));
   if (S._offline) problems.push(problem('', 'offline', 'the founder is away — wait for catch-up'));
   const left = postsLeftToday(S);
   if (left <= 0) {
@@ -510,8 +592,10 @@ export function validatePost(S, { char, text, ask } = {}) {
   }
   const replies = ask != null ? threadProblems(S, char, ask, problems) : null;
   return problems.length ? { ok: false, problems }
-                         : { ok: true, post: { char, text: String(text).trim(),
-                                               ...(replies ? { ask: replies } : {}) } };
+                         : { ok: true, warnings: lineVoiceWarnings(text),
+                             post: { char, text: String(text).trim(),
+                                     ...(mail ? { channel: 'mail', subject: String(subject).trim() } : {}),
+                                     ...(replies ? { ask: replies } : {}) } };
 }
 
 // What a reply in the Wire may move: the vocabulary minus the keys that are
@@ -619,6 +703,8 @@ function threadProblems(S, char, ask, problems) {
 }
 
 export function validateShock(S, { kind, days } = {}) {
+  const over = overRefusal(S);
+  if (over) return over;
   const problems = [];
   const KINDS_M = ['boom', 'tightening', 'crash'];
   if (!KINDS_M.includes(kind)) {
@@ -645,6 +731,8 @@ export function validateShock(S, { kind, days } = {}) {
 }
 
 export function validatePressure(S, { heat, line } = {}) {
+  const over = overRefusal(S);
+  if (over) return over;
   const problems = [];
   if (actOf(S) < 3) {
     return { ok: false, problems: [problem('', 'too_early',
@@ -677,15 +765,105 @@ export function validatePressure(S, { heat, line } = {}) {
                          : { ok: true, pressure: { heat: h, line: String(line).trim() } };
 }
 
-export function validateLine(S, text, max = W.LINE_MAX) {
+// ── The phone ───────────────────────────────────────────────────────────────
+// One reply on a call is a Wire reply's worth of consequence; the whole deal on
+// the table across a call is never more than one card. Both are judged here,
+// against the same ceilings, with the person on the line as the face — so
+// `affinity` is legal, and so is nothing the world could not do on a card.
+export function validateCallReply(S, call, { line, effects, hang_up } = {}) {
+  const over = overRefusal(S);
+  if (over) return over;
   const problems = [];
-  checkProse('text', text, max, problems);
-  return problems.length ? { ok: false, problems } : { ok: true, text: String(text).trim() };
+  if (!call || call.done) {
+    return { ok: false, problems: [problem('', 'no_call', 'there is no call open — wait_for_world will say when the founder picks up the phone')] };
+  }
+  if (call.mode !== 'world') {
+    return { ok: false, problems: [problem('', 'not_yours', 'that call is on the written line; the founder can hear only the authored voice')] };
+  }
+  if (!call.pending || call.pending.answered) {
+    problems.push(problem('', 'nothing_to_answer', 'the founder has not said anything new — wait_for_world returns their next line'));
+  }
+  checkProse('line', line, C.LINE_MAX, problems);
+  if (S._offline) problems.push(problem('', 'offline', 'the founder is away — wait for catch-up'));
+  const fx = effects && typeof effects === 'object' && !Array.isArray(effects) ? effects : {};
+  if (effects != null && fx !== effects) {
+    problems.push(problem('effects', 'type', 'an object of named fields, e.g. { "cash": -2000, "affinity": 3 }', { got: typeof effects }));
+  }
+  const keys = new Set(allowedKeys(S));
+  // Affinity is judged apart from the rest: it is what a call is for, so it
+  // gets a call's own multiple of the card ceiling rather than a reply's share.
+  const { affinity: aff, ...rest } = fx;
+  // This line, at a reply's scale.
+  effectProblems(S, 'effects', rest, 'neutral', problems, { char: call.char, keys, scale: C.CAP_MULT });
+  if (aff !== undefined) effectProblems(S, 'effects', { affinity: aff }, 'neutral', problems, { char: call.char, keys, scale: C.AFFINITY_MULT });
+  // And the whole deal, at a card's — what is already on the table plus this.
+  const merged = {};
+  for (const [k, v] of Object.entries(call.deal || {})) if (k !== 'flags' && Number.isFinite(v)) merged[k] = v;
+  for (const [k, v] of Object.entries(fx)) if (k !== 'flags' && Number.isFinite(v)) merged[k] = (merged[k] || 0) + v;
+  const { affinity: dealAff, ...dealRest } = merged;
+  const before = problems.length;
+  effectProblems(S, 'deal', dealRest, 'neutral', problems, { char: call.char, keys });
+  if (dealAff !== undefined) effectProblems(S, 'deal', { affinity: dealAff }, 'neutral', problems, { char: call.char, keys, scale: C.AFFINITY_MULT });
+  for (let i = before; i < problems.length; i++) {
+    problems[i].fix = `the whole deal on this call may never exceed one card: ${problems[i].fix}`;
+  }
+  return problems.length ? { ok: false, problems }
+    : { ok: true, reply: { line: String(line).trim(), hangUp: !!hang_up,
+        effects: Object.fromEntries(Object.entries(fx).filter(([k, v]) => k === 'flags' ? Array.isArray(v) && v.length : Number.isFinite(v) && v !== 0)) } };
+}
+
+export function validateRing(S, { char, line } = {}) {
+  const over = overRefusal(S);
+  if (over) return over;
+  const problems = [];
+  const gone = departedProblem(S, char);
+  if (gone) return { ok: false, problems: [gone] };
+  const cast = metCharacters(S);
+  if (!cast.includes(char)) {
+    return { ok: false, problems: [problem('char', 'unknown_character',
+      cast.length ? `the founder has met: ${cast.join(', ')}` : 'nobody has met the founder yet', { got: char })] };
+  }
+  checkProse('line', line, C.LINE_MAX, problems);
+  return problems.length ? { ok: false, problems }
+    : { ok: true, warnings: lineVoiceWarnings(line), ring: { char, line: String(line).trim() } };
+}
+
+// ── The last word ───────────────────────────────────────────────────────────
+// The one thing written *after* the ending, so it is the one validator that
+// wants `S.ending` to be set rather than refusing because it is. Once, because
+// a second one is a rewrite of the first, and the founder has already read it.
+export function validateEpilogue(S, text) {
+  const problems = [];
+  if (!S?.ending) {
+    return { ok: false, problems: [problem('', 'not_over',
+      'the run is still being played — this is for after it ends, when wait_for_world reports the ending')] };
+  }
+  if (S?.world?.author?.epilogue?.text) {
+    return { ok: false, problems: [problem('', 'already_written',
+      'the last word has been written; it is on their ending screen and on the shelf',
+      { got: String(S.world.author.epilogue.text).slice(0, 40) + '…' })] };
+  }
+  checkProse('text', text, W.EPILOGUE_MAX, problems);
+  return problems.length ? { ok: false, problems }
+    : { ok: true, warnings: lineVoiceWarnings(text), text: String(text).trim() };
+}
+
+// `path` names the field in the refusal: a line on the weather is `line`, a
+// line in ARIA's voice is `text`.
+export function validateLine(S, text, max = W.LINE_MAX, path = 'text') {
+  const over = overRefusal(S);
+  if (over) return over;
+  const problems = [];
+  checkProse(path, text, max, problems);
+  return problems.length ? { ok: false, problems }
+    : { ok: true, warnings: lineVoiceWarnings(text), text: String(text).trim() };
 }
 
 // A proposal answers what the founder typed: one choice's worth of consequence,
 // judged by the same ceilings, with the tone the world claims for it.
 export function validateProposal(S, { outcome, effects, tone = 'neutral' } = {}) {
+  const over = overRefusal(S);
+  if (over) return over;
   const problems = [];
   const active = S.narrative?.activeEvent;
   // Assistants call tools concurrently. Two answers to one typed sentence would

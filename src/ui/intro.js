@@ -17,7 +17,7 @@ import { rngState, setRngState } from '../engine/rng.js';
 import { capability } from '../webmcp/index.js';
 import { desiredTools, templateFor } from '../webmcp/surface.js';
 import { PLATFORM, REMEDY } from '../data/platform.js';
-import { LATE_START } from '../data/balance.js';
+import { LATE_START, NGPLUS, TIME, ACT_GATES, ENDINGS_FORCED } from '../data/balance.js';
 
 const ARCH_COLOR = { hacker: '#4dd0e1', designer: '#c084fc', hustler: '#f5a623',
   researcher: '#8b5cf6', operator: '#7c8a99', prophet: '#ffffff', ghost: '#6b7686' };
@@ -31,6 +31,10 @@ export const draft = {
   scenario: 'none',
   assistant: 'play',        // 'play' | 'mute' — asked only where both are real
   start: 'day0',            // 'day0' | 'act3' — where the run begins
+  letterToSelf: '',         // one line, posted back on the first day of Act IV
+  // New Game+, offered from the third run on. Each is a different world rather
+  // than a harder one, and each pays its own legacy multiplier.
+  ngWorld: false, ngRival: false, ngInvert: false,
 };
 
 let onStart = null;
@@ -53,8 +57,10 @@ const legacy = () => loadLegacy() || { runs: 0, unlockedArchetypes: ['hacker'] }
 // will hold the moment the run begins, and offers the one door that matters
 // for where the player is. Nothing here is a settings step — Begin is Begin.
 
-// What the world holds at day zero, from the same pure function that publishes
-// the surface, so the list on the title can never disagree with the popover.
+// The stable capability list, from the same pure function that publishes the
+// surface, so the title can never disagree with the popover. Some calls are
+// live-gated until play makes them legal; keeping their descriptors stable is
+// what lets one assistant stay connected for the whole run.
 export function openingHand() {
   const rng = rngState();
   let names = [];
@@ -66,11 +72,11 @@ export function openingHand() {
   };
 }
 const EARNED_BY_PLAY = [
-  ['post_as_<name>', 'the voice of anyone you meet'],
-  ['rival_move', 'once a rival becomes your nemesis'],
-  ['market_weather', 'from Act III'],
-  ['regulator_pressure', 'from Act III, until you earn Untouchable'],
-  ['read_the_rival', 'while the rival lab\'s own site is answering'],
+  ['post_as_character', 'becomes legal for each person you meet'],
+  ['rival_move', 'becomes legal once a rival enters'],
+  ['market_weather', 'becomes legal in Act III'],
+  ['regulator_pressure', 'becomes legal in Act III; Untouchable blocks it'],
+  ['read_the_rival', 'answers while the rival lab\'s own site is reachable'],
 ];
 
 // There is no documented host flag for a page to read. The desktop browser's
@@ -98,10 +104,11 @@ export function assistantMode() {
   return !on ? 'none' : inChatGPT() ? 'hosted' : 'tools';
 }
 
-// The one primary button says which game it opens.
+// The one primary button. It says whose game this is only where there is
+// somebody at the table; a first-ever visitor in an ordinary browser gets
+// **Begin**, not a consolation about the browser they did not open.
 function beginLabel() {
-  const m = assistantMode();
-  return m === 'hosted' ? 'Begin — with your assistant' : m === 'none' ? 'Begin — the written world' : 'Begin';
+  return assistantMode() === 'hosted' ? 'Begin — with your assistant' : 'Begin';
 }
 
 // The question, asked only where both answers are real: a browser with site
@@ -165,11 +172,39 @@ export function startPick() {
     </div>
   </div>`;
 }
-function openLabel() {
-  const m = assistantMode();
-  if (m === 'none') return 'Open the editor →';
-  return draft.assistant === 'mute' ? 'Open the editor — the written world →' : 'Open the editor — then connect →';
+// ── One line, to whoever is running this in three years ─────────────────────
+// A field on the last beat, and the only thing on it that is not a choice about
+// the run. What is typed here is held on `S.founder.letterToSelf` and posted
+// back, verbatim and unedited, on the first morning of Act IV — by which point
+// the person who wrote it has been gone for about a thousand days. Leaving it
+// blank is a real answer and gets its own letter, so there is no validation,
+// no asterisk and nothing to dismiss.
+export function letterPick() {
+  return `<div class="self-letter reveal">
+    <div class="adv-label">One line to the person running this in three years</div>
+    <textarea class="line-input self-letter-field" id="in-letter" rows="2" maxlength="240"
+      placeholder="Optional. It comes back when the company is large."
+      aria-label="A line to yourself, delivered in Act IV">${esc(draft.letterToSelf || '')}</textarea>
+  </div>`;
 }
+
+// The button at the threshold says where the run opens. It used to say "Open
+// the editor", which is what the button did and not what was being decided.
+function openLabel() {
+  const where = draft.start === 'act3' ? 'Begin — Act III' : 'Begin — day one';
+  if (assistantMode() !== 'none' && draft.assistant !== 'mute') return `${where}, then connect →`;
+  return `${where} →`;
+}
+
+// How many of the hand's tools get a chip of their own before the panel starts
+// costing the founder the Begin button. Ten is what fits a 420px screen.
+const HAND_CHIPS = 10;
+
+// §D6. The one sentence, before any name. It says where to open the page, who
+// the opponent is, and that it is *this* run rather than a mode — which is the
+// whole of what a first-time reader needs and none of what a protocol name
+// gives them.
+const PLAIN = 'Open this page inside ChatGPT\'s own browser and the ChatGPT you are talking to plays the market, the press and the rival — in this run.';
 
 // `brief` is for anyone who has seen the pitch: the status line and the doors,
 // nothing else. The full panel is for first sight.
@@ -180,7 +215,16 @@ export function webmcpPanel({ brief = false } = {}) {
   const hand = openingHand();
   const reason = on ? (cap.tier === 'legacy' ? cap.reason : '')
     : (cap.secure ? REMEDY : cap.reason);
-  const chips = hand.tools.map((t) => `<span class="wm-tool" data-tip="${esc(t.title)}">${esc(t.name)}</span>`).join('');
+  // The count is derived and stays honest; the list is a sample. The hand grew
+  // from ten tools to twenty-three and one chip apiece pushed Begin below the
+  // fold at 420px — which `tools/titleshot.mjs` is the thing that noticed. The
+  // rest are named in the last chip's note rather than dropped.
+  const shownTools = hand.tools.slice(0, HAND_CHIPS);
+  const restTools = hand.tools.slice(HAND_CHIPS);
+  const chips = shownTools.map((t) => `<span class="wm-tool" data-tip="${esc(t.title)}">${esc(t.name)}</span>`).join('')
+    + (restTools.length
+      ? `<span class="wm-tool wm-tool-more" data-tip="${esc(restTools.map((t) => esc(t.name)).join('<br>'))}" data-tip-title="The rest of the hand">+${restTools.length} more</span>`
+      : '');
   const later = hand.later.map(([n, why]) => `<span class="wm-later"><b>${esc(n)}</b> ${esc(why)}</span>`).join('');
   // A hand-off reloads the game in another browser, and saves do not follow.
   const saves = hasSave()
@@ -197,28 +241,40 @@ export function webmcpPanel({ brief = false } = {}) {
          <span class="wm-say">Open it there before setup so the game and its assistant begin together.</span>
          ${saves}
        </div>`;
+  // In the brief panel with no site tools the requirements line stays out: it
+  // is a list of browsers, and it lives in the Uplink, where a founder who
+  // wants the opponent goes looking for it. A legacy bridge keeps its reason,
+  // which is about this browser and worth one line.
+  const sayReason = reason && !(brief && !on);
   const status = `<div class="wm-status reveal">
       <span class="wm-dot ${on ? 'on' : ''}"></span>
       <span class="wm-state">${on ? 'Site tools on in this browser' : 'No site tools in this browser'}</span>
       <span class="wm-tier">${esc(cap.label)}</span>
     </div>
-    ${reason ? `<div class="wm-reason reveal">${esc(reason)}</div>` : ''}`;
+    ${sayReason ? `<div class="wm-reason reveal">${esc(reason)}</div>` : ''}`;
+  // §D6. The plain sentence first, then the standard. A new player's second
+  // paragraph used to be the name of a browser protocol — which describes the
+  // engineering and not the thing that happens to them. What happens to them is
+  // one sentence, and the standard's name is the line under it, where somebody
+  // who wants to know how goes looking.
   if (brief) {
     return `<section class="title-webmcp brief reveal" aria-label="Playing with your assistant">
+      <p class="wm-plain reveal">${PLAIN}</p>
       <div class="wm-kicker reveal"><span class="wm-mark">◈</span> The first game built on WebMCP</div>
       ${status}
       ${cta}
     </section>`;
   }
   return `<section class="title-webmcp reveal" aria-label="Playing with your assistant">
+    <p class="wm-plain reveal">${PLAIN}</p>
     <div class="wm-kicker reveal"><span class="wm-mark">◈</span> The first game built on WebMCP</div>
-    <p class="wm-lead reveal">Your own assistant plays the world against you. It shapes the opposition, the gameplay and the story: it writes the cards, speaks for the cast, moves the rival and turns the market — and you can take any of it away.</p>
+    <p class="wm-lead reveal">It shapes the opposition, the gameplay and the story: it writes the cards, speaks for the cast, moves the rival and turns the market — and you can take any of it away.</p>
     <p class="wm-lead dim reveal">It plays in full on its own. For the version with an opponent, use a WebMCP-capable browser: <b>${esc(PLATFORM.browser)}</b> or <b>${esc(PLATFORM.app)}</b> on ${esc(PLATFORM.presets)}.</p>
     ${status}
     <div class="wm-hand reveal">
       <div class="wm-label">The world's opening hand · ${hand.tools.length} tools, registered the moment the run begins</div>
       <div class="wm-tools">${chips}</div>
-      <div class="wm-label wm-label-later">Earned by play</div>
+      <div class="wm-label wm-label-later">Authority unlocked by play</div>
       <div class="wm-laters">${later}</div>
     </div>
     ${cta}
@@ -257,12 +313,13 @@ export async function showTitle({ cold = null } = {}) {
           Or just a person with a laptop in an age of unlimited leverage?</div>
         <div class="title-sub dim2">When machines can do anything you describe, how far does that go?</div>
         ${tiles}
-        ${webmcpPanel({ brief: hasSave() || (L.runs || 0) > 0 })}
-        ${tiles ? '' : `<div class="title-actions" id="title-actions">
-          ${hasSave() ? `<button class="btn btn-primary btn-lg reveal" data-act="continue-game">Continue</button>` : ''}
+        ${webmcpPanel({ brief: hasSave() || (L.runs || 0) > 0 || assistantMode() === 'none' })}
+        <div class="title-actions" id="title-actions">
+          ${tiles ? '' : `${hasSave() ? `<button class="btn btn-primary btn-lg reveal" data-act="continue-game">Continue</button>` : ''}
           <button class="btn ${hasSave() ? 'btn-ghost' : 'btn-primary'} btn-lg reveal" data-act="new-game">
-            ${hasSave() ? 'New timeline' : beginLabel()}</button>
-        </div>`}
+            ${hasSave() ? 'New timeline' : beginLabel()}</button>`}
+          <button class="btn btn-ghost btn-lg reveal" data-act="import-save-file">Import save file</button>
+        </div>
         ${L.runs > 0 ? `<div class="title-legacy reveal">
           <span>${L.runs} timeline${L.runs === 1 ? '' : 's'}</span>
           <span>${L.points || 0} legacy points</span>
@@ -297,19 +354,37 @@ export async function showTitle({ cold = null } = {}) {
 }
 
 // ── The beats ───────────────────────────────────────────────────────────────
-const BEATS = ['who', 'founder', 'building', 'threshold'];
+const ALL_BEATS = ['who', 'founder', 'building', 'threshold'];
 let beat = 0;
 let advanced = false;
 
+// One open archetype is not a question. On a first run the founder beat asked
+// it anyway — one card, one button, a strip of things you cannot have — so the
+// beat is skipped when there is nothing to choose, and the locked strip moves
+// to the threshold, where it reads as what the next run is for.
+function openArchetypes() {
+  const un = legacy().unlockedArchetypes || ['hacker'];
+  return ARCHETYPES.filter((a) => !a.unlockedBy || un.includes(a.id));
+}
+function lockedArchetypes() {
+  const un = legacy().unlockedArchetypes || ['hacker'];
+  return ARCHETYPES.filter((a) => a.unlockedBy && !un.includes(a.id));
+}
+function beats() {
+  return openArchetypes().length === 1 ? ALL_BEATS.filter((b) => b !== 'founder') : ALL_BEATS;
+}
+
 export function showIntro(startAt = 0) {
-  beat = Math.max(0, Math.min(BEATS.length - 1, startAt));
+  const open = openArchetypes();
+  if (open.length === 1) draft.archetype = open[0].id;
+  beat = Math.max(0, Math.min(beats().length - 1, startAt));
   renderBeat();
 }
 
-export function introBeat() { return BEATS[beat]; }
+export function introBeat() { return beats()[beat]; }
 
 export async function nextBeat() {
-  if (beat >= BEATS.length - 1) return;
+  if (beat >= beats().length - 1) return;
   await leave();
   beat++;
   renderBeat();
@@ -392,18 +467,20 @@ export function endStageCue() {
   cueOff = null;
 }
 
-function chrome(index) {
+function chrome(id) {
+  const list = beats();
+  const index = Math.max(0, list.indexOf(id));
   return `<div class="beat-chrome">
     <button class="beat-back" data-act="beat-back" title="Back">←</button>
     <div class="beat-dots">
-      ${BEATS.map((_, i) => `<span class="beat-dot ${i === index ? 'on' : ''} ${i < index ? 'done' : ''}"></span>`).join('')}
+      ${list.map((_, i) => `<span class="beat-dot ${i === index ? 'on' : ''} ${i < index ? 'done' : ''}"></span>`).join('')}
     </div>
-    <div class="beat-count">${index + 1} / ${BEATS.length}</div>
+    <div class="beat-count">${index + 1} / ${list.length}</div>
   </div>`;
 }
 
 async function renderBeat() {
-  const id = BEATS[beat];
+  const id = beats()[beat];
   const fn = id === 'who' ? beatWho : id === 'founder' ? beatFounder
     : id === 'building' ? beatBuilding : beatThreshold;
   // Each beat writes its innerHTML before its first `await`, so the stage is on
@@ -418,7 +495,7 @@ async function renderBeat() {
 async function beatWho() {
   app().innerHTML = `
   <div class="stage"><div class="beat narrow" id="beat">
-    ${chrome(0)}
+    ${chrome('who')}
     <div class="beat-body narrow">
       <div class="beat-q" id="q"></div>
       <div class="beat-fields reveal">
@@ -457,14 +534,13 @@ async function beatWho() {
 
 // ── 2. Founder ──────────────────────────────────────────────────────────────
 async function beatFounder() {
-  const un = legacy().unlockedArchetypes || ['hacker'];
-  const open = ARCHETYPES.filter((a) => !a.unlockedBy || un.includes(a.id));
-  const shut = ARCHETYPES.filter((a) => !(!a.unlockedBy || un.includes(a.id)));
+  const open = openArchetypes();
+  const shut = lockedArchetypes();
   const single = open.length === 1;
 
   app().innerHTML = `
   <div class="stage"><div class="beat ${single ? 'narrow' : ''}" id="beat">
-    ${chrome(1)}
+    ${chrome('founder')}
     <div class="beat-body ${single ? 'narrow' : ''}">
       <div class="beat-q" id="q"></div>
       <div class="beat-sub reveal">${single
@@ -478,22 +554,29 @@ async function beatFounder() {
             <span class="cc-name">${esc(a.name)}</span>
             <span class="cc-tag">${esc(a.tagline)}</span>
             <span class="cc-desc">${esc(a.desc)}</span>
+            ${a.perk ? `<span class="cc-perk">${esc(a.perk)}</span>` : ''}
             <span class="cc-stats">${archStats(a)}</span>
           </button>`).join('')}
       </div>
-      ${shut.length ? `<div class="locked-strip reveal">
-        <div class="locked-label">${single ? 'Waiting for you' : 'Still locked'}</div>
-        <div class="locked-row">
-          ${shut.map((a) => `<span class="locked-chip"
-            data-tip="${esc(a.desc)}<br><br><b>Unlocks:</b> ${esc(unlockHint(a))}" data-tip-title="${esc(a.name)} — locked">
-            <span style="color:${ARCH_COLOR[a.id]};opacity:.55">${a.icon}</span> ${esc(a.name)}</span>`).join('')}
-        </div>
-      </div>` : ''}
+      ${lockedStrip(shut, single ? 'Waiting for you' : 'Still locked')}
     </div>
   </div></div>`;
   await typeInto(document.getElementById('q'),
     single ? 'You are a builder.' : 'What kind of founder are you?', { cps: 38 });
   await stagger(document.querySelectorAll('#beat .reveal'), { gap: 70, delay: 100 });
+}
+
+// The archetypes a run has not earned yet, with what earns each.
+function lockedStrip(shut, label) {
+  if (!shut.length) return '';
+  return `<div class="locked-strip reveal">
+    <div class="locked-label">${esc(label)}</div>
+    <div class="locked-row">
+      ${shut.map((a) => `<span class="locked-chip"
+        data-tip="${esc(a.desc)}<br><br><b>Unlocks:</b> ${esc(unlockHint(a))}" data-tip-title="${esc(a.name)} — locked">
+        <span style="color:${ARCH_COLOR[a.id]};opacity:.55">${a.icon}</span> ${esc(a.name)}</span>`).join('')}
+    </div>
+  </div>`;
 }
 
 const UNLOCK_HINT = {
@@ -510,7 +593,7 @@ function unlockHint(a) { return UNLOCK_HINT[a.id] || 'keep playing'; }
 async function beatBuilding() {
   app().innerHTML = `
   <div class="stage"><div class="beat" id="beat">
-    ${chrome(2)}
+    ${chrome('building')}
     <div class="beat-body">
       <div class="beat-q" id="q"></div>
       <div class="beat-sub reveal">Every category is a different economy. Choose the one you want to live in.</div>
@@ -521,14 +604,7 @@ async function beatBuilding() {
             <span class="cc-name">${esc(c.name)}</span>
             <span class="cc-tag">${esc(c.tagline)}</span>
             <span class="cc-desc">${esc(c.desc)}</span>
-            <span class="cc-stats">
-              <span class="cc-stat">market ${fmt(c.tam)}</span>
-              <span class="cc-stat">viral ${c.baseViral.toFixed(2)}</span>
-              <span class="cc-stat">churn ${(c.baseChurn * 100).toFixed(1)}%</span>
-              <span class="cc-stat">${money(c.basePrice)}/mo</span>
-              ${c.regRisk > 0.6 ? '<span class="cc-stat warn">scrutiny</span>' : ''}
-              ${c.coldStart ? '<span class="cc-stat warn">cold start</span>' : ''}
-            </span>
+            <span class="cc-stats">${catStats(c)}</span>
           </button>`).join('')}
       </div>
     </div>
@@ -546,21 +622,30 @@ async function beatThreshold() {
   const diff = DIFFICULTIES.find((d) => d.id === draft.difficulty) || DIFFICULTIES[1];
   const scen = SCENARIOS.find((s) => s.id === draft.scenario) || SCENARIOS[0];
 
+  // The card names the two choices and, under each, what the choice does to
+  // the run — the same chips the beats showed — so "None of this can be
+  // changed later" stands over something rather than beside two nouns.
+  const archMods = archStats(a);
+  const single = openArchetypes().length === 1;
   app().innerHTML = `
   <div class="stage"><div class="beat narrow threshold-beat" id="beat">
-    ${chrome(3)}
+    ${chrome('threshold')}
     <div class="beat-body narrow">
       <div class="threshold-lines" id="lines"></div>
       <div class="threshold-card reveal">
         <span class="tc-row"><span class="tc-icon" style="color:${ARCH_COLOR[a.id]}">${a.icon}</span>
           <span><b>${esc(draft.founderName || 'You')}</b> — ${esc(a.name)}</span></span>
+        ${archMods ? `<span class="tc-mods">${archMods}</span>` : ''}
         <span class="tc-row"><span class="tc-icon" style="color:${c.color}">${c.icon}</span>
           <span><b>${esc(draft.companyName || 'Untitled')}</b> — ${esc(c.name)}</span></span>
+        <span class="tc-mods">${catStats(c)}</span>
         ${showAdv ? `<span class="tc-row"><span class="tc-icon" style="color:${diff.color}">${diff.icon}</span>
           <span>${esc(diff.name)}${scen.id !== 'none' ? ` · ${esc(scen.name)}` : ''}</span></span>` : ''}
       </div>
+      ${single ? lockedStrip(lockedArchetypes(), 'Waiting for you — six more founders, each earned by a run') : ''}
       ${showAdv ? `<button class="adv-toggle reveal" data-act="toggle-adv">${advanced ? 'Hide' : 'Adjust'} the run conditions</button>` : ''}
       ${showAdv && advanced ? advancedPanel(L) : ''}
+      ${letterPick()}
       ${assistantPick()}
       ${startPick()}
       <button class="btn btn-primary btn-lg beat-next reveal" data-act="start-game">${openLabel()}</button>
@@ -576,6 +661,8 @@ async function beatThreshold() {
     'That is everything the world knows.',
     'It is 4am and nobody is waiting on you.',
   ], { mode: 'fade', gap: 900 });
+  document.getElementById('in-letter')
+    ?.addEventListener('input', (e) => { draft.letterToSelf = e.target.value; });
   await stagger(document.querySelectorAll('#beat .reveal'), { gap: 120, delay: 80 });
 }
 
@@ -598,23 +685,103 @@ function advancedPanel(L) {
         data-tip="${esc(s.desc)}" data-tip-title="${esc(s.name)}">
         ${s.icon} ${esc(s.name)}${s.legacyMult !== 1 ? ` <span class="adv-mult">×${s.legacyMult.toFixed(2)}</span>` : ''}</button>`).join('')}
     </div>
+    <div class="adv-label">How the days pass</div>
+    <div class="adv-row">
+      <button class="adv-chip ${draft.pace !== 'long' ? 'on' : ''}" style="--ac:#4dd0e1" data-act="pick-pace" data-v="sitting"
+        data-tip="The clock runs while you play, at one to five times. A full run is an evening or two." data-tip-title="One sitting">◷ One sitting</button>
+      <button class="adv-chip ${draft.pace === 'long' ? 'on' : ''}" style="--ac:#f5a623" data-act="pick-pace" data-v="long"
+        data-tip="A month of the company for every real day you are away. The clock holds after a month of live play, the inbox fills while you are gone, and a run lives in your week rather than your evening." data-tip-title="The long game">☾ The long game</button>
+    </div>
+    <div class="adv-note">${runLengthLine()}</div>
+    ${ngRow(L)}
     <div class="adv-note">Harder conditions pay more Legacy points when the run ends.</div>
   </div>`;
+}
+
+// ── §D7. How long a run is ──────────────────────────────────────────────────
+// Nothing on the opening screen has ever said whether this is twenty minutes or
+// twenty hours, which is the first thing anybody wants to know and the one
+// question the interface refused to answer. It is *derived*: the four act
+// floors plus the window Act V leaves open are the shortest and longest a full
+// timeline can be, and `TIME.DAY_SECONDS` and `TIME.SPEEDS` turn those into
+// clock time. A number in prose should be read, not typed.
+export function runLengthDays() {
+  const toActV = ACT_GATES.ACT2_MIN_DAYS + ACT_GATES.ACT3_MIN_DAYS + ACT_GATES.ACT4_MIN_DAYS + ACT_GATES.ACT5_MIN_DAYS;
+  return [toActV + ENDINGS_FORCED.ACT5_WINDOW_MIN, toActV + ENDINGS_FORCED.ACT5_WINDOW];
+}
+
+function clockSpan(days, speed) {
+  const h = (days * TIME.DAY_SECONDS) / speed / 3600;
+  if (h >= 1.6) return `${h.toFixed(1)} hours`;
+  if (h >= 0.95) return 'about an hour';
+  return `${Math.round(h * 60)} minutes`;
+}
+
+function runLengthLine() {
+  const [lo, hi] = runLengthDays();
+  const top = TIME.SPEEDS[TIME.SPEEDS.length - 1];
+  return `A full timeline is ${fmt(lo)}–${fmt(hi)} in-game days — ${clockSpan(hi, 1)} of clock at 1×, `
+    + `${clockSpan(lo, top)} at ${top}×. How long you take over the decisions is the rest of it.`;
+}
+
+// ── New Game+ ───────────────────────────────────────────────────────────────
+// From the third run on. These are not difficulty: each one changes the shape
+// of the world you are walking into, and the third reads the last timeline's
+// ending out of the dossier — so what "inverted" means is different depending
+// on how the run before this one finished.
+function ngRow(L) {
+  if ((L.runs || 0) < NGPLUS.MIN_RUNS) return '';
+  const last = (L.dossier || [])[(L.dossier || []).length - 1];
+  const invertLine = last?.ending === 'refusal'
+    ? 'You stopped last time. This world\'s labs are slower for it.'
+    : last?.ending === 'sovereign'
+      ? 'You became a dependency last time. Senator Dorne opens hostile.'
+      : last
+        ? `Nothing in ${esc(last.endingName)} inverts yet — the toggle is stored and the world reads it where it can.`
+        : 'Nothing to invert: there is no finished timeline behind this one.';
+  const chip = (key, on, colour, icon, name, tip, tipTitle, mult) => `<button
+    class="adv-chip ${on ? 'on' : ''}" style="--ac:${colour}" data-act="pick-ng" data-v="${key}"
+    data-tip="${esc(tip)}" data-tip-title="${esc(tipTitle)}">${icon} ${esc(name)}
+    <span class="adv-mult">×${mult.toFixed(2)}</span></button>`;
+  return `<div class="adv-label">New Game+</div>
+    <div class="adv-row">
+      ${chip('ngWorld', draft.ngWorld, '#8b5cf6', '∞', 'The world remembers',
+        'The cast, the rival labs and the opening conditions read the timelines behind this one.',
+        'The world remembers', NGPLUS.LEGACY_WORLD)}
+      ${chip('ngRival', draft.ngRival, '#ff4d5e', '⚔', 'A harder rival',
+        `Aperture Systems opens with ${NGPLUS.RIVAL_FUNDING.toFixed(1)}× the money, from the first morning.`,
+        'A harder rival', NGPLUS.LEGACY_RIVAL)}
+      ${chip('ngInvert', draft.ngInvert, '#4dd0e1', '⇄', 'An inverted timeline',
+        invertLine, 'An inverted timeline', NGPLUS.LEGACY_INVERT)}
+    </div>`;
 }
 
 function archStats(a) {
   const out = [];
   for (const [k, v] of Object.entries(a.mods || {})) {
     if (k.startsWith('+')) { out.push(`<span class="cc-stat">${k.slice(1)} +${v}</span>`); continue; }
+    // `luck` is a share, not a multiplier: 0.6 lifts opportunity and milestone
+    // draws by 60% and cuts crisis draws by half that. See drawEvent.
+    if (k === 'luck') { out.push(`<span class="cc-stat up">good cards +${Math.round(v * 100)}%</span>`); continue; }
     const p = Math.round((v - 1) * 100);
     if (!p) continue;
     out.push(`<span class="cc-stat ${p > 0 ? 'up' : 'down'}">${label(k)} ${p > 0 ? '+' : ''}${p}%</span>`);
   }
   return out.join('');
 }
+// A category's economy in five chips, on its card and again at the threshold.
+function catStats(c) {
+  return `<span class="cc-stat">market ${fmt(c.tam)}</span>
+    <span class="cc-stat">viral ${c.baseViral.toFixed(2)}</span>
+    <span class="cc-stat">churn ${(c.baseChurn * 100).toFixed(1)}%</span>
+    <span class="cc-stat">${money(c.basePrice)}/mo</span>
+    ${c.regRisk > 0.6 ? '<span class="cc-stat warn">scrutiny</span>' : ''}
+    ${c.coldStart ? '<span class="cc-stat warn">cold start</span>' : ''}`;
+}
 const LABELS = { codeRate: 'code', debtRate: 'debt', repRate: 'reputation', conversion: 'conversion',
   churn: 'churn', mrrMult: 'revenue', arpu: 'arpu', researchRate: 'research', agentOutput: 'agents',
-  opCost: 'costs', valuationMult: 'valuation', competitorGrowth: 'rivals', rivalHeat: 'rival heat' };
+  opCost: 'costs', valuationMult: 'valuation', competitorGrowth: 'rivals', rivalHeat: 'rival heat',
+  raiseValuation: 'round offers', incidentChance: 'incidents', heatRate: 'heat' };
 function label(k) { return LABELS[k] || k; }
 
 // ── Selection helpers ───────────────────────────────────────────────────────
@@ -661,10 +828,15 @@ export function getConfig() {
     // 'none' where there was nothing to decide; the game ignores it.
     assistant: assistantMode() === 'none' ? 'none' : (draft.assistant === 'mute' ? 'mute' : 'play'),
     start: draft.start === 'act3' ? 'act3' : 'day0',
+    pace: draft.pace === 'long' ? 'long' : 'sitting',
+    // Plain text, one line: it is posted back through `md()`, which escapes,
+    // and a newline in the middle of a quoted block reads as two letters.
+    letterToSelf: String(draft.letterToSelf || '').replace(/\s+/g, ' ').trim().slice(0, 240),
+    ngWorld: !!draft.ngWorld, ngRival: !!draft.ngRival, ngInvert: !!draft.ngInvert,
   };
 }
 
-export function setDraft(k, v) { draft[k] = v; if (BEATS[beat] === 'threshold') renderBeat(); }
+export function setDraft(k, v) { draft[k] = v; if (beats()[beat] === 'threshold') renderBeat(); }
 
 // ── The curtain ─────────────────────────────────────────────────────────────
 // A held beat between choosing and playing, so the game does not simply appear.

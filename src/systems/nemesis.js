@@ -8,21 +8,32 @@
 // of their attention you occupy, not of who is winning.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { MOVES, MOVE_MAP, COUNTERS, COUNTER_MAP, grudgeBand } from '../data/nemesis.js';
+import { MOVES, MOVE_MAP, COUNTERS, COUNTER_MAP, GOALS, GOAL_MAP, grudgeBand,
+         APPROACH, APPROACH_META } from '../data/nemesis.js';
 import { RIVAL_PERSONALITIES, activeCompetitors } from './market.js';
 import { totalUsers, totalMrr } from './product.js';
 import { pushFeed } from './feed.js';
+import { computeMods, agentStats } from './modifiers.js';
+import { INCIDENTS as IB } from '../data/balance.js';
+import { fireAgent, intelLevel } from './agents.js';
+import { AGENTS, NEMESIS as N } from '../data/balance.js';
+import { REGION_MAP } from '../data/regions.js';
 import { clamp } from '../engine/format.js';
-import { chance, weightedPick, randRange } from '../engine/rng.js';
+import { chance, weightedPick, randRange, pick } from '../engine/rng.js';
 import { emit } from '../engine/bus.js';
 
-const DESIGNATE_AFTER_DAYS = 45;    // they have to survive before they count
-const DESIGNATE_THREAT = 1.0;
-const DROP_THREAT = 0.28;           // fall this far behind for long enough and it is over
-const DROP_PATIENCE = 90;
+const DESIGNATE_AFTER_DAYS = N.DESIGNATE_AFTER_DAYS;
+const DESIGNATE_THREAT = N.DESIGNATE_THREAT;
 
 export function nemesisState(S) {
   if (!S.market.nemesis) S.market.nemesis = { id: null, grudge: 0, moves: [], since: 0, lowDays: 0 };
+  // §A14. A save that predates the season grows one on the next tick.
+  S.market.nemesis.season ??= null;
+  S.market.nemesis.seasons ??= [];
+  S.market.nemesis.quietDays ??= 0;
+  // §H13. What they have started and not finished: a name they have gone
+  // after, or a product they have named. A save from before this has none.
+  S.market.nemesis.pending ??= null;
   return S.market.nemesis;
 }
 
@@ -90,13 +101,89 @@ function updateGrudge(S, c, days) {
   c.grudge = n.grudge;
 }
 
+// The moves Private Security closes: nobody gets to your people or your
+// distribution once the perimeter has a doctrine. Sabotage is an incident,
+// and incidents.js drops it from the pool for the same modifier.
+const HOSTILE = new Set(['poach', 'channel', 'sabotage']);
+
+// ── §A14 The season ─────────────────────────────────────────────────────────
+// They choose something to be trying to do, say enough about it in the Wire
+// that a founder paying attention can work it out, spend a season's moves on
+// it, and at the end of it one of them was right. `S.market.nemesis.season`
+// holds the whole of it, and the last few are kept so the Market view can
+// print a record rather than a mood.
+
+export function activeGoal(S) {
+  const n = nemesisState(S);
+  const se = n.season;
+  if (!se) return null;
+  const g = GOAL_MAP[se.goal];
+  return g ? { ...se, def: g, name: g.name, sub: g.sub } : null;
+}
+
+// The number the goal is judged against, read on the day the season opens.
+function seasonMark(S, c, goal) {
+  if (goal.id === 'category') return c.users;
+  if (goal.id === 'story') return S.resources.reputation || 0;
+  return 0;
+}
+
+function openSeason(S, c) {
+  const n = nemesisState(S);
+  const usable = GOALS.map((g) => ({ g, t: safeCall(() => g.pick(S, c)) })).filter((x) => x.t);
+  if (!usable.length) return null;
+  const chosen = weightedPick(usable, usable.map((x) => x.g.weight ?? 1));
+  const { g, t } = chosen;
+  n.season = {
+    goal: g.id, key: t.key, label: t.label, startedDay: Math.floor(S.time.day),
+    mark: seasonMark(S, c, g), moves: 0, told: false,
+    regionName: g.id === 'bloc' ? (REGION_MAP[t.key]?.name || t.label) : null,
+  };
+  // The telegraph. One line, in their founder's voice, that gives the season
+  // away without naming it — which is what `intelReveals` is for.
+  const line = safeCall(() => g.telegraph(S, c, n.season)) || '';
+  if (line) {
+    pushFeed(S, { type: 'social', tone: 'bad', author: c.handle || `@${c.founder.split(' ')[0].toLowerCase()}`,
+      text: fillLine(line, S, c), meta: `${c.name} · ${N.TELEGRAPH_META}` });
+    n.season.told = true;
+  }
+  emit('nemesis:season', { competitor: c, season: n.season, goal: g });
+  return n.season;
+}
+
+function closeSeason(S, c) {
+  const n = nemesisState(S);
+  const se = n.season;
+  if (!se) return;
+  const g = GOAL_MAP[se.goal];
+  const won = g ? !!safeCall(() => g.judge(S, c, se, se)) : false;
+  const text = g ? safeCall(() => (won ? g.won : g.lost)(S, c, se, se)) : '';
+  if (text) {
+    pushFeed(S, { type: 'news', tone: won ? 'bad' : 'good', author: 'The Ledger',
+      text: fillLine(text, S, c), meta: `${c.name} · ${won ? N.SEASON_WON : N.SEASON_LOST}` });
+  }
+  n.seasons.unshift({ goal: se.goal, label: se.label, day: Math.floor(S.time.day), won, moves: se.moves });
+  if (n.seasons.length > N.SEASONS_KEEP) n.seasons.length = N.SEASONS_KEEP;
+  // Winning a season is its own escalation; losing one costs them nothing but
+  // the quarter, and a rival who has just failed is a rival with something to
+  // prove.
+  n.grudge = clamp(n.grudge + (won ? N.SEASON_WON_GRUDGE : N.SEASON_LOST_GRUDGE), 0, 3.4);
+  c.grudge = n.grudge;
+  n.season = null;
+  emit('nemesis:season_end', { competitor: c, won, goal: g });
+}
+
+function safeCall(fn) { try { return fn(); } catch { return null; } }
+
 function movePool(S, c) {
   const n = nemesisState(S);
+  const mods = computeMods(S);
   const recent = n.moves.slice(0, 3).map((m) => m.id);
   return MOVES.filter((m) => {
     if (m.min > n.grudge) return false;
     if (m.only && !m.only.includes(c.personality)) return false;
     if (m.need && !safe(m.need, S)) return false;
+    if (mods.hostileImmune && HOSTILE.has(m.id)) return false;
     if (recent.includes(m.id)) return false;     // do not repeat themselves
     return true;
   });
@@ -104,14 +191,162 @@ function movePool(S, c) {
 
 function safe(fn, S) { try { return !!fn(S); } catch { return false; } }
 
-function fillLine(text, S, c) {
+function fillLine(text, S, c, ctx = {}) {
   const p = S.products[0];
   return String(text)
     .replace(/\{you\}/g, S.company.name)
     .replace(/\{them\}/g, c.name)
     .replace(/\{founder\}/g, c.founder)
     .replace(/\{product\}/g, p?.name || S.company.name)
-    .replace(/\{cat\}/g, p?.category || 'category');
+    .replace(/\{cat\}/g, p?.category || 'category')
+    .replace(/\{lane\}/g, ctx.lane || 'the')
+    .replace(/\{agent\}/g, ctx.poached || ctx.approached || 'your best engineer');
+}
+
+// ── §H13 A move with a target, and a window ─────────────────────────────────
+// A poach used to be a coin flip inside one tick: the roll, the departure and
+// the line all in the same frame. `availableCounters` had existed since the
+// feud did with nobody able to press anything against it, because by the time
+// a founder read the Wire the answer was already in the past.
+//
+// So the move opens an *approach*: they pick a name (or a product), the money
+// is on the table for `LEAD_DAYS`, and `resolvePending` below decides it. One
+// at a time — two open windows is two modal decisions about the same feud —
+// and only what the founder has bought the ability to see is telegraphed.
+
+// What the founder can see of an approach before it lands. Intelligence agents
+// on Operations read it off the recruiter traffic; a Vance who takes your
+// calls simply tells you, which is what a warm tie to a rival is *for*.
+export function seesApproach(S) {
+  if (intelReveals(S)) return 'intel';
+  const w = S.founder?.life?.ties?.vance?.warmth;
+  return typeof w === 'number' && w >= N.TELEGRAPH_WARMTH ? 'vance' : null;
+}
+
+// The approach on the table, if there is one and it is still answerable.
+export function pendingApproach(S) {
+  const p = nemesisState(S).pending;
+  if (!p) return null;
+  return { ...p, answerable: !p.countered && S.time.day <= p.counterUntil };
+}
+
+function telegraph(S, c, p) {
+  const how = seesApproach(S);
+  if (!how) return;
+  const lines = APPROACH[p.kind] || [];
+  if (!lines.length) return;
+  pushFeed(S, {
+    type: 'news', tone: 'bad', author: how === 'vance' ? (c.handle || '@mvance') : 'Operations',
+    text: fillLine(pick(lines), S, c, { lane: p.lane, product: p.product }),
+    meta: how === 'vance' ? `${c.founder} · told you, and did not have to` : APPROACH_META,
+  });
+  p.told = how;
+}
+
+// They come for whoever is least happy and most used to acting alone, and the
+// roll is against that agent's morale and autonomy — so the defence is the one
+// the card has always shown you. Redundant agents are never in the draw. The
+// rest of the roster feels it at the approach, which is what the move's `sub`
+// has always said: everyone hears the number.
+function poachAgent(S, c) {
+  const m = computeMods(S);
+  const n = nemesisState(S);
+  const pool = (S.agents || []).filter((a) => a.status === 'active' && !agentStats(a, S, m).indestructible);
+  const out = { effects: [], poached: null, approached: null };
+  if (!pool.length || n.pending) return out;
+  const target = weightedPick(pool, pool.map((a) => 0.05 + (1 - (a.morale ?? 1)) + (a.autonomy ?? 0.5) * 0.5));
+  for (const a of S.agents) if (a !== target) a.morale = clamp((a.morale ?? 1) - AGENTS.POACH_ROSTER_MORALE_HIT, 0.1, 1);
+  const odds = clamp(AGENTS.POACH_BASE + (1 - (target.morale ?? 1)) * AGENTS.POACH_MORALE_RATE
+    + (target.autonomy ?? 0.5) * AGENTS.POACH_AUTONOMY_RATE, 0, AGENTS.POACH_MAX);
+  const day = Math.floor(S.time.day);
+  // The price of keeping them is what they already draw, for a quarter. It is
+  // fixed when the window opens rather than read when the button is pressed,
+  // so the number in the Market view is the number that is charged.
+  const keepCost = Math.max(N.COUNTER_OFFER_FLOOR,
+    Math.round(agentStats(target, S, m).upkeep * N.COUNTER_OFFER_DAYS));
+  n.pending = { kind: 'poach', id: target.id, name: target.name,
+                lane: target.lane || target.spec || 'the team', odds, keepCost,
+                opened: day, resolveOn: day + N.LEAD_DAYS,
+                counterUntil: day + Math.min(N.COUNTER_WINDOW_DAYS, N.LEAD_DAYS),
+                countered: false, told: null };
+  telegraph(S, c, n.pending);
+  out.approached = target.name;
+  out.effects = [[`${target.name} approached`, -1], ['morale', -Math.round(AGENTS.POACH_ROSTER_MORALE_HIT * 100)]];
+  emit('nemesis:approach', { competitor: c, pending: n.pending });
+  return out;
+}
+
+// The same shape, pointed at a product rather than a person. They name it, the
+// week is spent mapping it, and the founder either hardens it or does not.
+function sabotageTarget(S, c) {
+  const n = nemesisState(S);
+  const out = { effects: [], product: null };
+  const p = (S.products || []).find((x) => x.id === S.activeProductId && x.launched)
+    || (S.products || []).find((x) => x.launched);
+  if (!p || n.pending) return out;
+  const day = Math.floor(S.time.day);
+  n.pending = { kind: 'sabotage', id: p.id, name: p.name, product: p.name,
+                code: N.HARDEN_CODE, focus: N.HARDEN_FOCUS,
+                opened: day, resolveOn: day + N.LEAD_DAYS,
+                counterUntil: day + Math.min(N.COUNTER_WINDOW_DAYS, N.LEAD_DAYS),
+                countered: false, told: null };
+  telegraph(S, c, n.pending);
+  out.product = p.name;
+  out.effects = [[`${p.name} named`, -1]];
+  emit('nemesis:approach', { competitor: c, pending: n.pending });
+  return out;
+}
+
+// The day it lands. A counter-offer does not make an approach go away — it
+// makes it much more likely to be refused, and the money is spent either way.
+function resolvePending(S, c) {
+  const n = nemesisState(S);
+  const p = n.pending;
+  if (!p || S.time.day < p.resolveOn) return;
+  n.pending = null;
+  // Nobody leaves while the founder is away, for the reason the emergency
+  // spin-down never fires offline.
+  if (S._offline) return;
+  const handle = c?.handle || '@mvance';
+  if (p.kind === 'poach') {
+    const target = (S.agents || []).find((a) => a.id === p.id && a.status === 'active');
+    if (!target) return;
+    const cooled = S.time.day - (n.lastPoachDay ?? -1e9) >= AGENTS.POACH_COOLDOWN_DAYS;
+    const odds = p.odds * (p.countered ? 1 - N.COUNTER_OFFER_ODDS : 1);
+    if (cooled && chance(odds)) {
+      fireAgent(S, target.id, 'poached');
+      n.lastPoachDay = Math.floor(S.time.day);
+      pushFeed(S, { type: 'social', tone: 'bad', author: handle,
+        text: `${target.name} starts with us on monday. we did not have to ask twice.`,
+        meta: `${c?.name || 'They'} · The offer was taken` });
+      emit('nemesis:landed', { kind: 'poach', name: target.name, countered: !!p.countered });
+      return;
+    }
+    target.morale = clamp((target.morale ?? 1) - AGENTS.POACH_TARGET_MORALE_HIT, 0.1, 1);
+    pushFeed(S, { type: 'news', tone: p.countered ? 'good' : 'neutral', author: 'Operations',
+      text: p.countered
+        ? `${target.name} turned it down on Thursday. The offer you matched is on the record now, and so is the fact that you matched it.`
+        : `${target.name} turned it down on Thursday and did not mention it until Monday, which is the part to think about.`,
+      meta: `${c?.name || 'They'} · The offer was refused` });
+    emit('nemesis:landed', { kind: 'poach', name: target.name, stayed: true, countered: !!p.countered });
+    return;
+  }
+  if (p.kind === 'sabotage') {
+    const relief = p.countered ? N.HARDEN_RELIEF : 0;
+    const sev = IB.SABOTAGE_SEVERITY * (1 - relief);
+    S.resources.techDebt += IB.SABOTAGE_DEBT * sev;
+    S.company.cash -= IB.SABOTAGE_CASH * sev;
+    if ((S.agents || []).length > 1 && !p.countered) {
+      const a = pick(S.agents);
+      if (a) a.morale = clamp((a.morale ?? 1) * IB.SABOTAGE_MORALE_MULT, 0.1, 1);
+    }
+    pushFeed(S, { type: 'news', tone: p.countered ? 'neutral' : 'bad', author: 'Operations',
+      text: p.countered
+        ? `Somebody spent four hours inside ${p.product} on Sunday and left with the same access they arrived with. The fortnight you spent was the cheapest fortnight of the quarter.`
+        : `Somebody spent four hours inside ${p.product} on Sunday. What they took is not the interesting part; what they left is a fortnight of work and a bill.`,
+      meta: `${c?.name || 'They'} · ${p.countered ? 'Held' : 'It landed'}` });
+    emit('nemesis:landed', { kind: 'sabotage', name: p.product, countered: !!p.countered });
+  }
 }
 
 // `forced` names a specific move; `lineOverride` replaces what they post while
@@ -123,21 +358,38 @@ export function runMove(S, c, forced, lineOverride) {
   const pool = forced ? [MOVE_MAP[forced]].filter(Boolean) : movePool(S, c);
   if (!pool.length) return null;
   if (forced && !movePool(S, c).some((m) => m.id === forced)) return null;
-  const move = weightedPick(pool, pool.map((m) => m.weight));
+  // §A14. A season pulls the draw toward the moves that serve it. It is a
+  // weight and nothing else: every move that was legal is still legal, and a
+  // rival with no season draws exactly as it always did.
+  const favours = GOAL_MAP[n.season?.goal]?.favours || [];
+  const move = weightedPick(pool,
+    pool.map((m) => m.weight * (favours.includes(m.id) ? N.GOAL_WEIGHT : 1)));
+  const mods = computeMods(S);
+  // What a move may reach into the game with, the way a card reaches through
+  // `fx`: the data never imports a system. `ctx` carries back what happened
+  // so the line can name it.
+  const ctx = {};
+  const sys = {
+    poach: (S_, c_) => { const r = poachAgent(S_, c_); Object.assign(ctx, r); return r.effects; },
+    sabotage: (S_, c_) => { const r = sabotageTarget(S_, c_); Object.assign(ctx, r); return r.effects; },
+  };
   let effects = [];
-  try { effects = move.effect(S, c) || []; } catch { effects = []; }
+  try { effects = move.effect(S, c, mods, sys) || []; } catch (e) { console.error('[nemesis]', move.id, e); effects = []; }
 
   pushFeed(S, {
     type: 'social', tone: move.id === 'respect' ? 'good' : 'bad',
     author: c.handle || `@${c.founder.split(' ')[0].toLowerCase()}`,
-    text: fillLine(lineOverride || (typeof move.line === 'function' ? move.line() : move.line), S, c),
+    text: fillLine(lineOverride || (typeof move.line === 'function' ? move.line(S, c, ctx) : move.line), S, c, ctx),
     meta: `${c.name} · ${move.sub}`,
   });
 
-  n.moves.unshift({ id: move.id, name: move.name, day: Math.floor(S.time.day), effects });
+  n.moves.unshift({ id: move.id, name: move.name, day: Math.floor(S.time.day), effects,
+                    forGoal: favours.includes(move.id) ? (n.season?.goal || null) : null });
   if (n.moves.length > 8) n.moves.pop();
   n.grudge = clamp(n.grudge + 0.06, 0, 3.4);
   c.grudge = n.grudge;
+  if (n.season) n.season.moves++;
+  n.quietDays = 0;
   emit('nemesis:move', { competitor: c, move, effects });
   return move;
 }
@@ -159,14 +411,33 @@ export function tickNemesis(S, days) {
 
   updateGrudge(S, c, days);
 
-  // They fade out of the story if they fall far enough behind for long enough.
-  if (c.threat < DROP_THREAT) {
-    n.lowDays += days;
-    if (n.lowDays > DROP_PATIENCE) { undesignate(S, c, 'faded'); n.cooldown = 20; return; }
-  } else n.lowDays = Math.max(0, n.lowDays - days * 0.5);
+  // §H13. Whatever they started resolves on its own day, whether or not they
+  // move again this week.
+  resolvePending(S, c);
 
-  // Escalation: the angrier they are, the more often they act.
-  const perDay = (0.010 + n.grudge * 0.014) * clamp(c.threat, 0.3, 4) * 0.5;
+  // §A14. The nemesis used to fade exactly when you got large: `threat` is a
+  // ratio against your own scale, so a founder mediating four per cent of world
+  // output outgrew every rival on the board and the feud simply stopped — the
+  // one antagonist with a face, gone in the act it mattered most. It is not a
+  // ratio that ends a rivalry now, it is silence: a whole season without a
+  // single move against you and they have stopped being about you. And
+  // Aperture never fades while it is alive, because Vance is written into the
+  // last act whether or not his company is winning.
+  n.quietDays += days;
+  if (!c.scripted && n.quietDays > N.DROP_PATIENCE) {
+    undesignate(S, c, 'faded'); n.cooldown = N.DROP_COOLDOWN; return;
+  }
+
+  // A season at a time. It opens with a line in the Wire, it weights their
+  // moves, and it closes with somebody having been right.
+  if (!n.season) openSeason(S, c);
+  else if (S.time.day - n.season.startedDay >= N.SEASON_DAYS) { closeSeason(S, c); openSeason(S, c); }
+
+  // Escalation: the angrier they are, the more often they act. `rivalHeat` is
+  // Regulatory Capture — the scrutiny you bought lands on them, and a rival
+  // under it moves against you that many times less often.
+  const perDay = (N.MOVE_BASE + n.grudge * N.MOVE_PER_GRUDGE) * clamp(c.threat, N.THREAT_MIN, N.THREAT_MAX) * 0.5
+    / Math.max(1, computeMods(S).rivalHeat || 1);
   if (chance(perDay * days)) runMove(S, c);
 }
 
@@ -181,18 +452,31 @@ export function availableMoves(S) {
   return movePool(S, c).map((m) => ({ id: m.id, name: m.name, sub: m.sub }));
 }
 
+// Intelligence agents on Operations. Their work discounts the cash side of a
+// counter — you already know what the answer will cost before you ask — and
+// past `INTEL_REVEAL` the Market view prints the moves the rival can make next.
+export function intelDiscount(S) {
+  return Math.min(AGENTS.SPEC.INTEL_COUNTER_CAP, intelLevel(S) * AGENTS.SPEC.INTEL_COUNTER_RATE);
+}
+export function intelReveals(S) { return intelLevel(S) >= AGENTS.SPEC.INTEL_REVEAL; }
+
 export function availableCounters(S) {
   const c = nemesisOf(S);
   if (!c) return [];
-  return COUNTERS.map((k) => {
+  const discount = intelDiscount(S);
+  // §H13. A counter that is only ever about something on the table is not on
+  // the list when nothing is. A row that is permanently grey teaches the
+  // founder to stop reading the column it is in.
+  return COUNTERS.filter((k) => { try { return k.when ? !!k.when(S, c) : true; } catch { return false; } }).map((k) => {
     const cost = (() => { try { return k.cost(S, c) || {}; } catch { return {}; } })();
+    if (cost.cash && discount) cost.cash = Math.round(cost.cash * (1 - discount));
     let need = true;
     try { need = k.need ? !!k.need(S, c) : true; } catch { need = false; }
     const afford = (S.company.cash >= (cost.cash || 0))
       && ((S.resources.code || 0) >= (cost.code || 0))
       && ((S.founder.focus || 0) >= (cost.focus || 0))
       && ((S.resources.reputation || 0) >= (cost.reputation || 0));
-    return { ...k, cost, need, afford, ok: need && afford };
+    return { ...k, cost, need, afford, ok: need && afford, discount: cost.cash ? discount : 0 };
   });
 }
 

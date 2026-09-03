@@ -38,46 +38,73 @@ const ROOT = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..'
 const VERBOSE = process.argv.includes('--verbose');
 const { cases } = JSON.parse(fs.readFileSync(path.join(ROOT, 'evals/prompts.json'), 'utf8'));
 
-// ── Get the real published surface, as wide as it ever gets ─────────────────
+// ── The real published surface, at two points in a run ──────────────────────
+// The registry publishes a stable capability index — the same names from the
+// first card to the credits — and resolves every description once, at
+// publication. So "what the browser shows" is `descriptorSnapshot(S)`: name,
+// title, description and schema, exactly what `reconcile` mints. It is taken
+// twice, at two points in a bot-played run, and every phrase is scored in
+// every state that publishes its tool. A phrase whose tool is published in
+// neither is a gate failure, not a warning: thirteen phrases used to be
+// skipped that way while the summary line counted the rest.
 const mc = installModelContext();
 const MCP = await import('../src/webmcp/index.js');
+const SiteTools = await import('../src/webmcp/tools.js');
+const World = await import('../src/world/author.js');
 const bot = await makeBot();
+const screen = SiteTools.screenTools({
+  setView: () => {},
+  views: () => [{ id: 'desk', name: 'The Desk' }, { id: 'research', name: 'Research' },
+                { id: 'agents', name: 'Agents' }, { id: 'market', name: 'Market' }],
+  spotlight: { anchors: () => ['.stat-strip'], anchorHelp: () => '.stat-strip — the readouts', show: () => ({ ok: true }) },
+});
 const s = bot.Game.startNewGame({ founderName: 'Ada', companyName: 'Meridian', archetype: 'hacker',
                                   category: 'devtools', productName: 'Meridian' });
 bot.Loop.stop();
 s.tutorialHold = false;   // a session releases this; nothing here does
-await MCP.boot({
-  screen: {
-    show_module: (await import('../src/webmcp/tools.js')).screenTools({
-      setView: () => {}, views: () => [{ id: 'desk', name: 'The Desk' }, { id: 'research', name: 'Research' },
-                                       { id: 'agents', name: 'Agents' }, { id: 'market', name: 'Market' }],
-      spotlight: { anchors: () => ['.stat-strip'], anchorHelp: () => '.stat-strip — the readouts', show: () => ({ ok: true }) },
-    }).show_module,
-    spotlight_panel: (await import('../src/webmcp/tools.js')).screenTools({
-      setView: () => {}, views: () => [{ id: 'desk', name: 'The Desk' }],
-      spotlight: { anchors: () => ['.stat-strip'], anchorHelp: () => '.stat-strip — the readouts', show: () => ({ ok: true }) },
-    }).spotlight_panel,
-  },
-});
-// Grow the run so the whole cast and the whole hand are published at once.
-bot.play(s, 260);
+await MCP.boot({ screen });
+
+const meet = (ids) => { for (const id of ids) s.narrative.relationships[id] = { met: true, affinity: 2, respect: 1, fear: 0, arc: 2 }; };
+const snapshot = (label) => ({ label, day: Math.floor(s.time.day), act: s.company.act,
+                               tools: MCP.surface.descriptorSnapshot(s) });
+
+// Act II: a young company, three people met, no card open.
+bot.play(s, 110);
+s.company.act = Math.max(2, s.company.act);
+delete s.ending;                 // the harness bot plays through an ending; a live run is the point
+meet(['vance', 'sam', 'priya']);
+const actII = snapshot('Act II');
+
+// Act III: the whole cast, the rival, a card open, a call the world is playing.
+bot.play(s, 150);
 s.company.act = Math.max(3, s.company.act);   // before the reconcile, so the
                                               // market and the regulators publish
+delete s.ending;
 s.market.nemesis = s.market.nemesis || {};
-for (const id of ['vance', 'priya', 'crane', 'sam', 'yuki', 'dorne', 'kai', 'weaver', 'nullptr']) {
-  s.narrative.relationships[id] = { met: true, affinity: 2, respect: 1, fear: 0, arc: 2 };
-}
-// A card open publishes the one-shot; a rival publishes rival_move.
+meet(['vance', 'priya', 'crane', 'sam', 'yuki', 'dorne', 'kai', 'weaver', 'nullptr']);
 await MCP.surface.reconcile(s, 'evals');
-const World = await import('../src/world/author.js');
 World.writeCard(s, { title: 'A quiet week', kind: 'story',
   body: 'Nothing has broken in nine days and it is making you suspicious.',
   choices: [{ label: 'Ship it', tone: 'good', outcome: 'It goes out.', effects: { rep: 4 } },
             { label: 'Wait', tone: 'neutral', outcome: 'You wait.', effects: { focus: 3 } }] });
+// A call the world is playing. Stood up by hand, the way the cast is above:
+// the surface only asks whether one is open.
+s.calls = { active: { id: 'call_eval', char: 'vance', by: 'world', mode: 'world', day: Math.floor(s.time.day),
+  rounds: [{ who: 'them', text: 'we need to talk.', day: 1 }, { who: 'you', text: 'About what?', day: 1 }],
+  used: [], node: null, deal: {}, fxLog: [], pending: { id: 'line_eval', text: 'About what?', delivered: true, answered: false },
+  done: false, endedBy: null }, log: [], seq: 2, lastRing: -99 };
 await MCP.surface.reconcile(s, 'evals');
+const actIII = snapshot('Act III');
+const STATES = [actII, actIII];
 
-const tools = await mc.getTools();
-if (!tools.length) { console.log('no tools were published — the surface is broken'); process.exit(1); }
+// The snapshot is the surface: what the live registry publishes is the same list.
+const live = (await mc.getTools()).map((t) => t.name).sort().join(',');
+const snap = actIII.tools.map((t) => t.name).sort().join(',');
+if (!snap) { console.log('no tools were published — the surface is broken'); process.exit(1); }
+if (live !== snap) {
+  console.log(`the registry publishes [${live}] and the snapshot says [${snap}] — this eval is not reading the real surface`);
+  process.exit(1);
+}
 
 // ── The documents ───────────────────────────────────────────────────────────
 function docFor(t) {
@@ -115,17 +142,12 @@ function terms(text) {
     .filter((w) => w && !STOP.has(w)).map(stem).filter((w) => w.length > 1);
 }
 
-const docs = tools.map((t) => ({ name: t.name, terms: terms(docFor(t)) }));
-const N = docs.length;
-const df = new Map();
-for (const d of docs) for (const w of new Set(d.terms)) df.set(w, (df.get(w) || 0) + 1);
-const idf = (w) => Math.log((N + 1) / ((df.get(w) || 0) + 1)) + 1;
-
-// Plain L2-normalised cosine.
+// ── One index per state ─────────────────────────────────────────────────────
+// IDF is a property of the document set, so each state indexes its own.
 //
-// It has a known bias toward short documents, and this surface has fourteen
-// `post_as_*` tools generated from one template whose documents are among the
-// shortest published — strong enough to put `post_as_kai` above `briefing` for
+// Plain L2-normalised cosine. It has a known bias toward short documents, and
+// when this surface published fourteen `post_as_*` tools generated from one
+// template it was strong enough to put `post_as_kai` above `briefing` for
 // "how much runway have I got left", on the word "left", against the only
 // document in the set containing "runway". The textbook correction is pivoted
 // length normalisation (Singhal et al.), so it was tried, at b = 0.55: top-1
@@ -134,20 +156,27 @@ const idf = (w) => Math.log((N + 1) / ((df.get(w) || 0) + 1)) + 1;
 // carrying the domain vocabulary. Recorded here because being wrong in a
 // specific way is more useful than being vaguely right, and because the number
 // below is a plain-cosine number and should be read as one.
-let avgLen = 1;
-
-function vec(ts) {
-  const tf = new Map();
-  for (const w of ts) tf.set(w, (tf.get(w) || 0) + 1);
-  const v = new Map();
-  let norm = 0;
-  for (const [w, n] of tf) {
-    const x = (1 + Math.log(n)) * idf(w);
-    v.set(w, x); norm += x * x;
-  }
-  norm = Math.sqrt(norm) || 1;
-  for (const [w, x] of v) v.set(w, x / norm);
-  return v;
+function index(tools) {
+  const docs = tools.map((t) => ({ name: t.name, terms: terms(docFor(t)) }));
+  const N = docs.length;
+  const df = new Map();
+  for (const d of docs) for (const w of new Set(d.terms)) df.set(w, (df.get(w) || 0) + 1);
+  const idf = (w) => Math.log((N + 1) / ((df.get(w) || 0) + 1)) + 1;
+  const vec = (ts) => {
+    const tf = new Map();
+    for (const w of ts) tf.set(w, (tf.get(w) || 0) + 1);
+    const v = new Map();
+    let norm = 0;
+    for (const [w, n] of tf) {
+      const x = (1 + Math.log(n)) * idf(w);
+      v.set(w, x); norm += x * x;
+    }
+    norm = Math.sqrt(norm) || 1;
+    for (const [w, x] of v) v.set(w, x / norm);
+    return v;
+  };
+  const docVecs = new Map(docs.map((d) => [d.name, vec(d.terms)]));
+  return { docs, vec, docVecs, names: new Set(docs.map((d) => d.name)) };
 }
 const cos = (a, b) => {
   let sum = 0;
@@ -156,83 +185,103 @@ const cos = (a, b) => {
   return sum;
 };
 
-avgLen = docs.reduce((a, d) => a + d.terms.length, 0) / (docs.length || 1);
-const docVecs = new Map(docs.map((d) => [d.name, vec(d.terms)]));
-const plainVecs = docVecs;
-
-// ── Gate 1: no two tools may be lexically indistinguishable ─────────────────
 let fails = 0, warns = 0;
 const fail = (m) => { fails++; console.log('  ✗ ' + m); };
 const warn = (m) => { warns++; console.log('  ! ' + m); };
 
-console.log(`\n── ${N} tools published ──`);
+// A stable surface publishes the same descriptors in both states; scoring
+// them twice would double every count and say nothing new. Scored once when
+// they are byte-identical, and the summary says so; in both when they differ.
+const identical = JSON.stringify(actII.tools) === JSON.stringify(actIII.tools);
+const scoredStates = identical ? [actIII] : STATES;
+console.log(identical
+  ? `\n── ${actIII.tools.length} tools published — the same descriptors at day ${actII.day} (Act ${actII.act}) and day ${actIII.day} (Act ${actIII.act}), so the surface is scored once ──`
+  : `\n── ${actII.tools.length} tools at day ${actII.day} (Act ${actII.act}), ${actIII.tools.length} at day ${actIII.day} (Act ${actIII.act}) — scored in both ──`);
+
 const DUP = 0.60;
-let worstPair = { sim: 0 };
-for (let i = 0; i < docs.length; i++) {
-  for (let j = i + 1; j < docs.length; j++) {
-    const sim = cos(plainVecs.get(docs[i].name), plainVecs.get(docs[j].name));
-    if (sim > worstPair.sim) worstPair = { sim, a: docs[i].name, b: docs[j].name };
-    if (sim > DUP) fail(`${docs[i].name} and ${docs[j].name} read the same (cosine ${sim.toFixed(2)} > ${DUP})`);
+for (const st of scoredStates) {
+  st.ix = index(st.tools);
+  const tag = identical ? '' : ` [${st.label}]`;
+  const { docs, docVecs } = st.ix;
+
+  // ── Gate 1: no two tools may be lexically indistinguishable ───────────────
+  let worstPair = { sim: 0 };
+  for (let i = 0; i < docs.length; i++) {
+    for (let j = i + 1; j < docs.length; j++) {
+      const sim = cos(docVecs.get(docs[i].name), docVecs.get(docs[j].name));
+      if (sim > worstPair.sim) worstPair = { sim, a: docs[i].name, b: docs[j].name };
+      if (sim > DUP) fail(`${docs[i].name} and ${docs[j].name} read the same${tag} (cosine ${sim.toFixed(2)} > ${DUP})`);
+    }
+  }
+  console.log(`  closest pair${tag}: ${worstPair.a} / ${worstPair.b} at ${worstPair.sim.toFixed(2)} (limit ${DUP})`);
+
+  // ── Gate 2: opening clauses ───────────────────────────────────────────────
+  // A model reads the first clause and stops, so two tools may not begin alike.
+  const opens = new Map();
+  for (const t of st.tools) {
+    const first = String(t.description).split(/[.:—]/)[0].trim().toLowerCase();
+    if (opens.has(first)) fail(`${t.name} opens exactly like ${opens.get(first)}${tag}`);
+    opens.set(first, t.name);
   }
 }
-console.log(`  closest pair: ${worstPair.a} / ${worstPair.b} at ${worstPair.sim.toFixed(2)} (limit ${DUP})`);
 
-// ── Gate 2: opening clauses ─────────────────────────────────────────────────
-// A model reads the first clause and stops, so two tools may not begin alike.
-const opens = new Map();
-for (const t of tools) {
-  const first = String(t.description).split(/[.:—]/)[0].trim().toLowerCase();
-  if (opens.has(first)) fail(`${t.name} opens exactly like ${opens.get(first)}`);
-  opens.set(first, t.name);
-}
-
-// ── Gate 3: the phrases ─────────────────────────────────────────────────────
-const known = new Set(tools.map((t) => t.name));
+// ── Gate 3: the phrases, in every state that publishes their tool ───────────
+const published = new Set(STATES.flatMap((st) => st.tools.map((t) => t.name)));
 const ranks = [];
-let top1 = 0, top3 = 0, unreachable = 0;
+const perState = new Map(scoredStates.map((st) => [st.label, { n: 0, top1: 0, top3: 0 }]));
+let top1 = 0, top3 = 0, unreachable = 0, skipped = 0;
 const misses = [];
 
 for (const c of cases) {
-  if (!known.has(c.intended)) { warn(`"${c.say}" wants ${c.intended}, which is not published in this state`); continue; }
+  const where = scoredStates.filter((st) => st.ix.names.has(c.intended));
+  if (!where.length) {
+    fail(`"${c.say}" wants ${c.intended}, which is published in neither state — retarget the phrase or publish the tool`);
+    skipped++;
+    continue;
+  }
   const lower = c.say.toLowerCase();
-  for (const n of known) {
+  for (const n of published) {
     if (lower.includes(n) || lower.includes(n.replace(/_/g, ' '))) fail(`"${c.say}" names a tool (${n})`);
   }
-  const q = vec(terms(c.say));
-  const scored = docs.map((d) => ({ name: d.name, score: cos(q, docVecs.get(d.name)) }))
-                     .sort((a, b) => b.score - a.score);
-  if (scored[0].score <= 0) { fail(`"${c.say}" matches nothing at all`); unreachable++; continue; }
-  const accept = new Set([c.intended, ...(c.also || [])]);
-  const rank = scored.findIndex((x) => accept.has(x.name)) + 1;
-  if (rank === 0) { fail(`"${c.say}" cannot reach ${c.intended} at any rank`); unreachable++; continue; }
-  ranks.push(rank);
-  if (rank === 1) top1++;
-  if (rank <= 3) top3++;
-  if (rank > 5) fail(`"${c.say}" → ${c.intended} ranks ${rank} (top-5 required); winner was ${scored[0].name}`);
-  else if (rank > 1) misses.push({ say: c.say, want: c.intended, rank, got: scored.slice(0, 3).map((x) => `${x.name} ${x.score.toFixed(2)}`) });
+  for (const st of where) {
+    const tag = identical ? '' : ` [${st.label}]`;
+    const { docs, docVecs, vec } = st.ix;
+    const q = vec(terms(c.say));
+    const scored = docs.map((d) => ({ name: d.name, score: cos(q, docVecs.get(d.name)) }))
+                       .sort((a, b) => b.score - a.score);
+    if (scored[0].score <= 0) { fail(`"${c.say}"${tag} matches nothing at all`); unreachable++; continue; }
+    const accept = new Set([c.intended, ...(c.also || [])]);
+    const rank = scored.findIndex((x) => accept.has(x.name)) + 1;
+    if (rank === 0) { fail(`"${c.say}"${tag} cannot reach ${c.intended} at any rank`); unreachable++; continue; }
+    ranks.push(rank);
+    const ps = perState.get(st.label);
+    ps.n++;
+    if (rank === 1) { top1++; ps.top1++; }
+    if (rank <= 3) { top3++; ps.top3++; }
+    if (rank > 5) fail(`"${c.say}"${tag} → ${c.intended} ranks ${rank} (top-5 required); winner was ${scored[0].name}`);
+    else if (rank > 1) misses.push({ say: c.say, want: c.intended, rank, tag, got: scored.slice(0, 3).map((x) => `${x.name} ${x.score.toFixed(2)}`) });
+  }
 }
 
 // ── Gate 4: every tool is exercised ─────────────────────────────────────────
 const exercised = new Set(cases.map((c) => c.intended));
-for (const t of tools) {
-  if (!exercised.has(t.name)) {
-    if (t.name.startsWith('post_as_')) continue;    // one voice stands for the rest
-    warn(`${t.name} is never asked for by any phrase`);
-  }
+for (const name of [...published].sort()) {
+  if (!exercised.has(name)) fail(`${name} is never asked for by any phrase`);
 }
 
 // ── Report ──────────────────────────────────────────────────────────────────
 const scored = ranks.length;
 const median = ranks.length ? ranks.slice().sort((a, b) => a - b)[Math.floor(ranks.length / 2)] : 0;
-console.log(`\n── ${scored} phrases scored ──`);
+console.log(`\n── ${cases.length} phrases, ${scored} scored${identical ? '' : ` across ${scoredStates.length} states`}${skipped ? `, ${skipped} unscorable` : ''} ──`);
 console.log(`  top-1        ${top1}/${scored}  (${Math.round((top1 / scored) * 100)}%)`);
 console.log(`  top-3        ${top3}/${scored}  (${Math.round((top3 / scored) * 100)}%)`);
+if (!identical) for (const [label, ps] of perState) console.log(`  ${label.padEnd(12)} top-1 ${ps.top1}/${ps.n} · top-3 ${ps.top3}/${ps.n}`);
 console.log(`  median rank  ${median}`);
 console.log(`  unreachable  ${unreachable}`);
 
 if (VERBOSE && misses.length) {
   console.log('\n── where the intended tool did not win ──');
-  for (const m of misses) console.log(`  ${m.rank}. "${m.say}"\n       want ${m.want} · got ${m.got.join(' | ')}`);
+  for (const m of misses) console.log(`  ${m.rank}. "${m.say}"${m.tag}\n       want ${m.want} · got ${m.got.join(' | ')}`);
 }
 
 console.log(fails ? `\n${fails} gate failure(s)${warns ? `, ${warns} warning(s)` : ''}`

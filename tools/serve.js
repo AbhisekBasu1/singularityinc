@@ -1,5 +1,6 @@
 // Minimal zero-dependency static server for local play/dev.
 import http from 'node:http';
+import { relayHandler } from './relay.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import url from 'node:url';
@@ -50,6 +51,8 @@ function handler(req, res) {
     catch { res.writeHead(400, { 'Content-Type': 'text/plain' }); return res.end('400 bad path'); }
 
     let pathname = path.posix.normalize(raw.replace(/\\/g, '/'));
+    // The relay: a room per run for a second human on another machine.
+    if (relayHandler(req, res, pathname)) return;
     if (pathname.endsWith('/')) pathname += 'index.html';
     if (DENY.test(pathname)) {
       res.writeHead(404, { 'Content-Type': 'text/plain' });
