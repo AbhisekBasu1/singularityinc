@@ -43,8 +43,10 @@ decision — above fair value you buy churn, below it you buy reach — and ther
 no setting that avoids the trade.
 
 **Gate:** $120M ARR and a $1.6B valuation, and either a Series A or ninety
-straight days where the day paid for itself. Floor 250 days; median exit ≈ day
-413.
+straight days where the day paid for itself. Floor 120 days — the length of the
+profitable quarter plus a month, because that door is the one a bootstrapper
+leaves by — and the act lasts as long as the numbers take rather than as long as
+the floor says. Median exit ≈ day 370.
 
 ### Act III — The Empire · *Escape Velocity*
 
@@ -57,7 +59,7 @@ stop being only a market participant — a hearing sat through, a region taken t
 government partnership, or a frontier-class training run. The Log shows all
 three as a checklist with where you stand in each, because any one of them opens
 it and the interface used to name them in one sentence and then go quiet.
-Floor 150 days; median exit ≈ day 697, and the act lasts as long as arriving
+Floor 150 days; median exit ≈ day 728, and the act lasts as long as arriving
 takes rather than as long as the floor says.
 
 ### Act IV — The Singularity · *Recursive Ascent*
@@ -73,14 +75,16 @@ settled without you. And one thing done inside this act: a quarterly intention
 kept, or a season of the feud closed in your favour. Floor 215 days, with a
 620-day stall valve underneath the whole clause, so a run that is otherwise
 finished cannot be locked out of its own ending — measured, that valve is
-reached by about one run in a hundred. Median exit ≈ day 1174.
+reached by about one run in a hundred. Median exit ≈ day 1135.
 
 **Every act since §A2 closes on a deed as well as a number**, because the
 economic curves are near vertical by Act III — raising the Act III bar from $75M
 ARR to $280M moved the transition by 36 days. A threshold cannot pace anything;
-it can only wall off a bad run while a good one sails past. So the day floor
-sets the pace, the numbers are the competence check, and the deed is the thing
-the act was *for*. Every deed has more than one door: a bootstrapper who never
+it can only wall off a bad run while a good one sails past. So the numbers are
+the competence check, the deed is the thing the act was *for*, and the day floor
+is a shortest-possible-act and nothing more: §A5 and §A6 took the last two that
+were setting the pace down to it, and on 210 runs a side no act's median length
+is its floor any longer. Every deed has more than one door: a bootstrapper who never
 raises must still be able to leave Act II. And since §A5 every door says how far
 along it is — "a region at government partnership · 2 of 3 stages in South Asia"
 — on the Log, in the Field Notes and on the workstation, so the nearest one is

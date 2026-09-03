@@ -935,6 +935,20 @@ node evals/capsfuzz.mjs      # can the worst legal world break the game
 RUNS=3 DAYS=2000 node tools/balance.mjs
 ```
 
+**Two of those three evals are byte-identical run to run, and it took a seed on
+the bot to make them so.** `makeBot(root, { seed })` gives the loop its own LCG;
+without a seed it is `Math.random` and every other harness plays exactly as it
+did. `baseline.mjs` had a seed on the *game* and a seed on its own card answers
+and was still a different run every time, because the phone branch in
+`bot.step` rolled `Math.random` — and a call blocks the clock, so whether the
+bot spoke or hung up decided whether that step advanced a day. 320 steps from
+one fixed seed landed anywhere between day 325 and day 355, the briefing came
+out 1,302–1,444 characters against a 1,500 cap, and about one run in eight shed
+`youMay.cast` and failed the `cast_list` claim's own probe. The bot's stream is
+deliberately *not* `src/engine/rng.js`: drawing the bot's dice from the game's
+would move every event draw after it, which is the thing `parity.mjs` compares.
+`select.mjs` needed a game seed as well — it never had one at all.
+
 `tools/simtest.mjs` is deliberately not in that list. It asserts nothing and
 exits zero: it plays one seeded run and prints the whole of it — the ledger line
 by line, the gate marks against the days the gates were *met*, the doctrines
@@ -960,7 +974,13 @@ ChatGPT's chat box at three widths.
 
 Balance targets (medians across builds): Act II ≈ day 110, Act III ≈ 400,
 Act IV ≈ 870, Act V ≈ 1200. A full run should land between 1000 and 1700 in-game
-days.
+days. **Measured after §A6 on 210 runs: 133 / 370 / 728 / 1135, ending at a
+median 1409 with 179 of 199 inside the band.** The two acts that arrive early of
+their target are the two whose floors came down — Act III by fifty days at §A6
+and Act IV by a hundred and forty at §A5 — and both are now paced by their gates
+rather than by a number in this file. Do not move a target to meet a
+measurement or a floor to meet a target: the band at the bottom of that
+paragraph is the thing that has to hold, and it does.
 
 **Measured on the current build at §A5, 7 builds × 15 seeded runs = 105, with
 the same harness run against the previous floor for the comparison.** Five runs
@@ -1002,10 +1022,75 @@ build at both floors. Act IV is bound by its numbers ($12T, 4.5% of world GDP,
 recursive self-improvement, 85% on the frontier) and by nothing else. Two things
 to watch there: `ACT5_STALL_DAYS` (620) is exceeded by 1% of runs now against
 2.2% before, because Act IV's *maximum* length fell (962 → 739) even as its
-median rose; and **Act II is now the act with a binding floor** — its length is
-exactly `ACT3_MIN_DAYS` in five of seven builds and its open share is 15%
-(mean 20%). That is the next one, and it wants the same instrument: measure
-`gateMetDay[3] − actMarks[2]` before moving 250.
+median rose; and **Act II was then the act with a binding floor** — its length
+was exactly `ACT3_MIN_DAYS` in five of seven builds and its open share was 15%
+(mean 20%). That was the next one, and §A6 below is it.
+
+**§A6 took the last one out of Act II, with the same instrument.** The reading
+is `gateMetDay[3] − actMarks[2]` over 210 runs (7 builds × 30) — min 86, p5 129,
+p10 141, p25 171, median 223, p75 301, max 1797 — against a floor of 250 that
+therefore bound in 60% of them. `ACT3_MIN_DAYS` is **120**: a little under the
+p5, and floored at the shortest Act II that can hold its own deed from a cold
+start, because the door that carries the act is ninety consecutive profitable
+days and a founder who enters with a broken streak needs all ninety. Measured
+at 210 runs a side, one constant changed:
+
+| | before (`ACT3_MIN_DAYS` 250) | after (120) |
+|---|---|---|
+| Act II reached | 137 | 133 |
+| Act III reached | 420 | **370** |
+| Act IV reached | 717 | 728 |
+| Act V reached | 1147 | 1135 |
+| Act II length | **250** (min = p10 = p25 = p50) | **209** (p10 142) |
+| Act III length | 268 | 301 |
+| Act IV length | 428 | 436 |
+| run end | 1372 (176/201 in band) | 1409 (179/199 in band) |
+| run end p10 / p90 | 1174 / 1652 | 1151 / 1649 |
+| gate-open I / II / III / IV | 0% / **12%** / 0% / 0% | 0% / **0%** / 0% / 0% |
+| bankruptcies | 2/210 | 0/210 |
+
+The mean open share of Act II went 19% → 0%, and per build it went
+0/10/17/0/11/40/26% to 0% in all seven. The floor now binds in 2.9% of runs.
+**Where the time went, again:** Act III arrives fifty days earlier and Act IV
+does not — 717 against 728 — because the fifty days are spent inside Act III,
+whose median length went 268 → 301. Act V lands at 1135 against 1147 and the run
+ends at 1409 against 1372. Nothing was compressed; a founder who was waiting is
+now playing, one act further in. That is the same handover §A5 saw into Act IV,
+and for the same reason: what is left is the gate, and the gate is work.
+Act I's `ACT2_MIN_DAYS` (45) binds in **0.0%** of 210 runs and its open share is
+0% median and 0% mean; it has never bound and it is left alone.
+
+The race is unmoved. Eight 14-run race tables a side — the harness is not
+reproducible, so one pair proves nothing — give a mean of 9.00 wins before and
+7.75 after, 72/112 against 62/112. That is 1.25 of a win inside a ±2 band and
+1.4σ on the pooled sample; the per-table spread is 7–11 before and 6–10 after.
+`RUNS=7 evals/capsfuzz.mjs` still reports "the band holds against the worst
+legal world".
+
+**A floor is not local, and two things downstream of this one had to move with
+it.** Anything that reads an *act day* as a measure of skill is really reading
+the floors underneath it, so cutting one silently makes it easier. `speedrun`
+("Act III inside 420 days") and `fast_third` went from 47% and 25% of harness
+runs to 70% and 57% — a rare achievement earned by more than half of them — so
+both are re-cut to the shares they had (370 and 320) with the measurement
+written beside them, and both comments that claimed the floors set "the
+earliest Act III there is" are gone: they had been false since §A2 and the
+gates set it now. And `runLengthDays()` in `src/ui/intro.js`, which answers the
+first question a new person asks, was *derived* from the four floors plus the
+Act V window — honest while the floors were the acts, and after §A6 it would
+have told them a full timeline is 650–790 days, "about an hour", for a game
+whose median run is 1,409 days and three and a half. It reads
+`ACT_GATES.RUN_DAYS_LOW/HIGH` now, which is the measured band. **When you move
+a floor, grep for what reads an act day.**
+
+One warning that cost an hour: the *first* read of this at 7 builds × 15 said
+the run-end p10 fell 1190 → 1079 and the in-band count fell 91/102 → 81/98,
+which reads as a run compressing under the floor change. At 210 a side both
+reversed. A hundred and five runs is enough for a median and not enough for a
+tail — take the tails at 210. And do not read even the 210 to the day: a third
+sample on the finished tree gives Act II 227 rather than 209 and the run end
+1,366 rather than 1,409, with the gate-open share still 0% and 0%. The shares
+are what this pass moved; the medians carry about ±20 days of sample either way.
 
 **Which act gate binds is deliberate — and since §A2 an act also closes on a
 deed.** The economic curves are near vertical by Act III — raising the Act III
@@ -1024,17 +1109,23 @@ calendar.
 
 `ACT_DEEDS` in `systems/progression.js` is the answer: one authored act per
 transition, ANDed into that act's `test`, and the floors cut to meet it
-(310→250, 470→**150**, 270→215; Act I's 60→45 has never bound). §A2 cut the
-first two and §A5 finished Act III's, which was the one still binding: the
-floors are **45 / 250 / 150 / 215** today, and the open share on 105 seeded runs
-is **0% / 15% / 0% / 0%**.
+(310→250→**120**, 470→**150**, 270→215; Act I's 60→45 has never bound). §A2 cut
+the first pair, §A5 finished Act III's and §A6 Act II's: the floors are
+**45 / 120 / 150 / 215** today, no act's median length is its floor any more,
+and the open share on 210 runs a side is **0% / 0% / 0% / 0%**. There is no
+timer left in the table — an act ends when its numbers and its deed are done —
+so the next time one of these looks wrong, the thing to change is the gate.
 
 Four rules hold the table together:
 
 - **Every deed has more than one door.** Act II is a Series A *or* a profitable
-  quarter, because a bootstrapper must be able to leave it — measured, the
-  harness raises a Series A in 2 runs of 21 and holds a profitable quarter in
-  21 of 21, so the second door is the one that carries the act. Act III is a
+  quarter, because a bootstrapper must be able to leave it — measured at §A6 on
+  210 runs, the harness raises a Series A in 10 of them and holds a profitable
+  quarter in 210 of 210 (median day 149, min day 80, so usually before Act II
+  even opens), which is why `ACT3_MIN_DAYS` is floored on the quarter's ninety
+  days and not on the round. The second door is the one that carries the act,
+  and a floor under ninety would be a floor a bootstrapper could not clear from
+  a cold streak. Act III is a
   hearing sat through *or* a region at government partnership *or* the
   frontier-class training run, which widens what used to be a single research
   node into three ways a company stops being only a market participant.

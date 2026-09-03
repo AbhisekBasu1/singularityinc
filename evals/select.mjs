@@ -51,7 +51,13 @@ const mc = installModelContext();
 const MCP = await import('../src/webmcp/index.js');
 const SiteTools = await import('../src/webmcp/tools.js');
 const World = await import('../src/world/author.js');
-const bot = await makeBot();
+// §A6. Seeded on both sides: the game's stream through `startNewGame` below,
+// and the bot's own dice here. Neither was pinned, so the two states this eval
+// scores against were a different pair of states every run — and a phrase whose
+// tool is published in only one of them is a gate failure rather than a
+// warning. The number to print twice is the same number.
+const SEED = 4242;
+const bot = await makeBot('../src/', { seed: SEED });
 const screen = SiteTools.screenTools({
   setView: () => {},
   views: () => [{ id: 'desk', name: 'The Desk' }, { id: 'research', name: 'Research' },
@@ -59,7 +65,7 @@ const screen = SiteTools.screenTools({
   spotlight: { anchors: () => ['.stat-strip'], anchorHelp: () => '.stat-strip — the readouts', show: () => ({ ok: true }) },
 });
 const s = bot.Game.startNewGame({ founderName: 'Ada', companyName: 'Meridian', archetype: 'hacker',
-                                  category: 'devtools', productName: 'Meridian' });
+                                  category: 'devtools', productName: 'Meridian', seed: SEED });
 bot.Loop.stop();
 s.tutorialHold = false;   // a session releases this; nothing here does
 await MCP.boot({ screen });

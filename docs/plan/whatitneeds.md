@@ -1119,22 +1119,32 @@ did not need a fourth door; it needed the floor under it to admit what it was.
 first fully met, and Act III's open share is 0% in six of seven builds — while
 the three doors stayed three and each of them now shows how far along it is.*
 
-- **Act II is the act with a binding floor now.** Measured on the same 105 runs
-  that closed Act III: Act II's length is exactly `ACT3_MIN_DAYS` (250) in five
-  of seven builds and it spends a median 15% of itself — mean 20%, and 46% in
-  one build — with the Act III gate already open, against 0% for Acts I, III and
-  IV. It is the same defect §A5 just fixed one act along, and it wants the same
-  instrument: measure the distribution of `gateMetDay[3] − actMarks[2]` and put
-  the floor a little under its 5th percentile before touching 250.
-- **`evals/baseline.mjs` is not deterministic despite its seed.** It plays 320
-  bot days from seed 4242 and the run lands anywhere from day 325 to day 355,
-  with Act II turning between day 96 and 202 — a wall-clock path somewhere under
-  `bot.play`, not the seeded stream. The briefing payload it then measures comes
-  out between 1,302 and 1,444 characters against a 1,500 cap, so roughly one run
-  in eight sheds `youMay.cast` and the `cast_list` claim fails its own probe.
-  Reproduced at both the old floor and the new one, so it is nothing to do with
-  §A5. Either pin whatever is reading the clock, or the probe should name a
-  field the payload cannot shed.
+*And **Act II's binding floor**, which that pass named as the next one: same
+instrument, 210 runs of `gateMetDay[3] − actMarks[2]` (min 86, p5 129, median
+223), so `ACT3_MIN_DAYS` is 120 rather than 250 — a little under the p5, floored
+on the ninety days of the profitable quarter because that is the door a
+bootstrapper leaves by. Act II's open share went 12% median / 19% mean to 0% and
+0%, its median length stopped being the floor to the digit (250 → 209), and the
+fifty days moved into Act III rather than out of the run: Act IV still arrives
+at 728 against 717 and the run still ends at 1409. No act's median length is its
+floor any longer, so there is no timer left in `ACT_GATES` to take out. Two
+things downstream had to move with it, and they are the general lesson:
+anything that reads an **act day** as a measure of skill is really reading the
+floor underneath it, so `speedrun` and `fast_third` went to 70% and 57% of runs
+until they were re-cut to the shares they had, and `runLengthDays()` — derived
+from the four floors — would have told a new player a full timeline is "about
+an hour". It reads a measured band now. Grep for what reads an act day before
+moving a floor again.*
+
+*And **`evals/baseline.mjs`'s non-determinism**, which was one line: the phone
+branch in `bot.step` rolled `Math.random`, a call holds the clock, so whether
+the bot spoke or hung up decided whether that step advanced a day at all.
+`makeBot(root, { seed })` gives the bot its own LCG — deliberately not the
+game's stream, which `parity.mjs` compares — and `baseline.mjs` and
+`select.mjs` pass one. Ten runs of the first and three of the second are now
+byte-identical; the briefing sits at 1,350 characters of its 1,500 at the state
+they pin, with `youMay.cast` intact and nothing trimmed.*
+
 - **I11 — eventually one housing.** Untouched, and correctly so: it is the one
   item in this document that deletes something. The console at `/` and the
   workstation at `/computer/` still share one save in both directions and one
@@ -1159,7 +1169,17 @@ the three doors stayed three and each of them now shows how far along it is.*
   in all five acts. But three cells sit at exactly 7, so gating it now would fail
   on the next card anybody writes with a pause in it. `TIC_WARN` stays a warning
   until the crowded cells have room above them.
-- **Two harness blind spots, recorded rather than fixed.** `RUNS=3` on
+- **Three harness blind spots, recorded rather than fixed.** `RUNS=3` on
   `balance.mjs` is a 21-run sample and this file has twice recorded it lying;
-  and the bot never touches the marketing or infrastructure dials, so every
-  measurement of §A17 is a measurement of the bot's ignorance.
+  the bot never touches the marketing or infrastructure dials, so every
+  measurement of §A17 is a measurement of the bot's ignorance; and a hundred
+  and five runs is now on that list too — §A6's first read of the run end at
+  7 × 15 said the p10 fell 1190 → 1079 and the in-band count 91/102 → 81/98,
+  and at 210 a side both reversed. It is enough for a median and not for a
+  tail.
+- **The bot is seeded only where somebody asked.** `makeBot({ seed })` exists
+  now, and `baseline.mjs` and `select.mjs` are the only two that pass one.
+  Every other harness still plays a fresh sample on purpose — `balance.mjs`,
+  `capsfuzz`, the race table — but that means the race table is 14 runs of
+  binomial noise and reading one of them as a signal is a mistake this file
+  has already recorded once. Pool eight before believing a shift.

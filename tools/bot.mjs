@@ -5,7 +5,20 @@
 // approximation of it that drifts.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function makeBot(root = '../src/') {
+// §A6. `seed` gives the bot its own dice. Without one this is `Math.random`
+// and every harness that calls `makeBot()` plays exactly as it did before; with
+// one the whole loop is reproducible, which is what `evals/baseline.mjs` and
+// `evals/select.mjs` need in order to print the same table twice.
+//
+// It is deliberately *not* the game's stream. Drawing from `src/engine/rng.js`
+// here would move every event draw and market roll after it — the thing
+// `tools/parity.mjs` exists to compare — so this is a separate LCG with a
+// separate state, and the game's seed stays the game's.
+export async function makeBot(root = '../src/', { seed = null } = {}) {
+  // The bot's dice. `Math.random` when nothing was asked for.
+  let bs = seed == null ? 0 : (seed >>> 0);
+  const rand = seed == null ? Math.random
+    : () => { bs = (bs * 1664525 + 1013904223) >>> 0; return bs / 4294967296; };
   const Game = await import(root + 'game.js');
   const Loop = await import(root + 'engine/loop.js');
   const { resolveChoice, dismissEvent } = await import(root + 'systems/narrative.js');
@@ -21,7 +34,8 @@ export async function makeBot(root = '../src/') {
           quarterState } = await import(root + 'systems/board.js');
 
   // `choose(n)` picks the deck card's button; without one the bot rolls its
-  // own dice, which is fine for a sample and useless for a pair.
+  // own dice — `rand` above, which is a seeded stream when the caller asked
+  // for one and `Math.random` when it did not.
   function step(s, { answerCards = true, choose = null } = {}) {
     // A first run parks the clock for the walkthrough and a session releases it
     // two seconds later. There is no session here.
@@ -61,12 +75,16 @@ export async function makeBot(root = '../src/') {
     // thing, sometimes two, and puts the phone down.
     if (answerCards && Calls.activeCall(s)) {
       const o = Calls.options(s);
-      if (o.length && Math.random() < 0.6) Calls.say(s, o[Math.floor(Math.random() * o.length)].id);
+      // This branch was the whole of `baseline.mjs`'s drift: a call holds the
+      // clock, so whether the bot says something or hangs up decides whether
+      // that step advanced a day at all, and 320 steps of it landed anywhere
+      // between day 325 and day 355 from one fixed seed.
+      if (o.length && rand() < 0.6) Calls.say(s, o[Math.floor(rand() * o.length)].id);
       else Calls.hangUp(s);
     }
     if (answerCards && s.narrative.activeEvent && !s.narrative.activeEvent.outcome) {
       const n = s.narrative.activeEvent.choices.length;
-      if (n) resolveChoice(s, choose ? choose(n) : Math.floor(Math.random() * n));
+      if (n) resolveChoice(s, choose ? choose(n) : Math.floor(rand() * n));
       dismissEvent(s);
     }
     const rounds = availableRounds(s);
@@ -85,5 +103,8 @@ export async function makeBot(root = '../src/') {
 
   function play(s, days, opts) { for (let d = 0; d < days; d++) step(s, opts); }
 
-  return { step, play, Game, Loop };
+  // `rand` is handed back so a harness that needs its own dice — a card answer,
+  // a coin flip between two probes — draws from the same seeded stream rather
+  // than opening a second one beside it.
+  return { step, play, Game, Loop, rand };
 }

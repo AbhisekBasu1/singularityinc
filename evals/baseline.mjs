@@ -24,7 +24,8 @@ import { makeBot } from '../tools/bot.mjs';
 const mc = installModelContext();
 const MCP = await import('../src/webmcp/index.js');
 const World = await import('../src/world/author.js');
-const bot = await makeBot();
+const SEED = 4242;
+const bot = await makeBot('../src/', { seed: SEED });
 const { computeMods } = await import('../src/systems/modifiers.js');
 const { totalUsers, totalMrr } = await import('../src/systems/product.js');
 const { capFor, capSummary } = await import('../src/world/validate.js');
@@ -33,15 +34,19 @@ const { WORLD_AUTHOR: W } = await import('../src/data/balance.js');
 
 // Seeded, so the table below is the same table every time it is printed.
 const s = bot.Game.startNewGame({ founderName: 'Ada', companyName: 'Meridian', archetype: 'hacker',
-                                  category: 'devtools', productName: 'Meridian', seed: 4242 });
+                                  category: 'devtools', productName: 'Meridian', seed: SEED });
 bot.Loop.stop();
 s.tutorialHold = false;   // a session releases this; nothing here does
 await MCP.boot();
-// Pinned all the way down: the bot's own card answers come from a stream of
-// this file's, not from Math.random.
-let x = 4242;
-const choose = (n) => { x = (x * 1664525 + 1013904223) >>> 0; return Math.floor((x / 4294967296) * n); };
-bot.play(s, 320, { choose });
+// §A6. Pinned all the way down, and this file used to only think it was: the
+// card answers came from a stream of its own, but the *phone* branch inside
+// `bot.step` still rolled `Math.random`, and a call holds the clock. So 320
+// steps from one fixed seed landed anywhere between day 325 and day 355, the
+// briefing came out between 1,302 and 1,444 characters against a 1,500 cap,
+// and about one run in eight shed `youMay.cast` and failed the `cast_list`
+// claim's own probe. The bot takes the seed now and the local LCG is gone —
+// one stream, one table, every time.
+bot.play(s, 320);
 s.company.act = Math.max(3, s.company.act);
 // The whole cast, as `select.mjs` does it. With exactly five voices the hand
 // is full at sixteen and the teaching tools are the ones that give way — so a

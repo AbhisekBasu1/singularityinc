@@ -17,7 +17,7 @@ import { rngState, setRngState } from '../engine/rng.js';
 import { capability } from '../webmcp/index.js';
 import { desiredTools, templateFor } from '../webmcp/surface.js';
 import { PLATFORM, REMEDY } from '../data/platform.js';
-import { LATE_START, NGPLUS, TIME, ACT_GATES, ENDINGS_FORCED } from '../data/balance.js';
+import { LATE_START, NGPLUS, TIME, ACT_GATES } from '../data/balance.js';
 
 const ARCH_COLOR = { hacker: '#4dd0e1', designer: '#c084fc', hustler: '#f5a623',
   researcher: '#8b5cf6', operator: '#7c8a99', prophet: '#ffffff', ghost: '#6b7686' };
@@ -701,13 +701,19 @@ function advancedPanel(L) {
 // ── §D7. How long a run is ──────────────────────────────────────────────────
 // Nothing on the opening screen has ever said whether this is twenty minutes or
 // twenty hours, which is the first thing anybody wants to know and the one
-// question the interface refused to answer. It is *derived*: the four act
-// floors plus the window Act V leaves open are the shortest and longest a full
-// timeline can be, and `TIME.DAY_SECONDS` and `TIME.SPEEDS` turn those into
-// clock time. A number in prose should be read, not typed.
+// question the interface refused to answer. `TIME.DAY_SECONDS` and
+// `TIME.SPEEDS` turn the day count into clock time.
+//
+// §A6: the day count came from the four act floors plus the window Act V
+// leaves open, which was the shortest and longest a full timeline could be
+// while the floors *were* the acts. Since §A5 and §A6 they are a
+// shortest-possible-act and nothing more — the gates set the pace — so a
+// derivation from them undersold the game by half and got worse with every
+// floor that came down. It reads the measured band in `balance.js` instead.
+// A number in prose should still be read and not typed; it is just being read
+// off the right measurement.
 export function runLengthDays() {
-  const toActV = ACT_GATES.ACT2_MIN_DAYS + ACT_GATES.ACT3_MIN_DAYS + ACT_GATES.ACT4_MIN_DAYS + ACT_GATES.ACT5_MIN_DAYS;
-  return [toActV + ENDINGS_FORCED.ACT5_WINDOW_MIN, toActV + ENDINGS_FORCED.ACT5_WINDOW];
+  return [ACT_GATES.RUN_DAYS_LOW, ACT_GATES.RUN_DAYS_HIGH];
 }
 
 function clockSpan(days, speed) {

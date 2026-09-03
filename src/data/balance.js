@@ -932,7 +932,43 @@ export const ACT_GATES = {
   ACT2_USERS_WITH_MRR: 2200, // users required alongside the Act II MRR goal
   ACT2_USERS_ALONE: 12000, // users that can satisfy the Act II growth path alone
   ACT2_FEATURES: 8, // features required before Act II
-  ACT3_MIN_DAYS: 250, // minimum length of Act II (was 310)
+  // ── §A6 The last floor that was still the act ─────────────────────────────
+  // §A5 took the timer out of Act III and named the act it moved the defect
+  // to. This is that act. Same instrument: 210 seeded runs (7 builds × 30) of
+  // `gateMetDay[3] − actMarks[2]` — the day the Act III gate is *first fully
+  // met*, counted from the day Act II opened. That number does not move with
+  // this floor, because the stamp is taken in `checkActProgression` before
+  // `minDays` can hold the turn, which is what makes it the right instrument
+  // for setting one. Distribution: min 86, p5 129, p10 141, p25 171,
+  // median 223, p75 301, p90 465, max 1797.
+  //
+  // Against a 250-day floor that was 60% of runs waiting on a calendar, and
+  // Act II's length was *exactly* 250 in five of seven builds — the same
+  // reading Act III gave at 420, one act earlier.
+  //
+  // 120 is a little under the 5th percentile, and it is also the shortest Act
+  // II that can hold its own deed from a cold start: the door that carries the
+  // act is ninety consecutive profitable days (the harness raises a Series A
+  // in 10 runs of 210 and holds the quarter in 210 of 210), so a founder who
+  // enters the act with a broken streak needs 90 of them plus a month of
+  // slack. Below that the floor stops being a floor and starts being a trap.
+  //
+  // Re-measured at 120 on 210 runs against the same harness at 250: the
+  // gate-open share of Act II goes 12% median / 19% mean to **0% / 0%**, its
+  // length stops being the floor to the digit (median 250 → 209, p10 250 →
+  // 142) and becomes the gate, and it binds in 2.9% of runs — the ones that
+  // arrive inside four months. The time did not come out of the run: the end
+  // sits at a median 1,409 days against 1,372, 179 of 199 inside the
+  // 1000–1700 band against 176 of 201, and the p10 moved 1,174 → 1,151. It
+  // moved into Act III, whose median length went 268 → 301 — the same
+  // handover §A5 saw into Act IV, and for the same reason: what is left is
+  // the gate, and the gate is work.
+  //
+  // A third 210-run sample taken afterwards reads Act II at 227 rather than
+  // 209 and the run end at 1,366 rather than 1,409, with the gate-open share
+  // still 0% and 0%. Two hundred and ten runs pins a share and carries about
+  // ±20 days on a median; do not read these to the day.
+  ACT3_MIN_DAYS: 120, // minimum length of Act II (was 310, then 250 — the deed closes it now)
   ACT3_ARR: 120e6, // ARR competence check for reaching Act III
   ACT3_VALUATION: 1.6e9, // valuation competence check for reaching Act III
   // ── §A5 The one floor that was still the whole act ────────────────────────
@@ -966,6 +1002,18 @@ export const ACT_GATES = {
   ACT5_GDP_SHARE: 0.045, // mediated GDP-share competence check for reaching Act V
   ACT5_FRONTIER: 85, // frontier progress competence check for reaching Act V
   ACT5_STALL_DAYS: 620, // safety-valve days before a stalled race may advance
+  // §A6. What the opening screen tells a new person a run costs, in in-game
+  // days. `runLengthDays()` used to *derive* this — the four act floors plus
+  // the Act V window — and that was honest only while the floors were the
+  // acts. They are a shortest-possible-act now: at §A2's floors the line read
+  // 780–920 days against a measured median run of 1,372, and once §A6 took Act
+  // II's floor to 120 it would have read 650–790, i.e. "about an hour" for a
+  // game whose median run is three and a half. So it is the measured band,
+  // which is also the band this whole file is tuned against — run end p10
+  // 1,151, median 1,409, p90 1,649 over 210 runs, rounded outward. It is a
+  // number in prose, so it must be read rather than typed: re-measure with the
+  // run-end reading whenever a floor or a gate moves.
+  RUN_DAYS_LOW: 1000, RUN_DAYS_HIGH: 1700,
   // §A2. A profitable quarter: consecutive days on which what the company
   // earned covered what it spent. One of the two doors out of Act II, and the
   // one a founder who never raises uses — a quarter rather than a month

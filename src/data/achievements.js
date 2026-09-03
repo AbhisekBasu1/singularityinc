@@ -236,11 +236,18 @@ a('scenarios_4', 'Every Opening', 'Finish runs on four different scenarios.',
   (S) => Object.keys(S.legacy.scenariosCleared || {}).length >= 4, { icon: '❖', rare: true });
 a('every_ending', 'All The Ways It Ends', 'Reach five different endings across timelines.',
   (S) => Object.keys(S.legacy.endings || {}).length >= 5, { icon: '⊙', rare: true });
-// ACT2_MIN_DAYS + ACT3_MIN_DAYS make day 370 the earliest Act III there is;
-// 260 was a promise the floors made impossible. Read the act mark, so a
-// player who kept going does not lose it by the time it is checked.
-a('speedrun', 'Early', 'Reach Act III inside 420 days.',
-  (S) => S.company.act >= 3 && (S.company.actMarks?.[3] ?? S.stats.daysSurvived) < 420, { icon: '⚡', rare: true });
+// §A6. This used to say the floors set the earliest Act III there is, and
+// after §A2 cut them that stopped being true; after §A6 took `ACT3_MIN_DAYS`
+// to 120 the floors allow day 165 and the *gates* are what actually bind —
+// the earliest measured is day 199 in one 210-run sample and 224 in another,
+// which is also why the earliest is not the thing to key an achievement on.
+// So the number is measured: Act III arrives at a median of 378 over 208 runs
+// and 370 catches about 47% of them, which is the share 420 caught before the
+// floor moved. Leaving 420 would have taken a rare achievement to 70% of runs
+// without anybody choosing that. Read the act mark, so a player who kept going
+// does not lose it by the time it is checked.
+a('speedrun', 'Early', 'Reach Act III inside 370 days.',
+  (S) => S.company.act >= 3 && (S.company.actMarks?.[3] ?? S.stats.daysSurvived) < 370, { icon: '⚡', rare: true });
 a('pacifist', 'Nobody Got Hurt', 'Reach Act IV having never acquired or crushed a rival.',
   (S) => S.company.act >= 4 && S.stats.acquisitions === 0 && S.stats.competitorsCrushed === 0, { icon: '☮', rare: true });
 
@@ -272,10 +279,13 @@ a('few_decisions', 'The Quiet Run', 'Reach Act IV having resolved fewer than 90 
   (S) => S.company.act >= 4 && (S.stats.eventsResolved || 0) < 90, { icon: '◌', rare: true });
 a('long_profit', 'It Paid For Itself', 'Spend 400 days of one run with the day\'s revenue above the day\'s costs.',
   (S) => (S.stats.daysProfitable || 0) >= 400, { icon: '◇', rare: true });
-// `speedrun` is Act III inside 420 days; this is the harder one below it, and
-// the floors (ACT2_MIN_DAYS + ACT3_MIN_DAYS) make 370 the earliest there is.
-a('fast_third', 'Straight Through', 'Reach Act III within ten days of the earliest it can be reached.',
-  (S) => S.company.act >= 3 && (S.company.actMarks?.[3] ?? Infinity) <= 380, { icon: '⇥', rare: true, secret: true });
+// `speedrun` is Act III inside 370 days; this is the harder one below it. It
+// promised "within ten days of the earliest it can be reached" and never once
+// meant it — before §A6 the earliest measured Act III was day 313 against a
+// threshold of 380 — so it names the day instead. 320 catches 25% of 208 runs,
+// which is the share 380 caught before the floor moved.
+a('fast_third', 'Straight Through', 'Reach Act III inside 320 days.',
+  (S) => S.company.act >= 3 && (S.company.actMarks?.[3] ?? Infinity) <= 320, { icon: '⇥', rare: true, secret: true });
 a('never_underwater', 'Never Once In The Red', 'Reach Act III without the account ever going negative.',
   (S) => S.company.act >= 3 && (S.stats.daysInRed || 0) === 0, { icon: '⌗', rare: true });
 
