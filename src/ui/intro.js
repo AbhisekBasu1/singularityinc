@@ -419,7 +419,6 @@ async function showLanding({ L }) {
             ${saved ? `<button class="btn btn-primary btn-lg reveal" data-act="continue-game">Continue</button>` : ''}
             <button class="btn ${saved ? 'btn-ghost' : 'btn-primary'} btn-lg reveal" data-act="new-game">
               ${saved ? 'New timeline' : beginLabel()}</button>
-            <a class="btn btn-ghost btn-lg reveal" href="computer/">Open the workstation</a>
             <button class="btn btn-ghost btn-sm reveal ld-import" data-act="import-save-file">Import save file</button>
           </div>
           ${Landing.readout(hand)}
