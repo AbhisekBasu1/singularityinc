@@ -26,6 +26,19 @@ A solo-founder simulation. Vanilla ES modules, no build step, no dependencies.
 - **Walkthrough anchors are load-bearing.** A step spotlights a CSS selector. If you rename
   a panel or drop a `data-tut` attribute, `tools/tutorialtest.mjs` fails — fix the step, do
   not delete it.
+- **A satisfied step holds; it never advances itself.** Meeting a step's condition marks
+  it done for the run: the wait line becomes a tick, Next lights, and the card stays. It
+  used to advance on the frame the condition went true — on the hours step that was
+  mid-drag, the pointer still down on Rest and the spotlight already on another panel —
+  and Back was broken by the same thing: a satisfied step re-satisfied itself on the next
+  frame and bounced forward, once per press. `done` in `src/ui/tutorial.js` is the
+  record and `start()` clears it. `tools/oslive.mjs` reads the card to decide what to
+  press: `.tut-wait` means do the thing, `.tut-done` means press Next — keep both class
+  names. Two more rules from the same pass: a step may name `also` selectors and the
+  cutout is the union (the ship step lights the hands above the Build panel, because on a
+  phone there is no W key, only the tile, and a pane over it was a step with nothing to
+  press); and between steps the cutout *closes* rather than holding the previous step's
+  rectangle, which lit whatever had scrolled under it while the new anchor was on its way.
 - **`styles/console.css` then `styles/hud.css` own the look, in that order.**
   `console.css` is the reskin layer: square geometry, corner ticks, segmented meters,
   mono uppercase labels, screen frame. `styles/hud.css` loads last and is the emissive

@@ -9,6 +9,10 @@
 // other way around.
 //
 //   anchor   CSS selector to spotlight. Omit for a centred card.
+//   also     more selectors kept lit with it — the cutout is the union. A step
+//            that asks for a press has to light the thing being pressed: on a
+//            phone there is no W key, only the tile, and a pane over it was a
+//            step with nothing to do.
 //   view     force this module before the step shows.
 //   place    preferred side of the anchor: top | bottom | left | right.
 //   advance  how the step is satisfied:
@@ -56,9 +60,9 @@ export const CHAPTERS = [
         body: `The bar across the top is **Focus** — your budget for the day, refilled every morning by how you sleep. Under it, four things you can do yourself.\n\n**Q** writes a line by hand: slow, clean, no debt. **W** has the machine write it: ten times the output, for money and a little tech debt. That trade is the whole company.\n\nPress **W** — or **Q**.`,
         advance: { act: 'do' } },
 
-      { id: 'ship', view: 'desk', anchor: '[data-tut="build"]', place: 'right',
+      { id: 'ship', view: 'desk', anchor: '[data-tut="build"]', also: ['[data-tut="actions"]'], place: 'right',
         title: 'Code becomes a feature',
-        body: `Code piles up here until there is enough for a feature. Features are what users actually get, and each one costs more than the last.\n\nPress **W** until the bar fills, then **S** — or the button — to ship it.`,
+        body: `Code piles up here until there is enough for a feature. Features are what users actually get, and each one costs more than the last.\n\nPress **W** — or its tile above — until the bar fills, then **S**, or the Ship button, to ship it.`,
         advance: { act: 'ship' } },
 
       { id: 'rest', view: 'desk', anchor: '[data-tut="alloc"]', place: 'right',

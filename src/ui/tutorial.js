@@ -26,6 +26,7 @@ let onEndFn = null;
 let escHandler = null;
 let aliasFn = null;         // the housing's name for a chrome anchor
 let osMode = false;         // the workstation is up: steps may override themselves
+let done = new Set();       // steps this run has satisfied — they stay satisfied
 
 export function registerShell({ setView, getView, onEnd, alias, os, showing }) {
   setViewFn = setView; getViewFn = getView; onEndFn = onEnd;
@@ -116,6 +117,7 @@ export function start(id, { from = 0 } = {}) {
   if (c.osOnly && !osMode) return false;
   chapter = c;
   index = Math.max(0, Math.min(from, c.steps.length - 1));
+  done = new Set();
   if (c.hold) S.tutorialHold = true;
   mount();
   showStep();
@@ -246,6 +248,7 @@ function showStep() {
   ensureStepView(st, true);
   paintCard();
   lastAnchorMiss = 0;
+  held = null;                    // the last step's cutout is not this step's
   place();
   scrollAnchorIntoView(st);
   sfx('click');
@@ -292,6 +295,14 @@ function scrollAnchorIntoView(st, tries = 0) {
   if (!st?.anchor) return;
   const el = document.querySelector(anchorSel(st.anchor));
   if (!el) { if (tries < 8) setTimeout(() => scrollAnchorIntoView(st, tries + 1), 90); return; }
+  // A step with `also` teaches the union: bring all of it on when it fits the
+  // glass, and settle for the anchor when it does not.
+  const els = targetEls(st);
+  if (els.length > 1) {
+    const box = unionRect(els);
+    if (rectFullyVisible(box, el)) return;
+    if (nudgeRectIntoView(box, el)) return;
+  }
   if (isFullyVisible(el)) return;
   // A partly clipped target only needs a small nudge; a target that is wholly
   // off-screen is easier to understand when it lands in the middle.
@@ -315,7 +326,14 @@ function back() {
 }
 
 // The advance condition. `next` steps wait for the button; everything else is
-// satisfied by the player doing the thing, and the button becomes a way out.
+// satisfied by the player doing the thing, and until then the button is a way
+// out. Meeting the condition makes the step *done*: the line under the body
+// says so, Next lights, and the card holds. It used to advance itself the
+// moment the condition went true — which on the hours step was mid-drag, the
+// pointer still down on Rest and the spotlight already on another panel. And a
+// done step stays done for the run, so Back lands on it and stays: before,
+// going back to a satisfied step re-satisfied it on the next frame and bounced
+// straight forward again, once per press.
 function satisfied(st, ev) {
   const a = st.advance;
   if (!a) return false;
@@ -325,42 +343,86 @@ function satisfied(st, ev) {
   return false;
 }
 
+function markDone() {
+  if (!chapter || done.has(index)) return;
+  done.add(index);
+  sfx('choose');
+  paintCard({ pop: false });
+}
+
+// An action the player performs. `at` guards the delay: the step that asked is
+// the one that gets the tick, not whichever is up when the timer fires.
+function noteAct(act, v) {
+  if (!chapter) return;
+  const st = step();
+  if (!st || done.has(index) || !satisfied(st, { type: 'act', act, v })) return;
+  const at = index;
+  setTimeout(() => { if (chapter && index === at) markDone(); }, 380);   // let the action's own feedback land first
+}
+
 // Delegated actions are global, so watch them here rather than threading a
 // callback through every handler in main.js.
 document.addEventListener('click', (e) => {
   if (!chapter) return;
   const el = e.target.closest?.('[data-act]');
   if (!el) return;
-  const st = step();
-  if (st && satisfied(st, { type: 'act', act: el.dataset.act, v: el.dataset.v })) {
-    setTimeout(advance, 380);       // let the action's own feedback land first
-  }
+  noteAct(el.dataset.act, el.dataset.v);
 }, true);
 
 // Keyboard shortcuts perform the same actions; accept them too.
-export function notifyAction(act, v) {
-  if (!chapter) return;
-  const st = step();
-  if (st && satisfied(st, { type: 'act', act, v })) setTimeout(advance, 380);
-}
+export function notifyAction(act, v) { noteAct(act, v); }
 
 // ── Frame ──────────────────────────────────────────────────────────────────
 // Measuring and placing is separate from the frame loop so a new step lands
 // in the right place on the same tick it is shown, not one frame later.
 const ANCHOR_GRACE = 900;   // long enough for a smooth scroll to land
+let held = null;            // this step has been laid out at least once
+
+// What the spotlight lights: the anchor, unioned with any `also` selectors the
+// step names. The ship step lights the Build panel and the hands above it,
+// because the code it asks for is written up there — on a phone, with a pane
+// over the W tile, it was a step with nothing to press. The union takes every
+// element that renders and `layout` clamps it to the glass; on screen means any
+// one of them is.
+function targetEls(st) {
+  if (!st?.anchor) return [];
+  return [st.anchor, ...(st.also || [])]
+    .map((sel) => document.querySelector(anchorSel(sel)))
+    .filter((el) => el && hasSize(el));
+}
+
+function unionRect(els) {
+  let left = Infinity, top = Infinity, right = -Infinity, bottom = -Infinity;
+  for (const el of els) {
+    const q = el.getBoundingClientRect();
+    left = Math.min(left, q.left); top = Math.min(top, q.top);
+    right = Math.max(right, q.right); bottom = Math.max(bottom, q.bottom);
+  }
+  return { left, top, right, bottom, width: right - left, height: bottom - top };
+}
+
+function targetRect(st) {
+  const els = targetEls(st);
+  return els.some(isVisible) ? unionRect(els) : null;
+}
 
 function place() {
   if (!chapter || !root) return;
   const st = step();
   if (!st?.anchor) { lastAnchorMiss = 0; layout(null); return; }
 
-  const el = document.querySelector(anchorSel(st.anchor));
-  if (el && isVisible(el)) { lastAnchorMiss = 0; layout(el.getBoundingClientRect()); return; }
+  const rect = targetRect(st);
+  if (rect) { lastAnchorMiss = 0; held = true; layout(rect); return; }
 
-  // Not ready. It is probably mid-scroll or mid-repaint, so hold the last
-  // frame rather than blinking to a centred card and back. Only a genuinely
-  // absent anchor — a panel this state does not render — falls through.
+  // Not ready. Inside a step that is a repaint or a scroll, so hold the last
+  // frame rather than blinking to a centred card and back. A step whose anchor
+  // has not been measured yet has no frame of its own, and holding the previous
+  // step's cutout lit whatever scrolled under it — a ring around nothing while
+  // the new target was still on its way — so the cutout closes until it lands.
+  // Only a genuinely absent anchor — a panel this state does not render — falls
+  // through to the centred card.
   if (!lastAnchorMiss) lastAnchorMiss = performance.now();
+  if (!held) closeCutout();
   if (performance.now() - lastAnchorMiss < ANCHOR_GRACE) return;
   layout(null);
 }
@@ -370,9 +432,14 @@ function tick() {
   const st = step();
   ensureStepView(st);
   place();
-  // Non-click advance conditions are polled.
-  if (st?.advance && !st.advance.act && satisfied(st)) { advance(); }
+  // Non-click conditions are polled; meeting one lights Next and holds.
+  if (st?.advance && !st.advance.act && !done.has(index) && satisfied(st)) markDone();
   raf = requestAnimationFrame(tick);
+}
+
+function hasSize(el) {
+  const r = el.getBoundingClientRect();
+  return r.width > 4 && r.height > 4;
 }
 
 function isVisible(el) {
@@ -392,21 +459,28 @@ function scrollHost(el) {
 // teach from: the whole anchor needs to clear both the window and the scrolling
 // game surface. This catches panels whose last rows sit below `.main` or a
 // workstation window.
-function isFullyVisible(el, inset = 12) {
-  const r = el.getBoundingClientRect();
+function clipBox(el, inset = 12) {
   const scroller = scrollHost(el);
   const clip = scroller?.getBoundingClientRect?.();
-  const top = Math.max(0, clip?.top ?? 0) + inset;
-  const bottom = Math.min(window.innerHeight, clip?.bottom ?? window.innerHeight) - inset;
+  return { scroller,
+    top: Math.max(0, clip?.top ?? 0) + inset,
+    bottom: Math.min(window.innerHeight, clip?.bottom ?? window.innerHeight) - inset };
+}
+
+function isFullyVisible(el, inset = 12) { return rectFullyVisible(el.getBoundingClientRect(), el, inset); }
+
+// `el` names the scroller — the element whose `.main` or window body is the
+// operative viewport — and `r` is what has to fit in it, which for a union of
+// panels is not any one element's own box.
+function rectFullyVisible(r, el, inset = 12) {
+  const { top, bottom } = clipBox(el, inset);
   return r.width > 4 && r.height > 4 && r.top >= top && r.bottom <= bottom;
 }
 
-function nudgeFullyIntoView(el, inset = 12) {
-  const r = el.getBoundingClientRect();
-  const scroller = scrollHost(el);
-  const clip = scroller?.getBoundingClientRect?.();
-  const top = Math.max(0, clip?.top ?? 0) + inset;
-  const bottom = Math.min(window.innerHeight, clip?.bottom ?? window.innerHeight) - inset;
+function nudgeFullyIntoView(el, inset = 12) { return nudgeRectIntoView(el.getBoundingClientRect(), el, inset); }
+
+function nudgeRectIntoView(r, el, inset = 12) {
+  const { scroller, top, bottom } = clipBox(el, inset);
   if (r.height > bottom - top) return false;
   const delta = r.top < top ? r.top - top : r.bottom > bottom ? r.bottom - bottom : 0;
   if (!delta) return false;
@@ -430,11 +504,7 @@ function layout(rect) {
 
   if (!rect) {
     // Whole screen dim, card centred.
-    css(panes.t, { top: 0, left: 0, width: W + 'px', height: H + 'px' });
-    css(panes.b, { height: '0px', width: '0px' });
-    css(panes.l, { height: '0px', width: '0px' });
-    css(panes.r, { height: '0px', width: '0px' });
-    ring.hidden = true;
+    closeCutout();
     card.classList.add('centred');
     card.style.left = ''; card.style.top = '';
     return;
@@ -453,6 +523,18 @@ function layout(rect) {
   css(ring, { top: y + 'px', left: x + 'px', width: w + 'px', height: h + 'px' });
 
   placeCard(card, { x, y, w, h }, step()?.place);
+}
+
+// Every pane over the glass and no ring: the dim with nothing lit. The card is
+// left where it is — between two steps that is the honest frame, and moving
+// the card to the centre and back is the blink `place` holds a frame to avoid.
+function closeCutout() {
+  if (!root) return;
+  const W = window.innerWidth, H = window.innerHeight;
+  css(root.querySelector('[data-p="t"]'), { top: '0px', left: '0px', width: W + 'px', height: H + 'px' });
+  for (const p of ['b', 'l', 'r']) css(root.querySelector(`[data-p="${p}"]`), { height: '0px', width: '0px' });
+  const ring = root.querySelector('.tut-ring');
+  if (ring) ring.hidden = true;
 }
 
 function css(el, o) { if (el) for (const k in o) el.style[k] = o[k]; }
@@ -490,13 +572,20 @@ function placeCard(card, box, prefer = 'bottom') {
 }
 
 // ── Card ───────────────────────────────────────────────────────────────────
-function paintCard() {
+// `pop` replays the arrival; a step turning done repaints in place instead.
+function paintCard({ pop = true } = {}) {
   const card = root?.querySelector('.tut-card');
   const st = step();
   if (!card || !st) return;
   const n = chapter.steps.length;
   const waits = !!st.advance;      // any condition means the card is waiting on the player
-  const label = st.cta || (waits ? 'Skip step' : index === n - 1 ? 'Done' : 'Next');
+  const isDone = waits && done.has(index);
+  const last = index === n - 1;
+  // Until the step is done its button is the way past it, and says so.
+  const label = st.cta || (waits && !isDone ? 'Skip step' : last ? 'Done' : 'Next');
+  const line = !waits ? ''
+    : isDone ? `<div class="tut-done"><span class="tut-check">\u2713</span>done \u00b7 next when you are ready</div>`
+    : `<div class="tut-wait"><span class="tut-pulse"></span>waiting for you</div>`;
 
   card.innerHTML = `
     <div class="tut-head">
@@ -505,14 +594,14 @@ function paintCard() {
     </div>
     <div class="tut-title">${esc(st.title)}</div>
     <div class="tut-body">${md(st.body)}</div>
-    ${waits ? `<div class="tut-wait"><span class="tut-pulse"></span>waiting for you</div>` : ''}
+    ${line}
     <div class="tut-rail">${Array.from({ length: n },
       (_, i) => `<i class="tut-tick${i < index ? ' done' : i === index ? ' on' : ''}"></i>`).join('')}</div>
     <div class="tut-foot">
       <button class="tut-ghost" data-tutact="skip" title="Close this walkthrough — replay it any time from ? → Walkthroughs">Close</button>
       <span class="grow"></span>
       ${index > 0 ? `<button class="tut-ghost" data-tutact="back">←</button>` : ''}
-      <button class="tut-go ${waits ? 'ghosted' : ''}" data-tutact="next">${esc(label)}</button>
+      <button class="tut-go${waits && !isDone ? ' ghosted' : ''}${isDone ? ' lit' : ''}" data-tutact="next">${esc(label)}</button>
     </div>`;
-  card.classList.remove('pop'); void card.offsetWidth; card.classList.add('pop');
+  if (pop) { card.classList.remove('pop'); void card.offsetWidth; card.classList.add('pop'); }
 }

@@ -109,6 +109,13 @@ for (const c of CHAPTERS) {
         warn(`${where}: anchor ${st.anchor} exists but has no styles — is it the right element?`);
       }
     }
+    // `also` widens the cutout; a selector in it is an anchor by another name.
+    if (st.also && !Array.isArray(st.also)) fail(`${where}: also must be a list of selectors`);
+    for (const sel of Array.isArray(st.also) ? st.also : []) {
+      checks++;
+      if (!st.anchor) fail(`${where}: also without an anchor`);
+      if (!anchorExists(sel)) fail(`${where}: also ${sel} matches nothing in any view`);
+    }
 
     const a = st.advance;
     if (a) {

@@ -86,6 +86,13 @@
    the right-click — instead, and carries the note. */
 .action-slot > button:disabled { pointer-events: none; }
 .action-slot[data-tip] { cursor: not-allowed; }
+/* In a flex row the slot holds its width and the text beside it gives. The
+   slot is `min-width: 0` for the grid it usually sits in, and in a `.row` that
+   let it shrink to nothing: at a phone width the Launch row squeezed it to 38px
+   and the button, which clips, read "AUNCH". A slot told to grow may, and its
+   neighbour wraps under it rather than the label being cut. */
+.row > .action-slot { flex: 0 0 auto; }
+.row > .action-slot.grow { flex: 1 1 auto; min-width: max-content; }
 .tip .note {
   font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em;
   text-transform: uppercase; color: var(--amber);

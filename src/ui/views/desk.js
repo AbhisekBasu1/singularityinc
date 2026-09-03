@@ -171,7 +171,7 @@ export function render(S) {
             </div>
             ${bar(featPct, featPct >= 1 ? 'var(--green)' : 'var(--cyan)', { tall: true, shimmer: featPct >= 1 })}
           </div>
-          <div class="row g8">
+          <div class="row wrap g8">
             ${noteSlot(featPct >= 1 ? null : shipNote(S, p, cost), 'Ship', 'grow', `<button class="btn ${featPct >= 1 ? 'btn-primary' : ''} grow" data-act="ship" ${featPct >= 1 ? '' : 'disabled'}>
               ${featPct >= 1 ? 'Ship Feature' : `Need ${fmt(cost - S.resources.code)} more code`}
             </button>`)}
