@@ -21,20 +21,20 @@
   Cache-Control: no-cache
 
 /index.html
-  Origin-Trial: REPLACE_WITH_THE_TOKEN_FOR_THIS_ORIGIN
+  Origin-Trial: ArdJkzenUoVnqPN+7smakDQYv93Y59ev6twDJ/KqniCsJ/IDpfgPi97tl//3/plcBe+uCOpV0DfVHYcsNsMeuA4AAABeeyJvcmlnaW4iOiJodHRwczovL3Npbmd1bGFyaXR5aW5jLmFiaGlzZWtiYXN1LmNvbTo0NDMiLCJmZWF0dXJlIjoiV2ViTUNQIiwiZXhwaXJ5IjoxNzk0ODczNjAwfQ==
   Cache-Control: no-cache
 
 /
-  Origin-Trial: REPLACE_WITH_THE_TOKEN_FOR_THIS_ORIGIN
+  Origin-Trial: ArdJkzenUoVnqPN+7smakDQYv93Y59ev6twDJ/KqniCsJ/IDpfgPi97tl//3/plcBe+uCOpV0DfVHYcsNsMeuA4AAABeeyJvcmlnaW4iOiJodHRwczovL3Npbmd1bGFyaXR5aW5jLmFiaGlzZWtiYXN1LmNvbTo0NDMiLCJmZWF0dXJlIjoiV2ViTUNQIiwiZXhwaXJ5IjoxNzk0ODczNjAwfQ==
   Cache-Control: no-cache
 
 # The workstation is the same game at a second path on the same origin, so it
 # carries the same token — trials are per origin, never per path. It needs its
 # own rows because a rule for `/` does not cover `/computer/`.
 /computer/
-  Origin-Trial: REPLACE_WITH_THE_TOKEN_FOR_THIS_ORIGIN
+  Origin-Trial: ArdJkzenUoVnqPN+7smakDQYv93Y59ev6twDJ/KqniCsJ/IDpfgPi97tl//3/plcBe+uCOpV0DfVHYcsNsMeuA4AAABeeyJvcmlnaW4iOiJodHRwczovL3Npbmd1bGFyaXR5aW5jLmFiaGlzZWtiYXN1LmNvbTo0NDMiLCJmZWF0dXJlIjoiV2ViTUNQIiwiZXhwaXJ5IjoxNzk0ODczNjAwfQ==
   Cache-Control: no-cache
 
 /computer/index.html
-  Origin-Trial: REPLACE_WITH_THE_TOKEN_FOR_THIS_ORIGIN
+  Origin-Trial: ArdJkzenUoVnqPN+7smakDQYv93Y59ev6twDJ/KqniCsJ/IDpfgPi97tl//3/plcBe+uCOpV0DfVHYcsNsMeuA4AAABeeyJvcmlnaW4iOiJodHRwczovL3Npbmd1bGFyaXR5aW5jLmFiaGlzZWtiYXN1LmNvbTo0NDMiLCJmZWF0dXJlIjoiV2ViTUNQIiwiZXhwaXJ5IjoxNzk0ODczNjAwfQ==
   Cache-Control: no-cache
