@@ -4,6 +4,8 @@
 
 **A founder simulation where your own assistant plays the world against you.**
 
+**Play it now:** [singularityinc.abhisekbasu.com](https://singularityinc.abhisekbasu.com) · the workstation at [/computer/](https://singularityinc.abhisekbasu.com/computer/) · the rival's own site at [rivalsingularityinc.abhisekbasu.com](https://rivalsingularityinc.abhisekbasu.com/rival/). Nothing to install.
+
 > **Runs in the ChatGPT desktop app, built-in browser, on GPT-5.6 Sol or Terra.**
 > Luna has WebMCP disabled. Site tools do not exist in the ChatGPT web app, the
 > browser extension, or Codex CLI, and Enterprise and Edu workspaces are
