@@ -1,4 +1,6 @@
-# SINGULARITY, INC.
+<p align="center">
+  <img src="assets/readme/wordmark.webp" alt="SINGULARITY, INC." width="100%">
+</p>
 
 **A founder simulation where your own assistant plays the world against you.**
 
@@ -24,6 +26,8 @@ you press Accept, or you do not.
 **[Play with your assistant →](#playing-with-your-assistant)**
 
 ---
+
+![What is actually going on](assets/readme/s01-world.webp)
 
 ## What is actually going on
 
@@ -69,6 +73,8 @@ A blocked call stays visible and returns the earned reason. Only **Mute the
 world** tears down the registrations; ordinary play never churns the tool list.
 
 ---
+
+![Playing with your assistant](assets/readme/s02-assistant.webp)
 
 ## Playing with your assistant
 
@@ -246,6 +252,8 @@ the first thing you are owed.
 
 ---
 
+![Two housings](assets/readme/s03-housings.webp)
+
 ## Two housings
 
 The game plays in either of two shells, on one save, and you can move between
@@ -269,6 +277,8 @@ sensibly in the ChatGPT pane.
 The workstation is what `docs/plan/desktopdesign.md` specifies and `src/ui/os/` implements.
 `src/ui/shell.js` is the seam: a facade in front of two implementations of one
 interface, so no view, system or tool knows which housing is up.
+
+![Run it](assets/readme/s04-run.webp)
 
 ## Run it
 
@@ -295,6 +305,8 @@ See [`docs/DEPLOY.md`](docs/DEPLOY.md) for the origin-trial chicken-and-egg, and
 trusting any of it.
 
 ---
+
+![The numbers](assets/readme/s05-numbers.webp)
 
 ## The numbers
 
@@ -330,6 +342,8 @@ full list, with a line each on what it sees, is in [`CLAUDE.md`](CLAUDE.md).
 
 ---
 
+![Reading the code](assets/readme/s06-code.webp)
+
 ## Reading the code
 
 | | |
@@ -346,6 +360,8 @@ full list, with a line each on what it sees, is in [`CLAUDE.md`](CLAUDE.md).
 MIT licensed.
 
 ---
+
+![The game itself](assets/readme/s07-game.webp)
 
 ## The game itself
 
@@ -388,6 +404,8 @@ reduced efficiency) while the tab is closed.
 
 ---
 
+![The opening](assets/readme/s08-opening.webp)
+
 ## The opening
 
 It starts as a scene, not a settings page. A cold open types itself out at 4am, the
@@ -399,6 +417,8 @@ button to hunt for. Then a curtain, and the game fades up behind it.
 Everything is skippable with a click, and after your first timeline the opening skips
 the cold open and adds difficulty and scenario controls behind a single "Adjust the
 run conditions" line.
+
+![What the game is](assets/readme/s09-what.webp)
 
 ## What the game is
 
@@ -417,6 +437,8 @@ run the clock and how long you sit with the decisions.
 
 Endings are constructed, not stumbled into. A prestige layer (**New Timeline**) carries legacy
 points, permanent perks, achievements and unlocked founder archetypes across runs.
+
+![Systems](assets/readme/s10-systems.webp)
 
 ## Systems
 
@@ -558,6 +580,8 @@ points, permanent perks, achievements and unlocked founder archetypes across run
 - **Ask ARIA** — an in-fiction analyst that reads the live simulation state and gives you a
   ranked, specific read on your position, in a voice that changes as she does.
 
+![By the numbers](assets/readme/s11-bynumbers.webp)
+
 ## By the numbers
 
 | | |
@@ -591,6 +615,8 @@ points, permanent perks, achievements and unlocked founder archetypes across run
 | Terminal commands / Record folders | **35** / **19**, generated from the save and never stored |
 | Save slots | **3**, plus the file, the string and a `#deck=` link |
 | Distinct run configurations | **1,568** |
+
+![How it teaches itself](assets/readme/s12-teaches.webp)
 
 ## How it teaches itself
 
