@@ -33,7 +33,7 @@ const VIEW_IDS = [...read('src/ui/shell.js').matchAll(/\{\s*id:\s*'([a-z]+)',\s*
 // marked `osOnly` may name one outright.
 const APP_IDS = [...read('src/ui/os/apps.js').matchAll(/\{\s*id:\s*'([a-z]+)',\s*title:/g)].map((m) => m[1]);
 const ACTIONS = new Set([...ALL_SRC.matchAll(/data-act="([a-z0-9-]+)"/g)].map((m) => m[1]));
-const CSS = ['main', 'components', 'intro', 'console', 'os'].map((f) => read(`styles/${f}.css`)).join('\n');
+const CSS = ['main', 'components', 'intro', 'console', 'hud', 'os', 'phone'].map((f) => read(`styles/${f}.css`)).join('\n');
 
 let fails = 0, warns = 0, checks = 0;
 const fail = (m) => { fails++; console.log('  ✗ ' + m); };

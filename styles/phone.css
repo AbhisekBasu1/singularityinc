@@ -1,0 +1,285 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE PHONE
+   The console, in one hand. This sheet loads last and holds everything that
+   is true only on glass: a coarse pointer, no hover, no keyboard, and a screen
+   between 320 and 620 pixels wide that people open a link on without ever
+   having seen the desktop. It is one file rather than a `max-width: 620px`
+   block at the bottom of each of the four sheets underneath, because a phone
+   is a different housing and not a narrower desktop — the chrome changes
+   shape here, and the shape has to be readable in one place.
+
+   Four decisions hold it together:
+
+   - The nav is a bar along the bottom, under the thumb, with the module
+     names on it. A 56px icon rail down the left of a 390px screen cost a
+     seventh of the width and put every module out of reach of the hand.
+   - The topbar is two rows. One row hid four of the five readouts at 700px
+     and squeezed Cash to a bare `$` beside the transport; the second row is a
+     ticker with all of them on it, and the two doors that were hidden below
+     760px (the post and the contacts) sit at its end — there is no M or C key
+     on a phone, and without a door those two surfaces were not in the game.
+   - The Wire is a full-width sheet over the module, stopping at the bar. The
+     132px it reserved above the bottom was for a chat box that only exists in
+     the ChatGPT desktop pane; on a phone that band was a strip of the Desk
+     showing under the feed.
+   - Nothing a thumb has to hit is under 34px, no label the eye has to read is
+     under 9.5px, and a label that does not fit wraps instead of clipping. The
+     mono indices and key badges keep their size: they are marks, not copy.
+
+   `tools/phoneshot.mjs` is how this is checked. It walks every surface at a
+   phone width and audits each for sideways scroll, clipped labels, small
+   targets and tiny text, and saves the screenshots — which are the actual
+   test; the audit is what points at them.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Touch, at any width ─────────────────────────────────────────────────── */
+@media (hover: none) and (pointer: coarse) {
+  button, [data-act], .slider, .nav-item, .choice, .thread-opt, .tech-node, .branch-tab, .cat-card, .arch-card {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  .btn, .action-btn, .nav-item, .speed-btn, .choice, .thread-opt, .tab, .branch-tab {
+    -webkit-user-select: none; user-select: none;
+  }
+  /* iOS zooms the whole page into any field under 16px. */
+  input, textarea, select { font-size: 16px; }
+  /* A finger is wider than a cursor. */
+  .slider { height: 38px; }
+  .slider-knob { width: 9px; height: 22px; }
+  /* A hover state has no end on glass: it sticks after the tap. Keep the
+     colour, drop the movement. */
+  .btn:hover:not(:disabled), .action-btn:hover:not(:disabled), .thread-opt:hover,
+  .beat-back:hover, .roll-btn:hover { transform: none; }
+}
+
+/* ── The housing ─────────────────────────────────────────────────────────── */
+/* A phone held sideways is 844×390: wider than the cut, and still a phone.
+   The list is the same layer both ways; the landscape block after it takes
+   the height back. */
+@media (max-width: 620px), ((max-width: 900px) and (max-height: 430px) and (orientation: landscape)) {
+  :root {
+    --topbar-h: 89px;          /* 52 for the transport, 37 for the ticker */
+    --ph-nav-h: 52px;          /* the bar, before the safe area */
+    --ph-status-h: 22px;
+    --ph-bottom: calc(var(--ph-nav-h) + var(--ph-status-h) + env(safe-area-inset-bottom, 0px));
+  }
+  #app { height: 100dvh; }
+
+  /* ── Topbar: two rows on a grid ─────────────────────────────────────────
+     The time block is `display: contents` so its buttons become cells of the
+     bar and can be placed on either row. `paintTopbar` builds this DOM once
+     and patches it, so the ids are stable. */
+  .topbar {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) auto auto auto auto;
+    grid-template-rows: 52px 37px;
+    height: var(--topbar-h); padding: 0 6px 0 0; gap: 0 4px;
+    align-items: center;
+  }
+  .topbar .time-block { display: contents; }
+  .topbar .brand {
+    grid-area: 1 / 1; width: 44px; flex: 0 0 44px; height: 52px;
+    padding-left: 0; justify-content: center; gap: 0;
+  }
+  .topbar .brand-mark { width: 24px; height: 24px; flex: 0 0 24px; font-size: 12px; }
+  .topbar .brand-text, .topbar .brand-day, .topbar #tb-say, .topbar .time-block > .col, .topbar #tb-focus { display: none; }
+  .topbar #tb-speed { grid-area: 1 / 2; justify-self: start; }
+  .topbar #tb-wire { grid-area: 1 / 3; }
+  .topbar #tb-world { grid-area: 1 / 4; }
+  .topbar [data-act="help"] { grid-area: 1 / 5; }
+  .topbar [data-act="settings"] { grid-area: 1 / 6; }
+  .topbar .stat-strip { grid-area: 2 / 1 / 3 / 5; }
+  .topbar [data-act="open-contacts"] { grid-area: 2 / 5; display: inline-flex; }
+  .topbar #tb-post { grid-area: 2 / 6; display: inline-flex; }
+
+  .topbar .speed-group { padding: 2px; gap: 2px; }
+  .topbar .speed-btn { min-width: 34px; height: 36px; font-size: 12px; }
+  .topbar .speed-btn:nth-child(3), .topbar .speed-btn:nth-child(5) { display: none; }
+  .topbar .tb-wire, .topbar .tb-post { height: 36px; padding: 0 9px; margin-right: 0; }
+  .topbar .tb-world { height: 36px; min-width: 36px; padding: 0 8px; justify-content: center; }
+  .topbar .tb-world .tbw-n { display: none; }     /* the dot is the chip */
+  .topbar .tb-world .tbw-dot { width: 7px; height: 7px; flex-basis: 7px; }
+  .topbar .btn-icon { width: 36px; height: 36px; padding: 0; }
+
+  /* The ticker: every readout, label over value, as narrow as its wider
+     line — so all five fit a 390 and the strip only swipes once the empire
+     adds compute and world GDP to it. */
+  .topbar .stat-strip {
+    height: 37px; padding: 0 2px; gap: 0; min-width: 0;
+    border-top: 1px solid var(--etch);
+    overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+    justify-content: flex-start;
+  }
+  .topbar .stat-strip::-webkit-scrollbar { display: none; }
+  .topbar .stat {
+    flex: 1 0 auto; flex-direction: column; align-items: center; justify-content: center;
+    gap: 1px; padding: 0 7px; height: 100%; border-radius: 0;
+  }
+  .topbar .stat + .stat::before { height: 18px; }
+  .topbar .stat-label { font-size: 7.5px; letter-spacing: 0.1em; line-height: 1; }
+  .topbar .stat-value { font-size: 12px; line-height: 1.1; text-shadow: 0 0 10px currentColor; }
+  .topbar .stat-value.sm { font-size: 11px; }
+  .topbar .stat-delta { display: none; }        /* still in the readout's tip */
+  /* The last readout fades at the edge, which is how a strip says it goes on. */
+  .topbar .stat-strip {
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent);
+    mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent);
+  }
+  /* The post's door wore the Wire's dot; on the ticker row, beside the phone,
+     it is an envelope. */
+  .topbar .tb-post .tbw-dot { width: auto; height: auto; flex-basis: auto; background: none; box-shadow: none; animation: none; }
+  .topbar .tb-post .tbw-dot::before { content: '\2709'; font-size: 13px; line-height: 1; }
+
+  /* ── The shell: main, then the status line, then the bar ──────────────── */
+  .shell { display: contents; }
+  .main { order: 1; flex: 1 1 auto; min-height: 0; padding: 12px 10px 28px; }
+  .statusline {
+    order: 2; height: var(--ph-status-h); padding: 0 8px; gap: 8px;
+    font-size: 9px; letter-spacing: 0.1em;
+  }
+  .statusline .sl-view { display: none; }         /* the bar shows the module */
+  .statusline .sl-left .sl-seg:nth-child(2) { display: inline; }
+  .statusline .sl-mid { justify-content: flex-start; overflow-x: auto; scrollbar-width: none; gap: 6px; }
+  .statusline .sl-mid::-webkit-scrollbar { display: none; }
+  .statusline .sl-right { display: none; }
+
+  .nav {
+    order: 3; flex: 0 0 auto; height: auto;
+    display: flex; flex-direction: row; align-items: stretch; gap: 0;
+    padding: 4px 4px calc(4px + env(safe-area-inset-bottom, 0px));
+    border-right: none; border-top: 1px solid var(--edge);
+    overflow: hidden; position: relative; z-index: 42;
+    background: linear-gradient(180deg, rgba(8,10,16,0.96), rgba(5,6,10,0.98));
+  }
+  .nav-section, .nav-spacer, .act-card, .nav-idx { display: none; }
+  .nav-item {
+    flex: 1 1 0; min-width: 0; height: 44px;
+    flex-direction: column; justify-content: center; align-items: center; gap: 4px;
+    padding: 4px 0 3px; text-align: center; letter-spacing: 0.04em;
+  }
+  .nav-item > span:not(.nav-icon):not(.nav-badge):not(.nav-idx) {
+    display: block; font-size: 7.5px; line-height: 1; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .nav-icon { width: auto; font-size: 16px; line-height: 1; opacity: 0.9; }
+  .nav-item .nav-badge {
+    position: absolute; top: 2px; right: 4px; margin: 0;
+    min-width: 14px; height: 14px; font-size: 8px; padding: 0 3px;
+  }
+  .nav-item.on::before { display: none; }
+  #app.booting .nav-item { animation-name: navUp; }
+  @keyframes navUp { from { opacity: 0; transform: translateY(6px); } 60% { opacity: 1; } to { opacity: 1; transform: none; } }
+
+  /* Focus mode is a desktop idea; the bar is already as small as it goes. */
+  #app.focus-mode .nav-item > span:not(.nav-idx):not(.nav-icon) { display: block; }
+
+  /* ── The Wire: a sheet over the module ────────────────────────────────── */
+  .feed-rail {
+    top: var(--topbar-h); left: 0; right: 0; width: 100vw;
+    bottom: var(--ph-bottom); border-left: none;
+  }
+  .feed-head { padding: 10px 12px 9px; }
+  .feed-close { width: 36px; height: 36px; }
+  .thread-opt { padding-top: 9px; padding-bottom: 9px; font-size: 11.5px; }   /* the left keeps the > glyph's room */
+  .thread-later { padding: 7px 10px; }
+  /* An envelope on one line had the subject in eleven characters. Who and
+     when on the first line; what it is about on its own. */
+  .env-line { flex-wrap: wrap; row-gap: 3px; padding: 9px 11px; }
+  .env-who { max-width: none; flex: 1 1 auto; order: 1; }
+  .env-line .feed-live { order: 2; }
+  .env-line .feed-left { order: 3; }
+  .env-day { order: 4; }
+  .env-subject { order: 5; flex: 1 1 100%; white-space: normal; line-height: 1.4; }
+
+  #toast-root {
+    left: 8px; right: 8px; max-width: none; align-items: stretch;
+    bottom: calc(var(--ph-bottom) + 8px);
+  }
+
+  /* ── Views ────────────────────────────────────────────────────────────── */
+  .view-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  .view-head > .row { flex-wrap: wrap; justify-content: flex-start; }
+  .view-sub { max-width: none; }
+  .act-hero { height: 110px; }
+
+  /* Keys a thumb can hit; labels that wrap rather than clip. */
+  .btn { min-height: 38px; padding: 8px 14px; }
+  .btn-sm { min-height: 36px; min-width: 36px; padding: 6px 11px; font-size: 11px; }
+  .btn-icon { width: 38px; height: 38px; padding: 0; }
+  .btn-block, .btn-lg, .modal-choices .btn, .action-slot.block .btn { white-space: normal; line-height: 1.3; height: auto; }
+  .modal-choices[style*="row"] { flex-wrap: wrap; }
+  .modal-choices[style*="row"] .btn { flex: 1 1 auto; }
+  .row.g8 > .btn-sm, .row.g8 > .action-slot { flex: 0 0 auto; }
+  /* A row of keys wraps; a row that is a label and a value does not. */
+  .main .row:has(> .btn:nth-of-type(2)), .main .row:has(> .action-slot ~ .btn),
+  .price-trade, .counter .ct-top { flex-wrap: wrap; row-gap: 4px; }
+  .counter .ct-cost, .pt-side { white-space: normal; }
+  .modal-top .btn-icon { flex: 0 0 auto; }
+  .alloc-row { grid-template-columns: 82px 1fr 38px; gap: 8px; }
+  .branch-tab, .lane-tab, .spend-hand, .tab { min-height: 36px; }
+  /* The list's tick is a 16px box; the thumb gets the whole row's height. */
+  .td-tick { width: 22px; height: 22px; box-sizing: content-box; padding: 7px; margin: -7px; }
+
+  /* Modals fill the glass. */
+  .modal-backdrop { padding: 6px; }
+  .modal { max-height: calc(100dvh - 12px); width: 100%; }
+  .modal-top { padding: 14px 14px 11px; }
+  .modal-body { padding: 14px 14px 16px; }
+  .modal-choices { padding: 4px 10px 12px; }
+  .event-body { font-size: 14px; line-height: 1.66; }
+  .event-title { font-size: 16px; }
+  .choice { padding: 11px 13px; }
+
+  /* ── The type floor ───────────────────────────────────────────────────── */
+  .stat-tile-label, .meter-label { font-size: 9.5px; letter-spacing: 0.12em; }
+  .focus-state, .focus-vital, .act-hero-kicker, .sinks-k, .nem-band, .nem-k,
+  .ch-key, .ch-foot, .tl-kind, .tk, .tk-label, .cc-stat, .ld-arc, .feed-author,
+  .env-who, .env-day, .stat-tile-sub, .tie-word, .tie-since, .td-note, .pt-side, .ship-kind,
+  .nr-out, .nr-day, .ng-days, .pp-state, .pp-k, .ep-idx, .ep-req, .ct-cost, .tly-cause, .why-caret { font-size: 9.5px; }
+  .sl-alert { font-size: 9px; padding: 1px 5px; }
+  .pill { font-size: 10px; padding: 4px 8px; }
+  .tiny { font-size: 11px; }
+  .feed-meta { font-size: 10px; }
+
+  /* ── The opening and the landing ──────────────────────────────────────── */
+  .beat-back, .roll-btn { width: 40px; height: 40px; }
+  .stage-cue-btn { min-height: 40px; }
+  .ld-shots { grid-template-columns: minmax(0, 1fr); }
+  .ld-link { display: inline-block; padding: 8px 0; }
+  .wm-actions .btn, .ld-tools .btn { min-height: 36px; }
+}
+
+/* Under 340px — an old SE — row one of the topbar is a few pixels over. The
+   world's chip goes; on a phone there is no assistant to reach through it,
+   and the panel is still at the top of the Wire. */
+@media (max-width: 340px) {
+  .topbar { grid-template-columns: 40px minmax(0, 1fr) auto auto auto; }
+  .topbar #tb-world { display: none; }
+  .topbar [data-act="help"] { grid-area: 1 / 4; }
+  .topbar [data-act="settings"] { grid-area: 1 / 5; }
+  .topbar .stat-strip { grid-area: 2 / 1 / 3 / 4; }
+  .topbar [data-act="open-contacts"] { grid-area: 2 / 4; }
+  .topbar #tb-post { grid-area: 2 / 5; }
+  .topbar .speed-btn { min-width: 32px; height: 34px; }
+  .nav-item > span:not(.nav-icon):not(.nav-badge):not(.nav-idx) { font-size: 7px; }
+}
+
+/* Sideways, a phone is 390px tall: the bar and the ticker are most of it.
+   The ticker folds into the first row's slack and the bar goes back to
+   icons. */
+@media (max-width: 900px) and (max-height: 430px) and (orientation: landscape) {
+  :root { --topbar-h: 52px; --ph-nav-h: 40px; }
+  .topbar { grid-template-columns: 44px auto minmax(0, 1fr) auto auto auto auto auto auto; grid-template-rows: 52px; }
+  .topbar #tb-speed { grid-area: 1 / 2; }
+  .topbar .stat-strip { grid-area: 1 / 3; height: 52px; border-top: none; }
+  .topbar #tb-wire { grid-area: 1 / 4; }
+  .topbar #tb-world { grid-area: 1 / 5; }
+  .topbar [data-act="open-contacts"] { grid-area: 1 / 6; }
+  .topbar #tb-post { grid-area: 1 / 7; }
+  .topbar [data-act="help"] { grid-area: 1 / 8; }
+  .topbar [data-act="settings"] { grid-area: 1 / 9; }
+  .nav-item { height: 34px; }
+  .nav-item > span:not(.nav-icon):not(.nav-badge):not(.nav-idx) { display: none; }
+  .statusline { display: none; }
+  :root { --ph-status-h: 0px; }
+}

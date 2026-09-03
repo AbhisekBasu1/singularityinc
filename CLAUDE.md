@@ -913,6 +913,53 @@ founder's own hand, so `surface.js` keeps a small `external` set and
 `reconcile` does not treat it as a stray to revoke. `muteAll` still takes it,
 because the plug means every origin.
 
+## The phone (`styles/phone.css`)
+
+The console in one hand. `phone.css` loads last, after `hud.css`, and is
+the whole of what is true only on glass: a coarse pointer at any width, and
+under 620px (or a phone held sideways) a different housing rather than a
+narrower desktop. It is one file on purpose — the chrome changes shape
+there, and the shape has to be readable in one place — so anything
+phone-only goes in it, not in a `max-width` block at the bottom of the four
+sheets underneath. The workstation does not load it: `/computer/` has its
+own stacked mode and a phone opening the link lands on `/`.
+
+- **The nav is a bar along the bottom, with the module names on it.** The
+  `.shell` grid goes `display: contents` so `.main`, the status line and
+  `.nav` become the app column's own flex children and can be ordered;
+  the 56px icon rail cost a seventh of a 390px screen and put every module
+  out of the thumb's reach. Everything that used to read `--nav-w` for its
+  left edge (the toast lane, the brand cell) is restated in the sheet.
+- **The topbar is two rows on a grid.** `.time-block` is `display:
+  contents` so its keys are cells of the bar and can be placed on either
+  row — `paintTopbar` builds that DOM once and patches it, so the ids are
+  stable enough to address. Row one is the brand, the transport, the Wire's
+  door, the world's chip and the two keys; row two is the ticker — every
+  readout, label over value — with the post and the contacts at its end.
+  Those two doors were `display: none` below 760px, and with no M or C key
+  on a phone the post and the phone book were simply not in the game there.
+  Under 340px the world's chip goes: there is no assistant to reach through
+  it on a phone, and the panel is still at the top of the Wire.
+- **The Wire is a full-width sheet that stops at the bar.** The 132px it
+  reserved above the bottom was for ChatGPT's chat box, which exists only in
+  the desktop pane; on a phone it was a strip of the Desk showing under the
+  feed. `tools/shot.mjs` therefore skips its keep-out band below 700px — the
+  pane is never that narrow, and a phone's bottom belongs to the browser.
+- **Nothing a thumb hits is under 34px and no label the eye reads is under
+  9.5px.** Mono indices, key badges and the bar's own labels keep their
+  size: they are marks, not copy. A row of keys wraps (`:has(> .btn:nth-
+  of-type(2))`), a dialog's action row wraps, and a long label on a block
+  key wraps — clipping was the failure in every case the survey found.
+  Inputs are 16px under a coarse pointer, or iOS zooms the page into them.
+- **`tools/phoneshot.mjs` is how this is checked.** It walks every surface
+  the console has — landing, setup, all eight modules, the Wire, a card, a
+  call, every dialog, the act card, the briefing, an ending, the walkthrough
+  — at a phone size (`W=`, `H=`), photographs each, and audits the whole
+  column for sideways scroll, labels clipped inside their box, targets under
+  36px and text under 9.5px. It exempts what scrolls sideways on purpose.
+  The screenshots are the actual test; the audit is what points at them.
+  Run it at 390×844, 360×800, 320×568 and 844×390 before touching this.
+
 ## The landing (`/`)
 
 The title beat at `/` is a landing page: one scroll inside the existing
@@ -1013,7 +1060,8 @@ like a regression and was noise. Use parity for regressions and balance for
 pacing.
 
 `tools/shot.mjs` is not a test — it is the only thing that has ever looked at
-the page. `tools/liveworld.mjs` is the same idea for the world: it injects a
+the page (`tools/phoneshot.mjs` is the same idea at a phone size, surface by
+surface). `tools/liveworld.mjs` is the same idea for the world: it injects a
 ModelContext before the app boots and drives the whole thing — a card, an
 answer in the founder's own words, the Accept form, a refusal, the second
 origin, the plug — through `executeTool`, then checks that an *absent* second

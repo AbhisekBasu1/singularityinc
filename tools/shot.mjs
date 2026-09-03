@@ -166,7 +166,11 @@ try {
     // ── The keep-out check ──────────────────────────────────────────────────
     // ChatGPT's chat input floats over the bottom centre of its browser, about
     // 720×120. Anything the page puts there is underneath it and unreachable.
-    const inBox = await page.evaluate(() => {
+    // That pane is never narrower than about 700px; under it the page is on a
+    // phone, whose bottom belongs to the browser's own toolbar and to the nav
+    // bar `phone.css` puts there — a band that is not a chat box.
+    const phone = w < 700;
+    const inBox = phone ? { pinned: [], flowing: [] } : await page.evaluate(() => {
       const bw = Math.min(720, innerWidth), bh = 120;
       const box = { l: (innerWidth - bw) / 2, r: (innerWidth + bw) / 2, t: innerHeight - bh, b: innerHeight };
       const pinned = [], flowing = [];
@@ -188,7 +192,7 @@ try {
       return { pinned: [...new Set(pinned)].slice(0, 8), flowing: [...new Set(flowing)].slice(0, 6) };
     });
     if (inBox.pinned.length) note(`pinned under the ChatGPT chat box, unreachable: ${inBox.pinned.join(' | ')}`);
-    else console.log('  ✓ nothing is pinned under the chat box');
+    else console.log(phone ? '  · no chat box on a phone' : '  ✓ nothing is pinned under the chat box');
     if (inBox.flowing.length) console.log(`  · in the keep-out box but scrollable: ${inBox.flowing.join(' | ')}`);
 
     // ── The world's console must be reachable at every width ───────────────
@@ -235,8 +239,9 @@ try {
       if (!before.rail && onScreen(door)) {
         document.getElementById('app')?.classList.add('wire-open');
         const after = open();
-        // Nothing the drawer pins may sit in the floating chat box.
-        const bw = Math.min(720, innerWidth), bh = 120;
+        // Nothing the drawer pins may sit in the floating chat box — which
+        // is a desktop pane's; a phone has no band to keep out of.
+        const bw = Math.min(720, innerWidth), bh = innerWidth < 700 ? 0 : 120;
         const box = { l: (innerWidth - bw) / 2, r: (innerWidth + bw) / 2, t: innerHeight - bh };
         const buried = [...document.querySelectorAll('#feed-rail button')].filter((el) => {
           if (!onScreen(el)) return false;

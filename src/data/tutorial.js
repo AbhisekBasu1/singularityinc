@@ -46,7 +46,7 @@ export const CHAPTERS = [
     steps: [
       { id: 'welcome',
         title: 'This is the console',
-        body: `You are one person with a laptop and a model that will write whatever you describe.\n\nEverything you will ever do happens on the eight modules down the left. This walkthrough covers the first one, and you will do three things in it: write, ship, and set your hours.\n\nSkip whenever you like — **?** reopens it, with the manual for every term in the game. **The clock is held until you are done.**`,
+        body: `You are one person with a laptop and a model that will write whatever you describe.\n\nEverything you will ever do happens on the eight modules in the rail. This walkthrough covers the first one, and you will do three things in it: write, ship, and set your hours.\n\nSkip whenever you like — **?** reopens it, with the manual for every term in the game. **The clock is held until you are done.**`,
         os: { title: 'This is the machine',
           body: `You are one person with a laptop and a model that will write whatever you describe.\n\nEverything you will ever do happens in the eight apps in the dock. This walkthrough covers the first one, and you will do three things in it: write, ship, and set your hours.\n\nSkip whenever you like — **?** reopens it, with the manual for every term in the game. **The clock is held until you are done.**` },
         cta: 'Begin' },
