@@ -632,7 +632,7 @@ screenshots. Run it with a GPU.
 
 ## The cast, the person and the long game
 
-Nine features from `newideas.md`, built on top of the world layer. Every one is
+Nine features from `docs/plan/newideas.md`, built on top of the world layer. Every one is
 additive: with no assistant the phone plays written trees, Aperture plays a
 written policy and the chair is empty. Nothing new reaches a reducer except
 through the seventeen keys and `commit()`.
@@ -1060,7 +1060,7 @@ there. `_review.ids` is an array and not the Set `reviewLoad` works in, because
 empty object with no `has` on it.
 
 All three bots share the hiring rule — `canReview(S, cand)` beside the runway
-check — for the reason `whatitneeds.md` gives: when attention becomes scarce, a
+check — for the reason `docs/plan/whatitneeds.md` gives: when attention becomes scarce, a
 harness that hires on cash alone measures its own ignorance. Measured across 35
 runs the end-of-run roster went 10 → 8 and Act V's went 10 → 8, with act medians
 moving by under 3%: the cap is `MAX_ROSTER_BASE` plus research as before, but

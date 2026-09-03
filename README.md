@@ -266,7 +266,7 @@ a **Journal** you write in, a **Calendar** the clock walks through, and a
 layout as fractions of the desktop, so a run arranged on a 27-inch screen opens
 sensibly in the ChatGPT pane.
 
-The workstation is what `desktopdesign.md` specifies and `src/ui/os/` implements.
+The workstation is what `docs/plan/desktopdesign.md` specifies and `src/ui/os/` implements.
 `src/ui/shell.js` is the seam: a facade in front of two implementations of one
 interface, so no view, system or tool knows which housing is up.
 
@@ -341,7 +341,7 @@ full list, with a line each on what it sees, is in [`CLAUDE.md`](CLAUDE.md).
 | `src/world/forecast.js` | the world runs the game forward on a copy of itself, and puts the RNG back |
 | `src/data/balance.js` | every number, with the measurement that produced it |
 | [`docs/PATTERN.md`](docs/PATTERN.md) | the four files worth copying into another project, and the traps they handle |
-| `docs/plan/` | the field guide, the design notes and the build plan this layer was built from — history, not instructions |
+| `docs/plan/` | the field guide, the design notes, the build plan, the workstation spec, the backlogs and the two full reads of the game (`newideas.md`, `whatitneeds.md`) — history, not instructions |
 
 MIT licensed.
 
