@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // THE DESK — founder attention, direct actions, the core Act I loop.
 // ─────────────────────────────────────────────────────────────────────────────
-import { esc, md, bar, meter, slider, sparkline, noteSlot } from '../dom.js';
+import { esc, md, bar, meter, slider, sparkline, noteSlot, objDetail } from '../dom.js';
 import { actionNote, shipNote, launchNote, noteTip } from '../notes.js';
 import { fmt, money, pct, clamp } from '../../engine/format.js';
 import { ALLOCATIONS, founderOutput, focusMultiplier, promptCost,
@@ -705,7 +705,7 @@ function objectivesPanel(S) {
             <span class="obj-dot"></span>
             <span style="min-width:0">
               <span class="obj-title">${esc(o.title)}${o.optional ? ' <span class="dimmer tiny">optional</span>' : ''}</span>
-              <span class="obj-hint">${esc(o.hint)}</span>
+              ${objDetail(o.doors ? o.doors(S) : null, o.hint)}
             </span>
           </button>`).join('')}
       </div>

@@ -691,6 +691,11 @@ html.reduced-motion .tb-said { transition: none; }
 .obj.clickable:hover { background: rgba(0,229,160,0.075); border-left-color: var(--green); transform: none; }
 .obj-title { font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em; text-transform: uppercase; }
 .obj-dot { border-radius: 0; width: 5px; height: 5px; }
+/* The deed's doors read as an instrument's checklist: the tick and the reading
+   in mono, the name in the body face so the row still reads as a sentence. */
+.obj-door .door-k, .obj-door .door-v { font-family: var(--mono); }
+.obj-door .door-v { color: var(--ink-5); }
+.obj-door.on .door-v { color: var(--green); }
 
 /* ── Act hero ────────────────────────────────────────────────────────────── */
 .act-hero { border-radius: var(--radius); border: 1px solid var(--edge); }

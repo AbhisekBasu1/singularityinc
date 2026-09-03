@@ -321,7 +321,7 @@ Full detail in [`evals/README.md`](evals/README.md).
 | facts absent from the page at any length | **8 / 8**, six of them shipped by a tool |
 | world actions with no DOM path at all | **5 / 5** |
 | cross-origin | a second origin publishing, discovered and called |
-| worst-legal-world vs the same bot alone | Act III day 479 vs 437 |
+| worst-legal-world vs the same bot alone | Act III day 526 vs 487 |
 | base game, untouched | act medians inside the ranges committed before this existed |
 
 Before committing:
@@ -434,8 +434,11 @@ Five acts, each of which changes what the game *is*:
 | **IV** | The Singularity | Recursive self-improvement. A visible race toward the frontier. Alignment stops being abstract. |
 | **V** | Ascension | Nothing requires you. You choose what all of it was for. |
 
-Roughly 1,000–1,700 in-game days per run — two to four hours, depending on how fast you
-run the clock and how long you sit with the decisions.
+Roughly 1,000–1,700 in-game days per run — measured median 1,456 across 105 seeded
+runs — two to four hours, depending on how fast you run the clock and how long you sit
+with the decisions. Each act closes on a number *and* a deed: something you can decide
+to go and do, with two or three ways to do it, and the Log shows how far along each of
+them you are.
 
 Endings are constructed, not stumbled into. A prestige layer (**New Timeline**) carries legacy
 points, permanent perks, achievements and unlocked founder archetypes across runs.

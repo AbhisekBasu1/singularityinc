@@ -33,7 +33,7 @@ get anything done: writing it yourself beats explaining it, and the game says so
 out loud. Nothing compounds yet.
 
 **Gate:** launch the product, ship 8 features, then reach $7K MRR with 2,200
-users — or 12,000 users on their own. Floor 45 days; median exit ≈ day 126.
+users — or 12,000 users on their own. Floor 45 days; median exit ≈ day 136.
 
 ### Act II — The Machine · *Product–Market Fit*
 
@@ -44,7 +44,7 @@ no setting that avoids the trade.
 
 **Gate:** $120M ARR and a $1.6B valuation, and either a Series A or ninety
 straight days where the day paid for itself. Floor 250 days; median exit ≈ day
-383.
+413.
 
 ### Act III — The Empire · *Escape Velocity*
 
@@ -54,8 +54,11 @@ moves against you rather than merely existing.
 
 **Gate:** a $180B valuation and 2,600 PF of compute, and one of three ways to
 stop being only a market participant — a hearing sat through, a region taken to
-government partnership, or a frontier-class training run. Floor 420 days;
-median exit ≈ day 760.
+government partnership, or a frontier-class training run. The Log shows all
+three as a checklist with where you stand in each, because any one of them opens
+it and the interface used to name them in one sentence and then go quiet.
+Floor 150 days; median exit ≈ day 697, and the act lasts as long as arriving
+takes rather than as long as the floor says.
 
 ### Act IV — The Singularity · *Recursive Ascent*
 
@@ -69,7 +72,8 @@ your frontier megaprojects, and how little you are slowing down for alignment.
 settled without you. And one thing done inside this act: a quarterly intention
 kept, or a season of the feud closed in your favour. Floor 215 days, with a
 620-day stall valve underneath the whole clause, so a run that is otherwise
-finished cannot be locked out of its own ending. Median exit ≈ day 1016.
+finished cannot be locked out of its own ending — measured, that valve is
+reached by about one run in a hundred. Median exit ≈ day 1174.
 
 **Every act since §A2 closes on a deed as well as a number**, because the
 economic curves are near vertical by Act III — raising the Act III bar from $75M
@@ -77,7 +81,11 @@ ARR to $280M moved the transition by 36 days. A threshold cannot pace anything;
 it can only wall off a bad run while a good one sails past. So the day floor
 sets the pace, the numbers are the competence check, and the deed is the thing
 the act was *for*. Every deed has more than one door: a bootstrapper who never
-raises must still be able to leave Act II.
+raises must still be able to leave Act II. And since §A5 every door says how far
+along it is — "a region at government partnership · 2 of 3 stages in South Asia"
+— on the Log, in the Field Notes and on the workstation, so the nearest one is
+always visible and the act ends when the founder arrives rather than when the
+calendar does.
 
 ### Act V — Ascension · *What Comes After*
 
@@ -86,8 +94,9 @@ ending. Each gate on the Ascension panel now says how many days it has left —
 alignment falls while the company is pointed at the frontier, approval falls as
 GDP share rises, and both of those were always true and were never once shown
 next to the gate they close. Past a window inside the act one of three cards
-seals a gate for good, and which one is the founder's answer. Median ≈ day 1200;
-a full run lands between 1000 and 1700 in-game days.
+seals a gate for good, and which one is the founder's answer. Reached at a
+median of day 1174; a full run lands between 1000 and 1700 in-game days, with a
+measured median of 1,456 across 105 seeded runs.
 
 ## The endings
 

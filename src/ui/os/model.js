@@ -6,7 +6,7 @@
 // run and checks it for the same leaked `undefined` and `NaN` that
 // `tools/uitest.mjs` checks every view for.
 // ─────────────────────────────────────────────────────────────────────────────
-import { esc, bar, sparkline } from '../dom.js';
+import { esc, bar, sparkline, objDetail } from '../dom.js';
 import { fmt, gameDateShort, clockText } from '../../engine/format.js';
 import * as Transport from '../transport.js';
 import { isLocked, dockApps } from './apps.js';
@@ -310,7 +310,7 @@ export function nowWidgetHtml(S) {
       <button class="w-obj" ${o.view ? `data-act="view" data-v="${o.view}"` : ''}>
         <span class="w-obj-dot"></span>
         <span class="w-obj-text"><span class="w-obj-title">${esc(o.title)}</span>
-        <span class="w-obj-hint">${esc(o.hint)}</span></span>
+        ${safe(() => objDetail(o.doors ? o.doors(S) : null, o.hint, 'w-obj-hint'), '')}</span>
       </button>`).join('')}</div>` : ''}
   </section>`;
 }

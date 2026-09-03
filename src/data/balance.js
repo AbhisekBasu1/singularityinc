@@ -935,7 +935,30 @@ export const ACT_GATES = {
   ACT3_MIN_DAYS: 250, // minimum length of Act II (was 310)
   ACT3_ARR: 120e6, // ARR competence check for reaching Act III
   ACT3_VALUATION: 1.6e9, // valuation competence check for reaching Act III
-  ACT4_MIN_DAYS: 420, // minimum length of Act III (was 470 — still two megaprojects long)
+  // ── §A5 The one floor that was still the whole act ────────────────────────
+  // Measured on 207 seeded runs (7 builds × 30) of `gateMetDay[4] −
+  // actMarks[3]` — the day the Act IV gate is *first fully met*, counted from
+  // the day Act III opened. That number does not move with this floor, because
+  // the stamp is taken before the act can turn either way, which is what makes
+  // it the right instrument for setting one. Distribution: min 59, p5 96,
+  // p10 111, p25 178, median 279, p75 365, max 601.
+  //
+  // Against a 420-day floor that was 90% of runs waiting on a calendar, and
+  // Act III's length was *exactly* 420 at the 25th, 50th and 75th percentile:
+  // the floor was not pacing the act, it was the act. A founder who had sat
+  // through the hearing on day 60 of it was told the world needed another 130
+  // days.
+  //
+  // 150 is the sane minimum rather than the 5th percentile, and the difference
+  // is deliberate. A floor at ~95 would bind in 5% of runs, but 150 is the
+  // shortest Act III that still holds a megaproject, and a lucky run must not
+  // clear the act in a month. Re-measured at 150 on 105 runs: the median
+  // gate-open share is 0% in six of the seven builds (11% in the seventh, mean
+  // 5%, against 37% median / 38% mean at 420), Act III's median length is the
+  // gate at 286 days rather than the floor at 420, and the run still ends at a
+  // median of 1,456 days. The floor does still bind in 16% of runs — those are
+  // the ones that arrive inside five months, and they wait weeks, not seasons.
+  ACT4_MIN_DAYS: 150, // minimum length of Act III (was 470, then 420 — the deed closes it now)
   ACT4_VALUATION: 1.8e11, // valuation competence check for reaching Act IV
   ACT4_COMPUTE: 2600, // compute competence check for reaching Act IV
   ACT5_MIN_DAYS: 215, // minimum length of Act IV (was 270)

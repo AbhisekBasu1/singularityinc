@@ -960,42 +960,52 @@ ChatGPT's chat box at three widths.
 
 Balance targets (medians across builds): Act II ≈ day 110, Act III ≈ 400,
 Act IV ≈ 870, Act V ≈ 1200. A full run should land between 1000 and 1700 in-game
-days. Measured on the current build (medians of 5 runs × 7 builds): Act II
-84–148, Act III 354–514, Act IV 739–873, Act V 985–1265, runs ending 1285–1565.
+days.
 
-Re-run at the close of the pass, `RUNS=3 DAYS=2000`, so a *three*-run sample
-against that five-run one: Act II 83–179, Act III 337–408, Act IV 718–789,
-Act V 951–1271, and 0 bankruptcies in 21 runs. Medians of those medians are
-126 / 383 / 760 / 1016. Read the spread and not the point: three runs is
-exactly the sample this file has twice recorded lying to it, and the two
-readings overlap everywhere they can. What is worth noticing is the same shape
-the paragraph below already names — Act IV keeps coming in early, and Act V's
-median with it, because §A2 took the waiting out of the floors and nothing has
-put length back into the game. The honest lever remains `ACT4_MIN_DAYS`, and it
-costs the open share directly.
+**Measured on the current build at §A5, 7 builds × 15 seeded runs = 105, with
+the same harness run against the previous floor for the comparison.** Five runs
+is the sample the balance table takes and it has lied to this file twice; a
+hundred and five does not, and the before column below is the *same* harness on
+the *same* day with one constant changed, which is the only kind of before this
+document should print.
 
-And the gate-open column, on that run: **0% / 0–38% / 0–75% / 0%**, median about
-0 / 26 / 33 / 0. Acts II and IV still leave with no wait at all in most builds.
-Act III is the one that is not fixed: a third of it, and in two builds two
-thirds, is still spent with the next gate open. The deed there has three doors
-by design and every one of them lands early, so the fix is not a fourth door and
-it is certainly not narrowing to one — that is the defect §A2 was written to
-remove. It wants either a floor that admits what it is or a door that is
-genuinely late in the act, and either one has to be measured against Act IV's
-arrival before it is believed.
+| | before (`ACT4_MIN_DAYS` 420) | after (150) |
+|---|---|---|
+| Act II reached | 134 | 136 |
+| Act III reached | 423 | 413 |
+| Act IV reached | 849 | **697** |
+| Act V reached | 1172 | 1174 |
+| Act II length | 250 | 250 |
+| Act III length | **420** (p25 = p50 = p75) | **286** |
+| Act IV length | 319 | 432 |
+| run end | 1415 (90/100 in band) | 1456 (86/99 in band) |
+| gate-open I / II / III / IV | 0% / 11% / **37%** / 0% | 0% / 15% / **0%** / 0% |
+| bankruptcies | 2/105 | 0/105 |
 
-Act IV moved, on purpose, and the run did not. §A2 cut the act floors (310→250,
-470→420, 270→215) and put a deed in each gate; the act that had been held open
-longest by a timer came in the furthest, and **Act IV's median is 801 against
-the old 867** — below the band this paragraph used to name. What did *not* move
-is the length of a run: 1,474 days against 1,454, because the days came out of
-the waiting rather than out of the game. Measured across the same 35 runs, the
-acts re-proportioned — Act II 306→288 days, Act III 433→397, **Act IV 287→373**
-— and the share of each act spent with the next gate already open went from
-0% / 29% / 58% / 22% to **0% / 0% / 33% / 0%**. Acts II and IV no longer wait at
-all; Act III still does, and it is the one left to fix. Act II (116) and Act V
-(1174) are inside the old band. If a later pass wants Act IV back at 870, the
-honest lever is `ACT4_MIN_DAYS` and it costs the open share directly.
+**§A5 took the last timer out of Act III.** The deed there has three doors and
+the gate opens on the earliest, which lands in the first third; `ACT4_MIN_DAYS`
+then held the act for another four months, so a founder who had survived the
+hearing was told the world needed a hundred and thirty more days. The floor is
+150 now, chosen off the distribution of the day the Act IV gate is first fully
+met (`gateMetDay[4] − actMarks[3]`: min 59, p5 96, median 279) and floored at
+the shortest Act III that still holds a megaproject rather than at the p5 —
+`src/data/balance.js` carries the whole reading. Per build the Act III open
+share went 10/58/16/73/50/31/45% to **0/0/0/11/0/0/0%**, and Act III's length
+stopped being the floor to the digit and became the gate.
+
+**Where the time went is the thing to know before touching this again.** It did
+not come out of the run: Act V still arrives at 1174 against 1172 and the run
+still ends at a median of 1,456 days inside the 1000–1700 band. It moved into
+Act IV, whose median length went 319 → 432 — and that is the game asking for
+work rather than a timer, because Act IV's own gate-open share is 0% in every
+build at both floors. Act IV is bound by its numbers ($12T, 4.5% of world GDP,
+recursive self-improvement, 85% on the frontier) and by nothing else. Two things
+to watch there: `ACT5_STALL_DAYS` (620) is exceeded by 1% of runs now against
+2.2% before, because Act IV's *maximum* length fell (962 → 739) even as its
+median rose; and **Act II is now the act with a binding floor** — its length is
+exactly `ACT3_MIN_DAYS` in five of seven builds and its open share is 15%
+(mean 20%). That is the next one, and it wants the same instrument: measure
+`gateMetDay[3] − actMarks[2]` before moving 250.
 
 **Which act gate binds is deliberate — and since §A2 an act also closes on a
 deed.** The economic curves are near vertical by Act III — raising the Act III
@@ -1014,10 +1024,12 @@ calendar.
 
 `ACT_DEEDS` in `systems/progression.js` is the answer: one authored act per
 transition, ANDed into that act's `test`, and the floors cut to meet it
-(310→250, 470→420, 270→215; Act I's 60→45 has never bound). Re-measured on the
-same 21 runs the open share is **0% / 2% / 29% / 0%**.
+(310→250, 470→**150**, 270→215; Act I's 60→45 has never bound). §A2 cut the
+first two and §A5 finished Act III's, which was the one still binding: the
+floors are **45 / 250 / 150 / 215** today, and the open share on 105 seeded runs
+is **0% / 15% / 0% / 0%**.
 
-Three rules hold the table together:
+Four rules hold the table together:
 
 - **Every deed has more than one door.** Act II is a Series A *or* a profitable
   quarter, because a bootstrapper must be able to leave it — measured, the
@@ -1029,6 +1041,27 @@ Three rules hold the table together:
 - **A deed is a competence check, not a delay.** Measured, every door lands
   before its act's numbers do, so the deeds move no median on their own; what
   moved the medians is the floors coming down behind them.
+- **§A5. Every door says how far along it is.** A deed named three chases in
+  one sentence of prose and then never mentioned them again, so a founder two
+  stages off a treaty had no way to know it. Each door carries a `note` — a
+  pure function of `S`, no draw from the stream, called from `render(S)` seven
+  times a second — and `deedDoors(S, act)` is the one list the Desk's objective
+  row, its Field Note (`act_deed`) and the workstation's NOW widget all draw:
+  "a hearing survived · not yet", "a region at government partnership · 2 of 3
+  stages in South Asia", "the frontier training run · 61%". `objDetail` in
+  `ui/dom.js` draws it and the checklist *replaces* the objective's hint rather
+  than sitting under it, because the hint on a deed is those doors written out
+  as one sentence — printing both is the same list twice with only one of them
+  saying where you stand. The reading goes on its own line under its door: an
+  objective card is 210px by `minmax` and beside the name it squeezed "a region
+  at government partnership" into three wrapped words. The deed's own
+  `test` is *derived* from its doors (`anyOpen`) rather than typed beside them,
+  so the checklist a founder reads and the gate that actually opens cannot
+  disagree. A door opening writes one line to the Wire, once per door per run,
+  from `DOOR_OPENED` in `data/events_acts.js`; `S.company.doorsOpen` is the
+  record and it is seeded *silently* the first time it is missing, because a
+  save from before this existed is mid-run with doors already open and three
+  lines about last spring is not a beat.
 - **Act IV's deed is scoped to Act IV.** "Keep a quarterly intention, or close
   a season of the feud in your favour" counts only from `actStartedDay`, or a
   promise kept in the garage would close the last act before it. The Act V

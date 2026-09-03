@@ -1003,10 +1003,16 @@ lines that make anything scarce after Act II: serving cost per category, upkeep
 on megaprojects and regions, wages by tier and level, a research spend line, and
 the marketing and infrastructure dials that write two ledger fields which had a
 reader and no writer. Acts close on a deed as well as a number (§A2), and the
-floors came down to meet them — 310→250, 470→420, 270→215 — which took the
-waiting out of the acts rather than out of the game: measured across 35 runs the
-run length moved 1,454→1,474 days while the share of each act spent with the
-next gate already open went **0% / 29% / 58% / 22% → 0% / 0% / 33% / 0%**. The
+floors came down to meet them — 310→250, 470→420 and then (§A5) →150, 270→215 —
+which took the waiting out of the acts rather than out of the game: measured
+across 105 seeded runs the run end sits at 1,456 days while the share of each act
+spent with the next gate already open is **0% / 15% / 0% / 0%**. Act III was the
+one §A2 left binding, and §A5 finished it by measuring the day the Act IV gate is
+first fully met (median 279 days into the act, p5 96) and putting the floor under
+that at the shortest Act III that still holds a megaproject: its open share went
+37%→0% and its length stopped being exactly 420 days in three quarters of runs.
+The time moved into Act IV (319→432 days), which is numbers-bound rather than
+timed — its own open share is 0% at both floors. The
 race stopped being a rubber band (§A3): `sprint` and `behind` are gone, each of
 the four labs runs its own roster, nodes and money through `systems/labs.js`, and
 over 28 seeded runs per column a committed founder wins **26/28** where an
@@ -1107,17 +1113,32 @@ the problem.
 
 ### Left
 
+*Gone from this list since it was written: **a late door out of Act III**. It
+did not need a fourth door; it needed the floor under it to admit what it was.
+`ACT4_MIN_DAYS` is 150 rather than 420, measured off the day the Act IV gate is
+first fully met, and Act III's open share is 0% in six of seven builds — while
+the three doors stayed three and each of them now shows how far along it is.*
+
+- **Act II is the act with a binding floor now.** Measured on the same 105 runs
+  that closed Act III: Act II's length is exactly `ACT3_MIN_DAYS` (250) in five
+  of seven builds and it spends a median 15% of itself — mean 20%, and 46% in
+  one build — with the Act III gate already open, against 0% for Acts I, III and
+  IV. It is the same defect §A5 just fixed one act along, and it wants the same
+  instrument: measure the distribution of `gateMetDay[3] − actMarks[2]` and put
+  the floor a little under its 5th percentile before touching 250.
+- **`evals/baseline.mjs` is not deterministic despite its seed.** It plays 320
+  bot days from seed 4242 and the run lands anywhere from day 325 to day 355,
+  with Act II turning between day 96 and 202 — a wall-clock path somewhere under
+  `bot.play`, not the seeded stream. The briefing payload it then measures comes
+  out between 1,302 and 1,444 characters against a 1,500 cap, so roughly one run
+  in eight sheds `youMay.cast` and the `cast_list` claim fails its own probe.
+  Reproduced at both the old floor and the new one, so it is nothing to do with
+  §A5. Either pin whatever is reading the clock, or the probe should name a
+  field the payload cannot shed.
 - **I11 — eventually one housing.** Untouched, and correctly so: it is the one
   item in this document that deletes something. The console at `/` and the
   workstation at `/computer/` still share one save in both directions and one
   facade in `src/ui/shell.js`, and every suite runs against both.
-- **A late door out of Act III.** Measured at the end of the pass, Act III still
-  spends a median third of itself — and in two builds two thirds — with the next
-  gate already open, against 0% for Acts II and IV. It is the last of §A2 that is
-  not finished. The fix is not narrowing `deed_arrive` to one door, which is the
-  defect §A2 was written to remove; it wants a floor that admits what it is or a
-  genuinely late door, and either has to be measured against Act IV's arrival,
-  which already comes in early.
 - **`commentary` has no eval phrase.** It is the only conditionally published
   name on the surface, and `evals/select.mjs` asserts that every published tool
   is asked for by at least one phrase. It passes because the eval's state has no

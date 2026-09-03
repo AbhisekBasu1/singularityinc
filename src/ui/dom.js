@@ -173,6 +173,35 @@ export function noteSlot(note, title, cls, inner) {
   return `<span class="action-slot ${cls || ''}"${tip}>${inner}</span>`;
 }
 
+// ── §A5 The doors of an act's deed, as a checklist ──────────────────────────
+// `deedDoors(S, act)` in `systems/progression.js` is the one place that knows
+// what the two or three ways out of an act are and how far along each is; this
+// is the one place that draws them. Both housings render this, so the Desk's
+// objective row, its Field Note and the workstation's NOW widget cannot come
+// to different conclusions about which door is nearest.
+//
+// The checklist *replaces* the objective's hint rather than sitting under it,
+// because the hint on a deed is the doors written out as one sentence — "a
+// hearing sat through, a region at government partnership, or a frontier-class
+// training run" — and printing both is the same list twice with only one of
+// them saying where you stand.
+//
+// A tick column rather than a rail: a one-sided accent border on a list row is
+// what `tools/oneside.mjs` exists to catch, and an index reads as machine. The
+// reading goes on its own line under the door rather than beside it: an
+// objective card is ~210px wide by `minmax`, and "a region at government
+// partnership" beside "2 of 3 stages in South Asia" squeezes the name to three
+// wrapped words. Sized by the panel, not by the window.
+export function objDetail(doors, hint, hintClass = 'obj-hint') {
+  if (!doors || !doors.length) return `<span class="${hintClass}">${esc(hint)}</span>`;
+  return `<span class="obj-doors">${doors.map((d) => `
+    <span class="obj-door${d.done ? ' on' : ''}">
+      <span class="door-k mono">${d.done ? '✓' : '·'}</span>
+      <span class="door-n">${esc(d.name)}</span>
+      <span class="door-v mono">${esc(d.note)}</span>
+    </span>`).join('')}</span>`;
+}
+
 // ── Slider (custom, pointer-driven) ────────────────────────────────────────
 export function slider(key, value, color = 'var(--green)', extra = '') {
   const v = Math.max(0, Math.min(1, value || 0));

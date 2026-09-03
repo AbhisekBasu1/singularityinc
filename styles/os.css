@@ -865,6 +865,11 @@ html[data-shell="os"].reduced-motion .mb-power .pw-cell i { transition: none; }
 .os .w-obj-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .os .w-obj-title { font-size: 11px; font-weight: 600; color: var(--ink-2); }
 .os .w-obj-hint { font-size: 10px; color: var(--ink-5); line-height: 1.4; }
+/* The deed's doors, in the widget. The same grid as the Desk's, one step
+   smaller, because the NOW card is a glance and the Desk's row is a read. */
+.os .w-obj .obj-doors { margin-top: 4px; gap: 0 5px; }
+.os .w-obj .door-k, .os .w-obj .door-v { font-size: 8.5px; line-height: 1.5; }
+.os .w-obj .door-n { font-size: 9.5px; line-height: 1.5; }
 
 .os .w-reads { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
 /* Five readouts in two columns leave the fifth sitting beside a hole, and the

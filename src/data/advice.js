@@ -8,6 +8,7 @@ import { runwayDays, burnPerDay, bankruptcyFloor } from '../systems/economy.js';
 import { activeProduct } from '../engine/state.js';
 import { maxAgents } from '../systems/agents.js';
 import { featureCost } from '../systems/product.js';
+import { deedDoors } from '../systems/progression.js';
 
 const N = [];
 const n = (id, priority, when, title, body, opts = {}) => N.push({ id, priority, when, title, body, ...opts });
@@ -115,6 +116,21 @@ n('act_ready', 84, (S) => { const g = S._actHint; return g && g.ready && g.wait 
   'You have met the threshold',
   (S) => `The numbers for the next act are already there. The world just needs time to catch up — **${Math.ceil(S._actHint.wait)} days**.`,
   { tone: 'green' });
+// §A5. The doors, at the moment the clock stops being the thing holding the
+// act. Every deed has two or three ways out, and the interface named them once,
+// in a single line of prose, and then never said which one the founder was
+// nearest — so a run could sit in Act III with a region two stages off a
+// treaty and nothing anywhere that said so. `deedDoors` is the same list the
+// Desk's objective row and the workstation's NOW widget draw, so all three
+// agree about which door is closest.
+n('act_deed', 82, (S) => { const g = S._actHint;
+    if (!g || g.ready || g.wait > 0) return false;
+    const d = deedDoors(S, g.act);
+    return d.length > 0 && d.every((x) => !x.done); },
+  'Nothing is waiting on the calendar now',
+  (S) => `${deedDoors(S, S._actHint.act).map((d) => `**${d.name}** — ${d.note}`).join('. ')}. `
+    + `Any one of them closes the act, and the numbers are the other half. Those keep moving on their own. These do not.`,
+  { tone: 'amber' });
 n('fundraise', 48, (S) => S.unlocks.fundraising && runwayDays(S) < 120 && S.company.rounds.length < 2,
   'You could raise on this chart',
   () => `Money buys speed. It costs a permanent share of everything after. Both of those are true at the same time.`,

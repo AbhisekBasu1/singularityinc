@@ -5,7 +5,7 @@
 import { totalUsers, totalMrr } from '../systems/product.js';
 import { activeProduct } from '../engine/state.js';
 import { RESEARCH_MAP } from './research.js';
-import { ACT_DEEDS } from '../systems/progression.js';
+import { ACT_DEEDS, deedDoors } from '../systems/progression.js';
 import { treeComplete } from '../systems/research.js';
 
 const O = [];
@@ -16,9 +16,15 @@ const o = (id, title, hint, test, opts = {}) => O.push({ id, title, hint, test, 
 // again here — a number in prose should be read, not typed, and so should a
 // requirement. Declared at the end of each act's block, which is where
 // `activeObjectives` sorts it: last thing in the act, because it is.
+//
+// §A5. And `doors`, which is the same table read one level deeper: the two or
+// three ways out of the act, each with how far along it is. An objective row
+// that carries it renders a checklist rather than a sentence, so the founder
+// can see which door is nearest instead of being told three of them exist.
 const deed = (id, act, view) => {
   const d = ACT_DEEDS[act + 1];
-  o(id, d.name, d.hint, (S) => d.test(S), { act, reward: { xp: 30 }, view });
+  o(id, d.name, d.hint, (S) => d.test(S),
+    { act, reward: { xp: 30 }, view, doors: (S) => deedDoors(S, act + 1) });
 };
 
 // ── Act I: the garage

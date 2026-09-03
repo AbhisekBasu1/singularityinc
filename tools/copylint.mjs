@@ -105,6 +105,10 @@ const MODULES = {
     return Object.entries(m.MORNING)
       .flatMap(([who, list]) => list.map((text, i) => ({ id: `${who}${i}`, text })));
   })()),
+  // §A5. What the Wire says the day one of an act's doors opens. A flat map of
+  // door id to sentence, wrapped so the walker sees them.
+  doors: Object.entries((await import('../src/data/events_acts.js')).DOOR_OPENED)
+    .map(([id, text]) => ({ id, text })),
   machineFolders: (await import('../src/data/machine.js')).FOLDERS,
   machineDepartures: Object.entries((await import('../src/data/machine.js')).DEPARTURES)
     .map(([id, text]) => ({ id, text })),

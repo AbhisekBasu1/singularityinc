@@ -324,6 +324,30 @@
 .obj-title { display: block; font-size: 12.5px; font-weight: 600; line-height: 1.35; }
 .obj-hint { display: block; font-size: 10.5px; color: var(--ink-3); line-height: 1.4; margin-top: 2px; }
 
+/* The doors of an act's deed. A tick column rather than a rail: a one-sided
+   accent on a list row is exactly what tools/oneside.mjs is written to catch,
+   and an index reads as machine.
+
+   Two columns and two rows per door — the tick, the door, and the reading on
+   its own line beneath. Beside the name it squeezed "a region at government
+   partnership" into three wrapped words in a 210px card, and a panel's contents
+   are sized by the panel, not by the window. `display: contents` puts all three
+   spans into the parent grid; the explicit `grid-column: 2` on the reading is
+   what drops it to the next row rather than the next column. */
+.obj-doors { display: grid; grid-template-columns: 9px 1fr; gap: 0 6px; margin-top: 7px; }
+.obj-door { display: contents; }
+.obj-door .door-k { grid-column: 1; font-size: 9px; line-height: 1.5; color: var(--ink-4); text-align: center; }
+.obj-door .door-n { grid-column: 2; font-size: 10px; line-height: 1.5; color: var(--ink-3); min-width: 0; }
+/* Mono and mixed case, not mono uppercase: these are readings — "day 41 of 90",
+   "2 of 3 stages in South Asia" — and a sentence set in caps shouts. The Review
+   line under the focus gauge is the same treatment for the same reason. */
+.obj-door .door-v {
+  grid-column: 2; font-size: 9px; line-height: 1.5; color: var(--ink-4);
+  padding: 0 0 4px 1px; min-width: 0; overflow-wrap: anywhere;
+}
+.obj-door.on .door-k, .obj-door.on .door-v { color: var(--green); }
+.obj-door.on .door-n { color: var(--ink-2); }
+
 #toast-root {
   position: fixed; bottom: 18px; left: calc(var(--nav-w) + 20px); z-index: 300;
   display: flex; flex-direction: column-reverse; gap: 8px; pointer-events: none;

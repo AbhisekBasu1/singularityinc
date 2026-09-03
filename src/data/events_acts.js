@@ -144,3 +144,24 @@ Whatever the last act of this is, it will not be survived. It will have to be ch
   ] },
 
 ];
+
+// ── §A5 A door opening ──────────────────────────────────────────────────────
+// The act card above is what the founder reads once the act has turned. These
+// are what the Wire says the day a door *opens* — the moment one of the two or
+// three ways out of an act stops being a thing to go and do and starts being a
+// thing that is done. One line per door, once per run, keyed by the door id in
+// `ACT_DEEDS`, and `systems/progression.js` reads this map.
+//
+// It reads this file and this file imports nothing from `src/systems/`, which
+// is what keeps that safe. Do not give this module an upward import.
+export const DOOR_META = 'A WAY OUT OF THIS ACT';
+
+export const DOOR_OPENED = {
+  series_a: 'The A closed this week. Somebody with a fund and a thesis has decided this is one of the ones, and the company is no longer a question of whether it lasts the year.',
+  profit_quarter: 'Ninety consecutive days in which the day paid for itself. No round closed it, no investor blessed it, and it is the harder of the two ways to arrive.',
+  hearing: 'The founder sat through the hearing and answered under oath, which is a thing the company had never had to do and will now do again.',
+  treaty: 'A government signed. Public services in that bloc run on this stack from the next fiscal year, which makes the company a piece of the state rather than a vendor to it.',
+  frontier: 'A frontier-class training run finished in a building this company owns. Whatever comes next, it does not have to be asked for.',
+  kept: 'The quarter was written down in advance and then it happened, which the people who have been here since the garage tell each other about for a week.',
+  season: 'The rival named what they were coming for, came for it, and did not get it. The season closes with the thing they wanted still on this side of the table.',
+};

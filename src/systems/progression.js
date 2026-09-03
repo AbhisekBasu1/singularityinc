@@ -2,7 +2,7 @@
 // PROGRESSION — acts, unlocks, achievements, endings. The shape of the run.
 // ─────────────────────────────────────────────────────────────────────────────
 import { ACHIEVEMENTS, ACHIEVEMENT_MAP } from '../data/achievements.js';
-import { ACTS, ACT_GATES as GATES, WORLD, ENDINGS_FORCED as EF } from '../data/balance.js';
+import { ACTS, ACT_GATES as GATES, WORLD, ENDINGS_FORCED as EF, BOARD } from '../data/balance.js';
 import { ENDINGS } from '../data/endings.js';
 import { totalUsers, totalMrr } from './product.js';
 import { computeMods, markDirty } from './modifiers.js';
@@ -11,7 +11,11 @@ import { clamp } from '../engine/format.js';
 import { endingReady, endingProgress } from '../data/commitments.js';
 import { playerProgress, repriceForSecond } from './agirace.js';
 import { specFx } from './agents.js';
-import { STAGE_INDEX } from '../data/regions.js';
+import { STAGE_INDEX, REGION_MAP } from '../data/regions.js';
+import { RESEARCH_MAP } from '../data/research.js';
+import { researchCost } from './research.js';
+import { pushFeed } from './feed.js';
+import { DOOR_OPENED, DOOR_META } from '../data/events_acts.js';
 
 // Each act needs both a numeric threshold and time on the clock: the world
 // does not reorganise itself in a fortnight, however good your quarter was.
@@ -51,6 +55,122 @@ const anyRegionAt = (S, stage) => Object.values(S.world?.regions || {})
 // through; none of them is a hearing you dodged.
 const HEARING_FLAGS = ['answered_dorne', 'played_the_room', 'said_i_dont_know'];
 
+// ── §A5 The doors, and where the founder is in each ─────────────────────────
+// A deed has more than one door on purpose, and the interface said so once, in
+// one line of prose, and then never mentioned it again: "a hearing sat through,
+// a region at government partnership, or a frontier-class training run" is
+// three separate chases printed as a single sentence, with nothing anywhere
+// that says which of them you are nearest. So each door carries a `note` — how
+// far along that one door is, right now.
+//
+// Two rules hold this together. The deed's `test` is *derived* from its doors
+// rather than typed beside them, so the checklist a founder reads and the gate
+// that actually opens can never disagree; and every `note` is a pure function
+// of `S` that draws nothing from the stream, because both housings call this
+// from `render(S)` about seven times a second.
+const door = (id, name, test, note) => ({ id, name, test, note });
+const anyOpen = (doors) => (S) => doors.some((d) => { try { return !!d.test(S); } catch (e) { return false; } });
+
+// The furthest a bloc has been taken, and what it is called. Used by the treaty
+// door so the note names the region the founder is actually closest in rather
+// than the first one in the table.
+function furthestRegion(S) {
+  let best = null;
+  for (const [id, r] of Object.entries(S.world?.regions || {})) {
+    const idx = STAGE_INDEX[r?.stage] || 0;
+    if (!best || idx > best.idx) best = { id, idx, name: REGION_MAP[id]?.name || id };
+  }
+  return best && best.idx > 0 ? best : null;
+}
+
+// What is left to pay for a node, counting every prerequisite it still needs.
+// Bounded by `seen` because the tree is a graph and a shared prerequisite would
+// otherwise be billed twice.
+function chainCost(S, id, seen) {
+  if (!id || seen.has(id) || S.research?.done?.[id]) return 0;
+  seen.add(id);
+  const node = RESEARCH_MAP[id];
+  if (!node) return 0;
+  let sum = researchCost(S, node);
+  for (const r of node.reqs || []) sum += chainCost(S, r, seen);
+  return sum;
+}
+
+// Either node is a frontier-class run. The nearer one sets the number, and it
+// is the share of that node's remaining bill — the node plus everything it
+// still waits on — that the founder has banked. It rises as prerequisites land
+// as well as as points accrue, which is what makes it read as progress.
+const FRONTIER_NODES = ['model_frontier', 'own_foundation_model'];
+function frontierShare(S) {
+  let best = 0;
+  for (const id of FRONTIER_NODES) {
+    if (S.research?.done?.[id]) return 1;
+    const need = chainCost(S, id, new Set());
+    if (!(need > 0)) continue;
+    best = Math.max(best, clamp((S.resources?.research || 0) / need, 0, 0.99));
+  }
+  return best;
+}
+
+// The two doors out of Act II: somebody funded it, or it funded itself.
+const DOORS_STAND_UP = [
+  door('series_a', 'a Series A', (S) => (S.company.rounds || []).some((r) => r.type === 'a'),
+    (S, done) => {
+      const rounds = S.company.rounds || [];
+      if (done) return `closed on day ${Math.floor(rounds.find((r) => r.type === 'a')?.day ?? 0)}`;
+      return rounds.length ? `${rounds.length} round${rounds.length === 1 ? '' : 's'} in, no A yet` : 'nothing raised';
+    }),
+  door('profit_quarter', 'a profitable quarter',
+    (S) => (S.company.profitStreak || 0) >= GATES.PROFIT_QUARTER_DAYS,
+    (S, done) => (done ? 'the quarter held'
+      : `day ${Math.floor(S.company.profitStreak || 0)} of ${GATES.PROFIT_QUARTER_DAYS}`)),
+];
+
+// The three doors out of Act III. This is the deed the §A5 pass was written
+// for: the gate opened on the earliest of the three and then the floor held the
+// act for another four months, so a founder who had survived the hearing was
+// told the world needed a hundred and thirty more days.
+const DOORS_ARRIVE = [
+  door('hearing', 'a hearing survived', (S) => HEARING_FLAGS.some((f) => !!S.narrative?.flags?.[f]),
+    (S, done) => (done ? 'you sat through it' : 'not yet')),
+  door('treaty', 'a region at government partnership', (S) => anyRegionAt(S, 'partner'),
+    (S, done) => {
+      const best = furthestRegion(S);
+      if (done) return `${best?.name || 'a bloc'} signed`;
+      if (!best) return 'no bloc entered';
+      return `${best.idx} of ${STAGE_INDEX.partner} stages in ${best.name}`;
+    }),
+  door('frontier', 'the frontier training run',
+    (S) => !!(S.research?.done?.own_foundation_model || S.research?.done?.model_frontier),
+    (S, done) => (done ? 'trained' : `${Math.round(frontierShare(S) * 100)}%`)),
+];
+
+// The two doors out of Act IV, both counted inside the act.
+const DOORS_INTENT = [
+  door('kept', 'a quarter you set yourself, kept',
+    (S) => (S.stats.lastIntentionKeptDay ?? -99) >= (S.company.actStartedDay || 0),
+    (S, done) => {
+      if (done) return 'kept, in this act';
+      // Read rather than opened: `quarterState` would create the quarter, and
+      // this is called from a render path seven times a second.
+      const q = S.company?.quarter;
+      if (!q) return 'no quarter open yet';
+      const left = Math.max(0, Math.ceil((q.start || 0) + BOARD.QUARTER_DAYS - S.time.day));
+      const set = q.intentions?.length || 0;
+      return set ? `${set} set, ${left} days to keep ${set === 1 ? 'it' : 'them'}`
+        : `the quarter ends in ${left} days`;
+    }),
+  door('season', 'a season off the rival',
+    (S) => (S.market?.nemesis?.seasons || [])
+      .some((x) => x && x.won === false && (x.day ?? -1) >= (S.company.actStartedDay || 0)),
+    (S, done) => {
+      if (done) return 'you took the season';
+      const n = S.market?.nemesis;
+      if (!n || !n.grudge) return 'nobody has come for you';
+      return n.season ? 'their season is running' : 'no season open';
+    }),
+];
+
 export const ACT_DEEDS = {
   // Act I closes on the thing Act I is for. The numbers were already there;
   // this says out loud that a company nobody can use is not one.
@@ -61,16 +181,13 @@ export const ACT_DEEDS = {
   // finds out it does not need to be funded. Either door leaves.
   3: { id: 'deed_stand_up', name: 'Raise a Series A — or hold a profitable quarter',
        hint: 'A Series A, or ninety straight days where the day paid for itself.',
-       test: (S) => (S.company.rounds || []).some((r) => r.type === 'a')
-         || (S.company.profitStreak || 0) >= GATES.PROFIT_QUARTER_DAYS },
+       doors: DOORS_STAND_UP, test: anyOpen(DOORS_STAND_UP) },
   // Act III is the act the company stops being only a market participant.
   // Three doors: the state noticed you and you sat through it, a bloc signed,
   // or you trained the thing yourself.
   4: { id: 'deed_arrive', name: 'Survive a hearing, sign a treaty, or train the model',
        hint: 'A hearing sat through, a region at government partnership, or a frontier-class training run.',
-       test: (S) => HEARING_FLAGS.some((f) => !!S.narrative?.flags?.[f])
-         || anyRegionAt(S, 'partner')
-         || !!(S.research.done.own_foundation_model || S.research.done.model_frontier) },
+       doors: DOORS_ARRIVE, test: anyOpen(DOORS_ARRIVE) },
   // Act IV is the long one, and the thing it is missing is evidence that the
   // founder is running the place on purpose. Keep something you said you would
   // keep, or take a season off the rival who came for you — and both are
@@ -80,14 +197,26 @@ export const ACT_DEEDS = {
   // slowed rather than locked out.
   5: { id: 'deed_intent', name: 'Keep a quarter, or take a season off the rival',
        hint: 'Keep a quarterly intention, or close a season of the feud in your favour — in this act.',
-       test: (S) => {
-         const from = S.company.actStartedDay || 0;
-         return (S.stats.lastIntentionKeptDay ?? -99) >= from
-           || (S.market?.nemesis?.seasons || []).some((x) => x && x.won === false && (x.day ?? -1) >= from);
-       } },
+       doors: DOORS_INTENT, test: anyOpen(DOORS_INTENT) },
 };
 
 export function actDeed(act) { return ACT_DEEDS[act] || null; }
+
+// §A5. The doors of one act's deed, each with whether it is open and where the
+// founder stands in it. Pure, and the only way the interface is allowed to ask:
+// the Desk's objective row, the Field Note and the workstation's NOW widget all
+// render this one list, so the three of them cannot drift apart the way three
+// hand-written copies would.
+export function deedDoors(S, act) {
+  const d = ACT_DEEDS[act];
+  if (!d?.doors) return [];
+  return d.doors.map((x) => {
+    let done = false, note = '';
+    try { done = !!x.test(S); } catch (e) { done = false; }
+    try { note = String(x.note(S, done) ?? ''); } catch (e) { note = ''; }
+    return { id: x.id, name: x.name, done, note };
+  });
+}
 
 // The one counter a deed needs that nothing else keeps: consecutive days where
 // what the company earned covered what it spent. Reset by one day out of the
@@ -96,6 +225,32 @@ export function actDeed(act) { return ACT_DEEDS[act] || null; }
 export function tickDeeds(S) {
   const profitable = (S.company.revenueToday || 0) > (S.company.expensesToday || 0);
   S.company.profitStreak = profitable ? (S.company.profitStreak || 0) + 1 : 0;
+  noteDoors(S);
+}
+
+// §A5. A door opening is a beat, and it used to pass in silence: the founder
+// sat through the hearing and the only thing that changed anywhere was a tick
+// box on a panel they may not have had open. One line in the Wire, once per
+// door per run, written in `data/events_acts.js` beside the act card that reads
+// the same deed back.
+//
+// `S.company.doorsOpen` is the record, and it is seeded silently the first time
+// it is missing — a save from before this existed is mid-run with doors already
+// open, and three lines about things that happened last spring is not a beat.
+function noteDoors(S) {
+  const first = S.company.doorsOpen == null;
+  const seen = (S.company.doorsOpen ??= {});
+  const d = ACT_DEEDS[S.company.act + 1];
+  if (!d?.doors) return;
+  for (const x of d.doors) {
+    if (seen[x.id] != null) continue;
+    let open = false;
+    try { open = !!x.test(S); } catch (e) { open = false; }
+    if (!open) continue;
+    seen[x.id] = Math.floor(S.time.day);
+    const text = DOOR_OPENED[x.id];
+    if (text && !first) pushFeed(S, { type: 'news', author: '', tone: 'good', text, meta: DOOR_META });
+  }
 }
 
 export const ACT_GATES = [
