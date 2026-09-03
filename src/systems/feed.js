@@ -116,14 +116,55 @@ const PRELAUNCH = [
 
 // ── Live threads ────────────────────────────────────────────────────────────
 // One-click micro-decisions embedded in the feed. Small stakes, no modal.
+//
+// A thread is asked once a run. The pool used to have no memory at all: a
+// resolved thread went straight back into the draw, and measured over one
+// seeded run the same twenty-one questions opened a hundred and fifty-one
+// times — "which shape do you want?" seven times, the incident post-mortem
+// forty-eight. `S.wire.asked` counts every opening by id, `eligibleThreads`
+// refuses anything already counted, and a thread that has to come back is
+// written as `stages[]`: the nth opening is the nth stage, each with its own
+// text and its own replies, so a recurrence reads as a thread that remembers
+// rather than the same card dealt again. When the stages run out it stops.
+export function askedState(S) {
+  const w = wireState(S);
+  if (!w.asked) {
+    // A save from before this existed is mid-run. Whatever is still on the
+    // rail has been asked; anything older is out of the window and unknowable,
+    // and may be asked once more.
+    w.asked = {}; w.askedDay = {};
+    for (const f of S.feed || []) {
+      if (!f.thread || !THREAD_MAP[f.thread]) continue;
+      w.asked[f.thread] = (w.asked[f.thread] || 0) + 1;
+      w.askedDay[f.thread] = Math.max(w.askedDay[f.thread] ?? -1, f.day ?? 0);
+    }
+  }
+  w.askedDay ??= {};
+  return w;
+}
+export function timesAsked(S, id) { return askedState(S).asked[id] || 0; }
+export function lastAskedDay(S, id) { return askedState(S).askedDay[id] ?? -1; }
+
+// The nth showing of a thread: the thread itself the first time, its nth
+// stage when it has them, and nothing at all when they are spent.
+export function stageOf(t, n = 0) {
+  if (!t) return null;
+  if (Array.isArray(t.stages)) return t.stages[n] || null;
+  return n === 0 ? t : null;
+}
+
 export function eligibleThreads(S) {
   const u = totalUsers(S);
   const p = S.products.find((x) => x.launched);
   const openIds = new Set(S.feed.filter((f) => f.thread && !f.resolved).map((f) => f.thread));
   return THREADS.filter((t) => {
     if (openIds.has(t.id)) return false;
+    if (!stageOf(t, timesAsked(S, t.id))) return false;
     if ((t.min || 0) > u) return false;
     if (t.act && S.company.act < t.act) return false;
+    // `until` is the last act a thread still makes sense in: a dorm-room
+    // question in Act IV is a question about somebody else's company.
+    if (t.until && S.company.act > t.until) return false;
     if (t.needsAgent && S.agents.length === 0) return false;
     if (t.whenLowRel && (!p || p.reliability > 0.86)) return false;
     // An authored gate on the run, the way a card has one. A throw is a no.
@@ -136,21 +177,34 @@ export function eligibleThreads(S) {
 // if that thread is not legal right now — §A15's incident post-mortem asks by
 // name, because a thread about this morning's outage is not a thread the day
 // may or may not feel like offering. Without an id this is what it always was.
-export function maybeThread(S, id = null) {
-  const pool = eligibleThreads(S);
+// `pool` lets the day hook hand over the list it already measured, so the
+// pacing and the draw agree about what is eligible without filtering twice.
+export function maybeThread(S, id = null, pool = null) {
+  pool ??= eligibleThreads(S);
   if (!pool.length) return null;
   const t = id ? pool.find((x) => x.id === id) : pick(pool);
   if (!t) return null;
+  const n = timesAsked(S, t.id);
+  const st = stageOf(t, n);
+  if (!st) return null;
   const tok = tokens(S);
-  return pushFeed(S, {
-    type: t.kind, author: t.kind === 'log' ? tok['{agent}'] : t.kind === 'news' ? '' : pick(RANDOM_HANDLES),
+  const kind = st.kind || t.kind;
+  const item = pushFeed(S, {
+    type: kind, author: kind === 'log' ? tok['{agent}'] : kind === 'news' ? '' : pick(RANDOM_HANDLES),
     // A thread whose text names what just happened has to be written at the
     // moment it opens rather than authored as a constant.
-    text: fill(typeof t.text === 'function' ? t.text(S) : t.text, tok), tone: t.tone || 'neutral',
+    text: fill(typeof st.text === 'function' ? st.text(S, n) : st.text, tok), tone: st.tone || t.tone || 'neutral',
     thread: t.id, resolved: false, expires: S.time.day + WIRE.THREAD_LIFE_DAYS,
-    points: t.kind === 'hn' ? randInt(20, 400) : undefined,
-    comments: t.kind === 'hn' ? randInt(5, 120) : undefined,
+    // Which stage this is rides on the item, so the replies it shows after a
+    // reload are the ones it opened with rather than whichever is due next.
+    ...(Array.isArray(t.stages) ? { stage: n } : {}),
+    points: kind === 'hn' ? randInt(20, 400) : undefined,
+    comments: kind === 'hn' ? randInt(5, 120) : undefined,
   });
+  const w = askedState(S);
+  w.asked[t.id] = n + 1;
+  w.askedDay[t.id] = Math.floor(S.time.day);
+  return item;
 }
 
 // The world's threads carry their options on the item itself (`runtime`),
@@ -205,7 +259,10 @@ export function resolveThread(S, feedId, optIndex) {
     if (!worldThreadResolver) return null;
     applied = worldThreadResolver(S, item, opt) || [];
   } else {
-    for (const [k, v] of Object.entries(opt.fx || {})) {
+    // `fx` may be a function of the run — a sum sized to the company rather
+    // than typed as a number — the way a call's reply may be.
+    const fx = typeof opt.fx === 'function' ? (opt.fx(S) || {}) : (opt.fx || {});
+    for (const [k, v] of Object.entries(fx)) {
       if (THREAD_FX[k]) { THREAD_FX[k](S, v); applied.push([k, v]); }
     }
   }
@@ -284,7 +341,9 @@ export function openMailCount(S) {
 export function threadOptions(S, item) {
   if (Array.isArray(item?.runtime?.opts)) return item.runtime.opts;
   const t = authoredThread(item?.thread);
-  return t ? t.opts : [];
+  if (!t) return [];
+  if (Array.isArray(t.stages)) return t.stages[item?.stage ?? 0]?.opts || [];
+  return t.opts || [];
 }
 
 // The same sentence from two handles in one week reads as a script, not a

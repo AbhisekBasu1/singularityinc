@@ -2094,6 +2094,17 @@ export const WIRE = {
   // everything still asking.
   THREAD_LIFE_DAYS: 45,
   SNOOZE_DAYS: 7,
+  // A thread is asked once a run (`askedState` in `feed.js`), so the draw is
+  // paced by what is left rather than by a flat roll: the full rate while the
+  // eligible pool is at least `THREAD_THIN_POOL` deep, scaling down to
+  // `THREAD_THIN_FLOOR` of it for the last one, so an act's final few
+  // questions stretch across it instead of landing in one week and leaving
+  // the rail with nothing to ask for a season. `THREAD_CHANCE` was a literal
+  // in the day hook before this; `MAIL.OPEN_CAP` is the letters' own slot.
+  THREAD_CHANCE: 0.09,
+  MAX_OPEN_THREADS: 3,
+  THREAD_THIN_POOL: 10,
+  THREAD_THIN_FLOOR: 0.25,
   NULLPTR_DELAY_DAYS: 90 / 86400,
   NULLPTR_ARC_MAX: 4,          // arc 4 is the account shut down, arc 5 its last comment
   PENDING_MAX: 4,

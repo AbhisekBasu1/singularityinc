@@ -180,10 +180,13 @@ export function tickIncidents(S, days, sideIncidentMult = 1) {
   emit('incident', { incident: inc, severity: sev });
   // §A15. An incident above the line asks what you are going to say about it.
   // By name, not by draw: a thread about this morning's outage is not
-  // something the day may or may not feel like offering. `eligibleThreads`
-  // refuses one that is already open, and there is exactly one id, so the cap
-  // of one incident thread at a time is the id itself. Never offline — a
-  // question the founder is not there to answer is a question that expires.
+  // something the day may or may not feel like offering. The thread is a
+  // family of stages — one per incident, each its own question with its own
+  // replies — and `eligibleThreads` refuses one that is already open or
+  // already spent, so the cap of one incident thread at a time is the id
+  // itself and no outage is ever asked about in the same words twice. Never
+  // offline — a question the founder is not there to answer is a question
+  // that expires.
   if (!S._offline && sev >= BALANCE.THREAD_SEVERITY) maybeThread(S, 't_incident_ask');
   return inc;
 }

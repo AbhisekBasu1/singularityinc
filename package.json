@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node tools/serve.js",
     "dev": "node tools/serve.js",
-    "test": "node tools/lint.mjs && node tools/copylint.mjs && node tools/uitest.mjs && node tools/ostest.mjs && node tools/puretest.mjs && node tools/tutorialtest.mjs && node tools/transporttest.mjs && node tools/fmttest.mjs && node tools/savetest.mjs && node tools/lifetest.mjs && node tools/phonetest.mjs && node tools/keeptest.mjs && node tools/chronicletest.mjs && node tools/rivaltest.mjs && node tools/rivalorigintest.mjs && node tools/longtest.mjs && node tools/prestigetest.mjs && node tools/endingtest.mjs && node tools/worldtest.mjs && node tools/webmcptest.mjs && node tools/residenttest.mjs && node tools/choreo.mjs",
+    "test": "node tools/lint.mjs && node tools/copylint.mjs && node tools/uitest.mjs && node tools/ostest.mjs && node tools/puretest.mjs && node tools/tutorialtest.mjs && node tools/transporttest.mjs && node tools/fmttest.mjs && node tools/savetest.mjs && node tools/lifetest.mjs && node tools/phonetest.mjs && node tools/wiretest.mjs && node tools/keeptest.mjs && node tools/chronicletest.mjs && node tools/rivaltest.mjs && node tools/rivalorigintest.mjs && node tools/longtest.mjs && node tools/prestigetest.mjs && node tools/endingtest.mjs && node tools/worldtest.mjs && node tools/webmcptest.mjs && node tools/residenttest.mjs && node tools/choreo.mjs",
     "evals": "node evals/select.mjs && node evals/baseline.mjs && node evals/capsfuzz.mjs",
     "balance": "RUNS=3 DAYS=2000 node tools/balance.mjs",
     "caps": "node tools/capsderive.mjs",

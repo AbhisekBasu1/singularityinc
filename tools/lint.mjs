@@ -103,16 +103,31 @@ for (const e of events.EVENTS) {
 // 6b. Live threads: valid options and known effect keys.
 const threads = await import('../src/data/threads.js');
 const FX_KEYS = new Set(['rep','cash','code','insight','research','debt','focus','align','heat','opinion','awareness','sentiment','autonomy','flag']);
+// A thread is one question or a family of `stages`, never both, and every
+// stage has the shape a thread has. `until` is the last act it may open in.
+// `fx` may be a function of the run; it is evaluated against a probe state and
+// its keys checked like any other.
+const threadProbe = (await import('../src/engine/state.js')).newGame({});
 for (const t of threads.THREADS) {
-  if (!t.text) fail('threads.js', `${t.id} has no text`);
-  if (!t.opts?.length || t.opts.length < 2) fail('threads.js', `${t.id} needs at least two options`);
-  for (const o of t.opts || []) {
-    if (!o.label) fail('threads.js', `${t.id} option missing label`);
-    if (!o.out) fail('threads.js', `${t.id} option "${o.label}" missing outcome text`);
-    for (const k of Object.keys(o.fx || {})) {
-      if (!FX_KEYS.has(k)) fail('threads.js', `${t.id} option "${o.label}" uses unknown effect key "${k}"`);
+  const staged = Array.isArray(t.stages);
+  if (staged && (t.text || t.opts)) fail('threads.js', `${t.id} has stages and a top-level text or opts — one or the other`);
+  if (staged && t.stages.length < 2) fail('threads.js', `${t.id} has fewer than two stages — write it as a plain thread`);
+  if (t.until && t.act && t.until < t.act) fail('threads.js', `${t.id} ends (until ${t.until}) before it begins (act ${t.act})`);
+  (staged ? t.stages : [t]).forEach((f, i) => {
+    const at = staged ? `${t.id}[${i}]` : t.id;
+    if (!f.text) fail('threads.js', `${at} has no text`);
+    if (!f.opts?.length || f.opts.length < 2) fail('threads.js', `${at} needs at least two options`);
+    for (const o of f.opts || []) {
+      if (!o.label) fail('threads.js', `${at} option missing label`);
+      if (!o.out) fail('threads.js', `${at} option "${o.label}" missing outcome text`);
+      let fx = o.fx || {};
+      if (typeof fx === 'function') { try { fx = fx(threadProbe) || {}; } catch (e) { fail('threads.js', `${at} option "${o.label}" fx threw: ${e.message}`); fx = {}; } }
+      for (const [k, v] of Object.entries(fx)) {
+        if (!FX_KEYS.has(k)) fail('threads.js', `${at} option "${o.label}" uses unknown effect key "${k}"`);
+        if (k !== 'flag' && !Number.isFinite(v)) fail('threads.js', `${at} option "${o.label}" effect ${k} is not a number`);
+      }
     }
-  }
+  });
 }
 { const ids = threads.THREADS.map((t) => t.id);
   const dup = ids.filter((x, i) => ids.indexOf(x) !== i);
@@ -134,6 +149,23 @@ const mail = await import('../src/data/mail.js');
     }
     if (threads.THREADS.some((t) => t.id === l.id)) fail('mail.js', `${l.id} collides with a thread id`);
   } }
+
+// 6b2a. Every reply label is unique across every ask in the game — the Wire's
+// threads, every stage of a family, and the letters that ask. Two open items
+// offering the same word are one decision printed twice: measured before this
+// rule, "Decline" sat on seven asks and "Grant it" on all five retros.
+{ const seen = new Map();
+  const claim = (where, label) => {
+    const k = String(label ?? '').trim().toLowerCase();
+    if (seen.has(k)) fail('threads.js', `reply label "${label}" on ${where} is already on ${seen.get(k)}`);
+    else seen.set(k, where);
+  };
+  for (const t of threads.THREADS) {
+    const staged = Array.isArray(t.stages);
+    (staged ? t.stages : [t]).forEach((f, i) => (f.opts || []).forEach((o) => claim(staged ? `${t.id}[${i}]` : t.id, o.label)));
+  }
+  for (const l of mail.LETTERS) (l.ask || []).forEach((o) => claim(l.id, o.label));
+}
 
 // 6b3. The phone: every topic has a line, a reply and a noun; every effect key
 // is one the collector knows; ids are unique per person across the whole tree.

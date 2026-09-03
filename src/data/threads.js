@@ -5,12 +5,21 @@
 //
 // text/author are filled by the feed's token system. `opts` effects are tiny.
 // `text` may be a function of S where the thread has to name something that
-// just happened — see the incident pair at the bottom of this file.
+// just happened — see the incident family at the bottom of this file.
+//
+// Every thread is asked once a run, and every reply label is unique across
+// every ask in the game — the Wire's threads and the letters that ask —
+// because two open items offering the same word are one decision printed
+// twice. `tools/lint.mjs` enforces both. A thread that has to come back is
+// written as `stages[]`, one per showing, each with its own text and replies;
+// `until` is the last act it still makes sense in; `kind` and `tone` may be
+// set per stage. `threads2.js` is the second half of the pool.
 // ─────────────────────────────────────────────────────────────────────────────
 // Deliberately the leaf and not `signals.js`: this file is imported by
 // `feed.js`, and `signals.js` reaches `rivalco.js`, which imports `feed.js`.
 import { incidentVerb } from './incidentverbs.js';
 import { INCIDENTS as INCIDENTS_B } from './balance.js';
+import { THREADS2 } from './threads2.js';
 
 const incidentRecently = (S, d) => Math.floor(S.time.day) - (S.stats?.lastIncidentDay ?? -999) <= d;
 
@@ -18,7 +27,7 @@ export const THREADS = [
   { id: 't_complaint', kind: 'social', tone: 'bad', min: 200,
     text: '{product} lost my work this morning. no error, no warning, just gone.',
     opts: [
-      { label: 'Reply publicly', out: 'You answer in nine minutes with the actual cause and a fix ETA.',
+      { label: 'Answer in the thread', out: 'You answer in nine minutes with the actual cause and a fix ETA.',
         fx: { rep: 6, focus: -1.4, sentiment: 0.02 } },
       { label: 'DM and refund', out: 'You refund them personally. They post a screenshot of the refund.',
         fx: { cash: -60, rep: 9, sentiment: 0.03 } },
@@ -26,7 +35,7 @@ export const THREADS = [
         fx: { sentiment: -0.01 } },
     ] },
 
-  { id: 't_praise', kind: 'social', tone: 'good', min: 100,
+  { id: 't_praise', kind: 'social', tone: 'good', min: 100, until: 2,
     text: 'genuinely the best {cat} tool I have used. and it is one person?',
     opts: [
       { label: 'Thank them', out: 'You reply with something specific rather than a heart emoji. They notice.',
@@ -54,7 +63,7 @@ export const THREADS = [
         fx: { rep: 12, focus: -2 } },
       { label: 'Reproduce theirs, publicly', out: 'You run their benchmark honestly and post the result, favourable or not.',
         fx: { rep: 16, insight: 5, focus: -3 } },
-      { label: 'Ignore it', out: 'The thread dies in a day. Someone screenshots the claim anyway.',
+      { label: 'Let the benchmark thread die', out: 'The thread dies in a day. Someone screenshots the claim anyway.',
         fx: { rep: -3 } },
     ] },
 
@@ -69,18 +78,18 @@ export const THREADS = [
         fx: { code: 7, align: -0.004 } },
     ] },
 
-  { id: 't_press_query', kind: 'news', tone: 'neutral', min: 5000,
+  { id: 't_press_query', kind: 'news', tone: 'neutral', min: 5000, until: 2,
     text: 'A reporter is asking for comment on your headcount for a piece running Thursday.',
     opts: [
       { label: 'Answer honestly', out: '"One." They print it. It becomes the headline.',
         fx: { rep: 14, opinion: 0.004 } },
-      { label: 'Decline', out: '"The company declined to comment." Nine words that follow you.',
+      { label: 'Decline the piece', out: '"The company declined to comment." Nine words that follow you.',
         fx: { rep: -6 } },
       { label: 'Offer a longer conversation', out: 'The piece is better and later and mostly about the right things.',
         fx: { rep: 10, focus: -3 } },
     ] },
 
-  { id: 't_hiring_dm', kind: 'social', tone: 'neutral', min: 8000,
+  { id: 't_hiring_dm', kind: 'social', tone: 'neutral', min: 8000, until: 3,
     text: 'any chance you are hiring? I would work on {product} for free honestly',
     opts: [
       { label: 'Explain the model', out: 'You describe a company with no roles. They find it thrilling and unsettling.',
@@ -98,7 +107,7 @@ export const THREADS = [
         fx: { rep: 8, sentiment: 0.03, focus: -1 } },
       { label: 'Fix first, post after', out: 'Back in twenty minutes with a full timeline. Slightly late, fully honest.',
         fx: { rep: 3, sentiment: 0.01 } },
-      { label: 'Nothing', out: 'It resolves. The thread stays up. So does the screenshot.',
+      { label: 'Let it resolve on its own', out: 'It resolves. The thread stays up. So does the screenshot.',
         fx: { rep: -8, sentiment: -0.02 } },
     ] },
 
@@ -115,7 +124,7 @@ export const THREADS = [
   { id: 't_investor_dm', kind: 'social', tone: 'neutral', min: 20000,
     text: 'love what you are building. free for 15 min this week?',
     opts: [
-      { label: 'Take the call', out: 'No money changes hands. Two introductions do.',
+      { label: 'Take the fifteen minutes', out: 'No money changes hands. Two introductions do.',
         fx: { rep: 6, focus: -2, insight: 4 } },
       { label: 'Ask what they can do that money cannot', out: 'A very good question that ends most of these conversations.',
         fx: { rep: 8, insight: 6 } },
@@ -162,7 +171,7 @@ export const THREADS = [
         fx: { rep: 8, awareness: 80 } },
       { label: 'Ship something they cannot copy', out: 'You spend the week on the hard part instead of the loud part.',
         fx: { code: -16, rep: 6, insight: 5 } },
-      { label: 'Nothing', out: 'They plateau in four months, as clones do.', fx: { focus: 2 } },
+      { label: 'Let the clone plateau', out: 'They plateau in four months, as clones do.', fx: { focus: 2 } },
     ] },
 
   { id: 't_award_nom', kind: 'news', tone: 'good', min: 50000, act: 2,
@@ -176,11 +185,13 @@ export const THREADS = [
     ] },
 
   { id: 't_user_milestone', kind: 'social', tone: 'good', min: 1000,
+    // A year of daily use needs a year: it used to be offered on day 200.
+    when: (S) => S.time.day >= 365,
     text: 'day 365 of using {product} every single working day. thank you for making this.',
     opts: [
       { label: 'Send them something real', out: 'A handwritten note and a year of credit. They frame the note.',
         fx: { cash: -200, rep: 12, sentiment: 0.03 } },
-      { label: 'Reply publicly', out: 'You reply with a detail only a real user would know. The thread notices.',
+      { label: 'Reply under it', out: 'You reply with a detail only a real user would know. The thread notices.',
         fx: { rep: 7, focus: -0.6 } },
       { label: 'Ask what nearly made them stop', out: 'The answer is a feature you shipped in month four and never revisited.',
         fx: { insight: 12, focus: -1 } },
@@ -193,7 +204,7 @@ export const THREADS = [
         fx: { rep: 10, opinion: 0.005, focus: -2 } },
       { label: 'Publish what you pay out', out: 'You disclose exactly where the value goes. It is more persuasive than any argument.',
         fx: { opinion: 0.008, rep: 6 } },
-      { label: 'Ignore it', out: 'It gets four hundred likes.', fx: { opinion: -0.004 } },
+      { label: 'Scroll past it', out: 'It gets four hundred likes.', fx: { opinion: -0.004 } },
     ] },
 
   // The Refusal's flag, off the die roll: the sovereign question can be
@@ -206,7 +217,7 @@ export const THREADS = [
     opts: [
       { label: 'Say no, in public, with the reasoning', out: 'Four paragraphs on why no state should run on one company. It is read into three parliaments by Friday. The minister does not call again.',
         fx: { opinion: 0.03, heat: -5, rep: 20, focus: -2, flag: 'refused_sovereign' } },
-      { label: 'Decline to comment', out: 'The clip runs for a week. Nobody learns anything, including you.',
+      { label: 'No comment on the minister', out: 'The clip runs for a week. Nobody learns anything, including you.',
         fx: { heat: 2 } },
       { label: 'Say the door is open', out: 'A delegation is on a plane by the weekend. Whatever they bring, you will have to answer it properly.',
         fx: { rep: 8, heat: 3, insight: 4 } },
@@ -232,20 +243,70 @@ export const THREADS = [
   // window rather than "today". One at a time is enforced by there being one
   // id: `eligibleThreads` refuses a thread that is already open.
   //
-  // The text is a function because it has to name what happened —
+  // It is a family, not a card: measured over one seeded run it opened
+  // forty-eight times in the same words with the same three replies, because
+  // every severe incident asked it by name. Each stage is one incident — the
+  // second is "twice now", the third is a customer with timestamps, the fourth
+  // is the roster asking to freeze deploys, the fifth is the front page — and
+  // after the fifth an outage is a post and the deck's own cards. The `when`
+  // reads the day this last opened so one outage cannot spend two stages.
+  //
+  // The first text is a function because it has to name what happened —
   // `incidentVerb` is the same phrasing the phone and the post use, keyed off
   // the kind `incidents.js` stamps rather than off the incident's title.
   { id: 't_incident_ask', kind: 'social', tone: 'bad', min: 400,
     when: (S) => incidentRecently(S, INCIDENTS_B.THREAD_WINDOW_DAYS)
-      && (S.world?.lastIncidentSeverity || 0) >= INCIDENTS_B.THREAD_SEVERITY,
-    text: (S) => `so ${S.stats?.lastIncident ? String(S.stats.lastIncident).toLowerCase() : 'something'} at {product} — it ${incidentVerb(S)} and there is still nothing on the status page. are we getting a write-up or not`,
-    opts: [
-      { label: 'Own it publicly, with the timeline', out: 'You publish the whole thing the same day — what broke, when you knew, what you did, what you are changing. It is read more widely than anything you have ever shipped.',
-        fx: { rep: 18, heat: -3, sentiment: -0.02, focus: -3 } },
-      { label: 'Point at the vendor', out: 'The statement is accurate. It is also, unmistakably, about somebody else, and the vendor reads it too.',
-        fx: { rep: 2, sentiment: 0.01, flag: 'blamed_the_vendor' } },
-      { label: 'Fix it quietly and say nothing', out: 'It is fixed by Thursday and the fix is the kind you make when nobody is going to read the diff.',
-        fx: { debt: 14, rep: -6, heat: 2 } },
+      && (S.world?.lastIncidentSeverity || 0) >= INCIDENTS_B.THREAD_SEVERITY
+      && (S.stats?.lastIncidentDay ?? 0) > (S.wire?.askedDay?.t_incident_ask ?? -1),
+    stages: [
+      { text: (S) => `so ${S.stats?.lastIncident ? String(S.stats.lastIncident).toLowerCase() : 'something'} at {product} — it ${incidentVerb(S)} and there is still nothing on the status page. are we getting a write-up or not`,
+        opts: [
+          { label: 'Own it publicly, with the timeline', out: 'You publish the whole thing the same day — what broke, when you knew, what you did, what you are changing. It is read more widely than anything you have ever shipped.',
+            fx: { rep: 18, heat: -3, sentiment: -0.02, focus: -3 } },
+          { label: 'Point at the vendor', out: 'The statement is accurate. It is also, unmistakably, about somebody else, and the vendor reads it too.',
+            fx: { rep: 2, sentiment: 0.01, flag: 'blamed_the_vendor' } },
+          { label: 'Fix it quietly and say nothing', out: 'It is fixed by Thursday and the fix is the kind you make when nobody is going to read the diff.',
+            fx: { debt: 14, rep: -6, heat: 2 } },
+        ] },
+      { text: '{product} again. that is twice now by my count and the status page still says operational. at what point does this thing get an actual SLA',
+        opts: [
+          { label: 'Publish an SLA and stand behind it', out: 'A number, in public, with credits attached to missing it. The next outage costs money as well as face, which is the point.',
+            fx: { rep: 10, sentiment: 0.02, cash: -1500, focus: -2 } },
+          { label: 'Credit every account it touched', out: 'Nobody asked for it and everybody notices. The credit note is the most shared thing you post this month.',
+            fx: { cash: -3000, rep: 8, sentiment: 0.03 } },
+          { label: 'Explain that it was a different cause', out: 'It was, and it does not matter: the thread hears two outages and one company.',
+            fx: { rep: -2, sentiment: -0.01, focus: -1 } },
+        ] },
+      { kind: 'news', tone: 'bad',
+        text: 'A customer running production on {product} has written up three incidents in one quarter, with timestamps. Their CTO wants a call before the renewal.',
+        opts: [
+          { label: 'Take the renewal call yourself', out: 'Forty minutes, most of it listening. They renew, and they send you the list they made for the call.',
+            fx: { focus: -3, rep: 6, insight: 8, sentiment: 0.02 } },
+          { label: 'Send the ops report and the fix', out: 'It is thorough and it is not a call. They renew for a year instead of three.',
+            fx: { rep: 2, focus: -1, sentiment: 0.01 } },
+          { label: 'Offer them an exit with no penalty', out: 'They stay. A company that offers the door is one you can keep trusting, apparently.',
+            fx: { rep: 8, cash: -2000, sentiment: 0.02 } },
+        ] },
+      { kind: 'log', tone: 'neutral',
+        text: 'I have counted. That is the fourth one over the line. I want to freeze deploys for two weeks and rebuild the release path, and I want a yes or a no rather than a later.',
+        opts: [
+          { label: 'Freeze deploys for a fortnight', out: 'Two weeks of nothing shipping and a release path that has been read by somebody. The fifth one does not come.',
+            fx: { code: -20, debt: -14, rep: 2, focus: -1 } },
+          { label: 'Ship the fix and keep the cadence', out: 'The fix goes out on Tuesday. So does everything else, on the same path it always took.',
+            fx: { code: 6, debt: 6 } },
+          { label: 'Put yourself on the on-call rotation', out: 'You take the 3am pages for a month. The release path gets rebuilt anyway, by you, at 3am.',
+            fx: { focus: -4, debt: -6, rep: 4, align: 0.003 } },
+        ] },
+      { kind: 'hn', tone: 'bad',
+        text: 'Ask HN: what is going on at {company}? Five incidents and counting, and the status page still says operational.',
+        opts: [
+          { label: 'Answer with the whole incident history', out: 'Every one, dated, with what changed after each. It is the most honest thing on the front page and it stays there two days.',
+            fx: { rep: 14, heat: -2, focus: -3, sentiment: -0.01 } },
+          { label: 'Post the reliability roadmap', out: 'Six months of work, in public, with dates. Now you have to do it.',
+            fx: { rep: 8, code: -10, insight: 4 } },
+          { label: 'Let the thread age out', out: 'It does. The phrase "still says operational" does not.',
+            fx: { rep: -8, sentiment: -0.02, opinion: -0.004 } },
+        ] },
     ] },
 
   // The bill for the second door. Not a timer: it sits in the pool and arrives
@@ -262,5 +323,9 @@ export const THREADS = [
         fx: { rep: -14, sentiment: -0.02, flag: 'vendor_answered' } },
     ] },
 ];
+
+// The second half of the pool, so a run never has to ask the same thing
+// twice. One list, so the draw, the lint and the tests see one deck.
+THREADS.push(...THREADS2);
 
 export const THREAD_MAP = Object.fromEntries(THREADS.map((t) => [t.id, t]));

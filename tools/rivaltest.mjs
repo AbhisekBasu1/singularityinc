@@ -262,6 +262,9 @@ await section('somebody else is on the region board', async () => {
   const low = Reg.canDisplace(s, 'af');
   ok('a state will not drop a supplier for a stranger', !low.ok && low.reason === 'stance', JSON.stringify(low));
   ok('with a note the row can print', /STANDING/.test(low.note || ''), low.note);
+  // A rival can have expanded into any bloc by now on the game's own
+  // unseeded dice, and this assertion is about an empty one: make it empty.
+  delete s.world.regionRivals.me;
   eq('nobody there is nobody to displace', Reg.canDisplace(s, 'me').reason, 'nobody');
   // And the bloc a rival holds costs standing while they hold it.
   const r = (await import('../src/data/regions.js')).REGION_MAP.af;

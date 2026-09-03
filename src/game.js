@@ -11,7 +11,7 @@ import { tickEmergency, bankruptcyFloor } from './systems/economy.js';
 import { createProduct, launchProduct, shipFeature, featureCost, totalUsers, totalMrr } from './systems/product.js';
 import { tickNarrative, scheduleNext, presentEvent } from './systems/narrative.js';
 import { generateFeed, feedFromEvent, pushFeed, maybeThread, expireThreads, openThreadCount,
-  founderPost, tickWire, traitReaction, castPost } from './systems/feed.js';
+  eligibleThreads, founderPost, tickWire, traitReaction, castPost } from './systems/feed.js';
 import { ariaWire } from './systems/aria.js';
 import { tickIncidents } from './systems/incidents.js';
 import { tickLedger } from './systems/ledger.js';
@@ -229,9 +229,16 @@ function wire() {
     // moved, so the snapshot is the day as it closed.
     tickLedger(s, day);
 
-    // Live threads — small, answerable, capped so the rail never becomes a queue.
+    // Live threads — small, answerable, capped so the rail never becomes a
+    // queue, and each asked once a run. The roll is scaled by how much of the
+    // pool is still unasked, so a thin act asks slowly rather than spending
+    // its last few questions in a week and falling silent for a season.
     expireThreads(s);
-    if (!s._offline && openThreadCount(s) < 3 && chance(0.09)) maybeThread(s);
+    if (!s._offline && openThreadCount(s) < WIRE.MAX_OPEN_THREADS) {
+      const pool = eligibleThreads(s);
+      const scale = Math.max(WIRE.THREAD_THIN_FLOOR, Math.min(1, pool.length / WIRE.THREAD_THIN_POOL));
+      if (pool.length && chance(WIRE.THREAD_CHANCE * scale)) maybeThread(s, null, pool);
+    }
 
     // Agents speak in their own voice, occasionally.
     if (s.agents.length && chance(0.16)) {

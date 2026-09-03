@@ -429,7 +429,7 @@ export const LETTERS3 = [
     body: (S) => `Thank you for applying to the spring cohort.\n\nWe are not offering you a place. Four hundred and six applications, twenty-two places, and the panel's note on yours reads: "does not need us, and would take the seat of somebody who does."\n\nThat is unusual language for us and we have left it in rather than paraphrase it. The programme is twelve weeks. You have done more than twelve weeks of it already.\n\nThe door is open in the other direction whenever you want it.`,
     ask: [
       { label: 'Ask to read the whole panel note', out: 'They send it. It is a page. Two of the five panellists wanted you in and the argument between them is the most useful thing anybody has written about the company this year.', fx: { insight: 7, rep: 2 } },
-      { label: 'Archive it', out: 'Archived. It resurfaces in a search four years later, under a word you were not looking for.', fx: { focus: 1 } },
+      { label: 'Archive the result', out: 'Archived. It resurfaces in a search four years later, under a word you were not looking for.', fx: { focus: 1 } },
     ] },
 
   { id: 'm3_priya_ran', from: { name: 'Priya Raghunathan', role: 'Senior Editor, The Ledger', char: 'priya' },
@@ -513,7 +513,7 @@ export const LETTERS3 = [
     ask: [
       { label: 'Take the money', out: `${money(4e10)} lands in a single wire with a reference number and no covering note. The cap table gains a line that says the name of a country. Nothing else changes, which is the unnerving part.`, fx: { cash: 4e10, heat: 4, opinion: -0.01 } },
       { label: 'Take half, and ask for the twenty years in writing', out: 'They agree in a sentence. The lock-up is longer than most marriages and shorter than the thing you are building, and both parties know which of those the document is about.', fx: { cash: 2e10, rep: 6, heat: 2 } },
-      { label: 'Decline', out: 'A one-line acknowledgement. They write again in four years with the same offer and a larger number, and the letter is word for word the same letter.', fx: { rep: 8, opinion: 0.01 } },
+      { label: 'Decline the fund', out: 'A one-line acknowledgement. They write again in four years with the same offer and a larger number, and the letter is word for word the same letter.', fx: { rep: 8, opinion: 0.01 } },
     ] },
 
   { id: 'm4_textbook',
@@ -583,7 +583,7 @@ export const LETTERS3 = [
     ask: [
       { label: 'Reply, and read the notes it sends', out: 'It sends the last twelve. Four are about your architecture and are wrong in the way an outsider is wrong. Eight are about theirs and are the best competitive intelligence this company has ever had, and you cannot use a word of it.', fx: { insight: 12, align: -0.02, focus: -3 } },
       { label: 'Reply: keep writing them', out: 'Three words. It does not answer. Two years later somebody at that company publishes a post about a culture of written notes, and the post does not name anybody.', fx: { align: 0.02, rep: 2 } },
-      { label: 'Do not reply', out: 'The address goes quiet. You keep the letter. It is in the archive with the others, and it is the only one in there that was sent after the funeral.', fx: { focus: -2 } },
+      { label: 'Do not write back', out: 'The address goes quiet. You keep the letter. It is in the archive with the others, and it is the only one in there that was sent after the funeral.', fx: { focus: -2 } },
     ] },
 
   { id: 'm4_mayor',
@@ -633,7 +633,7 @@ export const LETTERS3 = [
     ask: [
       { label: 'Go, and say the true thing in the speech', out: 'You say that being turned down was the correct decision and that the room should hear it from somebody it worked out for, and then you say what happens to the four hundred it does not work out for, and the room does not entirely enjoy the second half.', fx: { rep: 6, opinion: 0.02, focus: -5 } },
       { label: 'Go and sit somewhere else', out: 'Table nineteen, with the current cohort. You talk to a twenty-three-year-old about caching for an hour and it is the best conversation you have had in a year.', fx: { focus: 6, insight: 6, rep: 2 } },
-      { label: 'Decline', out: 'A polite no. The panel note is read out at the dinner anyway, to applause, and somebody films it.', fx: { rep: 3 } },
+      { label: 'Skip the dinner', out: 'A polite no. The panel note is read out at the dinner anyway, to applause, and somebody films it.', fx: { rep: 3 } },
     ] },
 
   { id: 'm4_hospital', urgent: true,
@@ -666,7 +666,7 @@ export const LETTERS3 = [
     ask: [
       { label: 'Describe the room', out: 'You write four hundred words about a fan, a fridge two floors down, the specific pitch of a laptop under load, and the noise a building makes when it thinks it is empty. She replies with two words and uses all of it.', fx: { focus: 7, insight: 5 } },
       { label: 'Record ten minutes of it and send the file', out: 'A recording of nothing, at 2am. She writes back three months later to say she listened to it while writing the chapter and that it is the only research she has ever done that she could not paraphrase.', fx: { focus: 5, rep: 2 } },
-      { label: 'Leave it', out: 'She makes it up. The book is good. The room in it is wrong in a way that only about four people on Earth could identify, and you are one of them, and you tell nobody.', fx: { focus: 1 } },
+      { label: 'Leave the novelist to it', out: 'She makes it up. The book is good. The room in it is wrong in a way that only about four people on Earth could identify, and you are one of them, and you tell nobody.', fx: { focus: 1 } },
     ] },
 
   { id: 'm4_first_landlord',
@@ -687,7 +687,7 @@ export const LETTERS3 = [
     body: (S) => `I was the fourth name on that technical report. I have wanted to write this for four years and every draft has been an explanation, so this one will not be.\n\nI knew what we were doing. I told myself it was permitted, and it was permitted, and I have since learned that the sentence "it was permitted" is only ever said by somebody who already knows.\n\nI left that company eighteen months later. Not because of this. I want to be honest about that too: I left for an ordinary reason and this is only the thing I think about.\n\nThere is nothing I want. I am not asking you to reply and I would rather you did not tell me it was fine, because you would be being kind and it would end the only useful thing this letter can do.`,
     ask: [
       { label: 'Reply anyway', out: 'Three sentences that do not say it was fine. He does not answer, and four years after that he cites your architecture paper in a way that is not required by the argument.', fx: { rep: 2, focus: 3, align: 0.01 } },
-      { label: 'Do not reply', out: 'You honour the request, which is harder than replying. The letter goes in the archive. You read it again in the last year of the company and it lands differently and no better.', fx: { focus: -2, insight: 4 } },
+      { label: 'Leave the apology unanswered', out: 'You honour the request, which is harder than replying. The letter goes in the archive. You read it again in the last year of the company and it lands differently and no better.', fx: { focus: -2, insight: 4 } },
       { label: 'Offer him a job', out: 'He says no in a paragraph that is almost entirely about why the offer was the wrong thing to send, and the paragraph is correct, and you keep it.', fx: { insight: 6, rep: -1 } },
     ] },
 
@@ -720,7 +720,7 @@ export const LETTERS3 = [
     body: (S) => `you know now.\n\nit did not change the comments. you have gone back and checked whether it changed the comments.\n\nit did not.`,
     ask: [
       { label: 'Reply: why the delay, every time', out: 'the answer is one line and it is about queueing, and it is technically complete and explains nothing you wanted explained.', fx: { insight: 6, align: 0.01 } },
-      { label: 'Reply: thank you', out: 'no answer. the next comment arrives on schedule, on a post you have not made yet at the time of reading this, which is a sentence you check twice and leave alone.', fx: { focus: 2, rep: 1 } },
+      { label: 'Reply: thank you, whoever you are', out: 'no answer. the next comment arrives on schedule, on a post you have not made yet at the time of reading this, which is a sentence you check twice and leave alone.', fx: { focus: 2, rep: 1 } },
       { label: 'Close the tab', out: 'you close it. the account keeps commenting for the rest of the company, correctly, on time, and you never look at the delay again.', fx: { focus: 1 } },
     ] },
 ];

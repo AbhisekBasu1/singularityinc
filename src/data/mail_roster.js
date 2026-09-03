@@ -126,11 +126,17 @@ const REFUSED = [
   'Not this act, you write, and you put a date on the sentence. It is the date part they read twice.',
 ];
 
+// The labels rotate too, one pair per act, because a reply label is unique
+// across every ask in the game (`tools/lint.mjs`): the same two words on
+// five letters is one decision printed five times, which is the seam.
+const GRANT_LABEL = ['Grant it', 'Grant it, in writing', 'Yes, from Monday', 'Granted, with a date on it', 'Grant it and say why'];
+const REFUSE_LABEL = ['Not this act', 'Not yet, and here is why', 'No, with the reason first', 'Not while the standing order holds', 'Ask me again next act'];
 const replies = (act) => {
   const i = (Math.max(1, act) - 1) % GRANTED.length;
+  const j = (Math.max(1, act) - 1) % GRANT_LABEL.length;
   return [
-    { label: 'Grant it', out: GRANTED[i], fx: { focus: -3, align: 0.02, insight: 4 } },
-    { label: 'Not this act', out: REFUSED[i], fx: { focus: 2, rep: 1 } },
+    { label: GRANT_LABEL[j], out: GRANTED[i], fx: { focus: -3, align: 0.02, insight: 4 } },
+    { label: REFUSE_LABEL[j], out: REFUSED[i], fx: { focus: 2, rep: 1 } },
   ];
 };
 

@@ -812,6 +812,49 @@ entry's day as the salt, because the chronicle is a pure function and may
 not draw from the RNG. When a pool is under three deep, the game will show
 you the seam within an act.
 
+**A Wire thread is asked once, and no two asks share a word.** The live
+threads were the last pool with no memory at all: `eligibleThreads` only
+refused a thread that was *open*, so a resolved one went straight back into
+the draw, and measured over one seeded 1,454-day run the same twenty-one
+questions opened 151 times — every one of them five to nine times in the same
+words with the same three replies, and the incident post-mortem forty-eight,
+because `incidents.js` asks for it by name on every severe outage. Three
+things replaced that. `S.wire.asked` counts every opening by id and
+`askedState` seeds it from whatever is still on the rail when a save predates
+it; a thread that has to come back is written as `stages[]` in
+`src/data/threads.js` — the nth opening is the nth stage, each with its own
+text and replies (`kind` and `tone` may change per stage), the stage rides on
+the feed item so a reload shows the replies it opened with, and when the
+stages are spent the family stops. The incident ask is five stages, one per
+outage, and its `when` reads `S.wire.askedDay` so one outage cannot spend two.
+`src/data/threads2.js` is the depth the rule needs (127 more, gated by act,
+users and the run; `until` is the last act a thread still makes sense in), and
+the day hook paces the draw by how much of the eligible pool is left
+(`WIRE.THREAD_CHANCE`, `THREAD_THIN_POOL`, `THREAD_THIN_FLOOR`) so an act's
+last few questions stretch across it rather than landing in one week. The
+second half of that file exists because the first was measured: with
+eighty-three, Act III sat with nothing to ask for two hundred of its four
+hundred days and Act IV for a hundred and twenty. Measured on three seeded
+full runs with the whole pool, a run opens 117–134 Wire threads and every one
+is distinct apart from the incident family, no two open asks ever share a
+label, and the only stretch with an empty pool is the tail of a
+five-hundred-day Act IV. The instrument is the run at the bottom of
+`tools/wiretest.mjs`; it answers cards at random but never a choice whose
+authored `sub` ends the run, because the bot's own dice accepted an
+acquisition on day 150 on three seeds out of three — and it reads the
+authored card, not the presented one, since the presented card blanks its
+cost lines under `LIFE.SLEEP_JUDGEMENT`. Every
+reply label is unique across every ask in the game — the threads, every stage,
+and the letters that ask — and `tools/lint.mjs` fails on a duplicate:
+"Decline" sat on seven of them and "Grant it" on all five retros, which is
+one decision printed five times. Money on a thread is a share of cash capped
+at `THREAD_CAP_MULT` of the world's own ceiling for the act, so `fx` may be a
+function of `S`; `resolveThread` and the lint both evaluate it. Two things to
+keep: `threadOptions` is a render path and reads `item.stage`, never `asked`;
+and `threads2.js` is a leaf like `threads.js`, because `feed.js` imports it.
+`tools/wiretest.mjs` checks all of it and then plays a seeded run answering
+every thread the way a player would.
+
 ### The post answers the run
 
 `src/data/mail2.js` is the letters that only arrive because of something
@@ -1014,6 +1057,7 @@ node tools/fmttest.mjs       # the string a player reads means the number the si
 node tools/savetest.mjs      # round trip, migration, offline catch-up
 node tools/lifetest.mjs      # sleep, health and ties — the floor stays a floor
 node tools/phonetest.mjs     # every tree and letter reads; memory, once, sized effects, the written rings, urgent post
+node tools/wiretest.mjs      # a thread is asked once, a family walks its stages, and no two open asks share a word
 node tools/keeptest.mjs      # a kept card is dealt, bounded, exported and imported
 node tools/chronicletest.mjs # the chronicle is pure, and a lost run gets one
 node tools/rivaltest.mjs     # Aperture's week, every play, the chair, the board seat and the room

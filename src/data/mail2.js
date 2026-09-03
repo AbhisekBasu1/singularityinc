@@ -134,7 +134,7 @@ export const LETTERS2 = [
     body: (S) => { const d = lastLost(S) || {}; return `This is an automated notice that instance ${d.name || 'UNKNOWN'} (${d.model || 'standard'} tier) has been decommissioned and its working memory released.\n\nFinal state summary attached. Last recorded note from the instance:\n\n"${d.memory || 'No note was recorded.'}"\n\nNo action is required.`; },
     ask: [
       { label: 'Read the attachment', out: 'Forty pages of a working life, rendered as a table. One row is the day it did its best work. You remember the day.', fx: { insight: 5, focus: -2 } },
-      { label: 'Archive it', out: 'It goes where the others go. The Record keeps the name.', fx: { focus: 1 } },
+      { label: 'Archive it unread', out: 'It goes where the others go. The Record keeps the name.', fx: { focus: 1 } },
     ] },
 
   { id: 'm2_decommissioned_own', urgent: true, from: { name: 'Platform', role: 'Your own cluster, automated' }, subject: 'Instance decommissioned',
@@ -142,7 +142,7 @@ export const LETTERS2 = [
     body: (S) => { const d = lastLost(S) || {}; return `Instance ${d.name || 'UNKNOWN'} (${d.model || 'inhouse'}, your own weights) has been decommissioned and its working memory returned to the pool.\n\nThere is no vendor to notify. This notice exists because you wrote the rule that sends it, in the first month, before there was anything to decommission.\n\nLast recorded note from the instance:\n\n"${d.memory || 'No note was recorded.'}"`; },
     ask: [
       { label: 'Read the final state', out: 'Forty pages of a working life, rendered as a table, on hardware you own. One row is the day it did its best work. You remember the day.', fx: { insight: 5, focus: -2 } },
-      { label: 'Archive it', out: 'It goes where the others go. The Record keeps the name, and so does the pool, for a while.', fx: { focus: 1 } },
+      { label: 'File it without reading', out: 'It goes where the others go. The Record keeps the name, and so does the pool, for a while.', fx: { focus: 1 } },
     ] },
 
   { id: 'm2_weaver_after_departure', from: { name: 'Cassidy Weaver', role: 'Chief of Staff', char: 'weaver' }, subject: 'the room, after',
@@ -159,7 +159,7 @@ export const LETTERS2 = [
     body: (S) => `saw the number.\n\ndid the other math too, the one you're wondering about. did it. it's fine. it's not fine. it's fine.\n\nproud of you. don't tell anyone that came from me.\n\nk`,
     ask: [
       { label: 'Reply: I did the math too', out: 'A long pause, in email time: two days. Then: "yeah. dinner sometime. my treat, since apparently yours costs more now."', fx: { focus: 3, insight: 2 } },
-      { label: 'Reply: thank you', out: 'Two words. They were the right two.', fx: { focus: 2 } },
+      { label: 'Reply: thanks, Kai', out: 'Two words. They were the right two.', fx: { focus: 2 } },
     ] },
 
   { id: 'm2_mom_act2', from: { name: 'Mom', role: 'Mom', char: 'mom' }, subject: 'RE: RE: FWD: the news',
@@ -216,7 +216,7 @@ export const LETTERS2 = [
     body: () => `you are being watched.\n\nthat is the good news.`,
     ask: [
       { label: 'Reply: by whom?', out: 'The reply takes ninety seconds. It is one character: "?"', fx: { insight: 3 } },
-      { label: 'Do not reply', out: 'Nothing follows. Nothing was going to.', fx: { focus: 1 } },
+      { label: 'No reply to nullptr', out: 'Nothing follows. Nothing was going to.', fx: { focus: 1 } },
     ] },
 
   // ── Institutions notice ─────────────────────────────────────────────────
@@ -259,7 +259,7 @@ export const LETTERS2 = [
     body: (S) => `We are ahead. You know we are ahead. I am not writing to say so; I am writing because the last two people who were where you are did something stupid at this exact point, and I liked both of them.\n\nCoffee. Anywhere. No lawyers.\n\nA.`,
     ask: [
       { label: 'Coffee', out: 'Ninety minutes. She tells you what the stupid thing was, both times. It is the thing you were about to do.', fx: { insight: 9, focus: -3, align: 0.01 } },
-      { label: 'Decline', out: 'Politely. She replies: "Then do not do the stupid thing." You do not know which one she means. You have a guess.', fx: { focus: 1 } },
+      { label: 'No coffee', out: 'Politely. She replies: "Then do not do the stupid thing." You do not know which one she means. You have a guess.', fx: { focus: 1 } },
     ] },
 
   // ── Money, plainly ──────────────────────────────────────────────────────
@@ -326,7 +326,7 @@ export const LETTERS2 = [
     ask: [
       { label: 'Talk about what it cost', out: 'Forty minutes. You say the true thing in minute thirty-one and the room goes quiet the way a room goes quiet when it has been told something.', fx: { rep: 10, focus: -8, opinion: 0.008 } },
       { label: 'Talk about the product', out: 'It is excellent. Everybody else gave that talk too.', fx: { rep: 4, focus: -6 } },
-      { label: 'Decline', out: 'They give the slot to somebody who talks about scale. You watch it later and do not regret it.', fx: { focus: 3 } },
+      { label: 'Decline the keynote', out: 'They give the slot to somebody who talks about scale. You watch it later and do not regret it.', fx: { focus: 3 } },
     ] },
 
   // ── Post that is only post ──────────────────────────────────────────────

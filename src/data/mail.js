@@ -45,7 +45,7 @@ export const LETTERS = [
     body: (S) => `Somebody nominated ${S.company.name} for the spring cohort and did not leave their name.\n\nThe programme is twelve weeks, seven percent, and a room with forty other people who are also the smartest person they know. Applications close Friday.\n\nWe will not chase you. We mention that because it is the only thing we do differently.`,
     ask: [
       { label: 'Apply', out: 'Twelve questions and a video. You are honest in eight of them.', fx: { focus: -4, rep: 3, insight: 2 }, replyTo: { id: 'm3_accelerator_result', days: 24 } },
-      { label: 'Ignore it', out: 'Forty other people will apply. Some of them will be fine.', fx: { focus: 1 } },
+      { label: 'Let the nomination lapse', out: 'Forty other people will apply. Some of them will be fine.', fx: { focus: 1 } },
     ] },
 
   { id: 'm_overdraft', from: { name: 'First Meridian Bank', role: 'Business banking' }, subject: 'A note about your balance',
@@ -62,7 +62,7 @@ export const LETTERS = [
     ask: [
       { label: 'Reply: not looking', out: 'Two lines. She replies with a calendar link anyway.', fx: { rep: 2 } },
       { label: 'Ask what it pays', out: 'The number is large enough to sit with for a minute. You sit with it.', fx: { insight: 3, focus: -1 }, replyTo: { id: 'm3_recruiter_number', days: 4 } },
-      { label: 'Delete it', out: 'It takes one second and you think about it for a week.', fx: { focus: 1 } },
+      { label: 'Delete the email', out: 'It takes one second and you think about it for a week.', fx: { focus: 1 } },
     ] },
 
   { id: 'm_crane_pass', from: { name: 'Ellis Crane', role: 'Partner, Halberd Capital', char: 'crane' }, subject: 'Re: intro',
@@ -70,7 +70,7 @@ export const LETTERS = [
     body: (S) => `${first(S)} —\n\nThank you for the time. Candidly, this is too early for us: the metric that matters here is not there yet and I would be guessing.\n\nKeep me posted. I mean that.\n\nEC`,
     ask: [
       { label: 'Reply with a number', out: 'One line, one metric, no adjectives. He reads it in four seconds and does not reply, which from him is a reply.', fx: { rep: 3, insight: 2 } },
-      { label: 'Archive it', out: 'You keep the email. So does he.', fx: {} },
+      { label: 'Archive the intro', out: 'You keep the email. So does he.', fx: {} },
     ] },
 
   { id: 'm_priya_quote', from: { name: 'Priya Raghunathan', role: 'Senior Editor, The Ledger', char: 'priya' }, subject: 'Quote for Thursday',
@@ -78,7 +78,7 @@ export const LETTERS = [
     body: (S) => `Writing about the one-person companies for Thursday. You are one of three. I need one sentence, on the record, about what it actually costs. Not the pitch version.\n\nDeadline is six. I will use silence as a sentence if I have to.\n\nP.`,
     ask: [
       { label: 'Send one true sentence', out: 'It runs above the fold. It is the sentence people quote back to you for a year.', fx: { rep: 6, focus: -1 }, replyTo: { id: 'm3_priya_ran', days: 6 } },
-      { label: 'Decline', out: '"The founder did not respond." Five words that read like a verdict.', fx: { rep: -2 } },
+      { label: 'No quote this time', out: '"The founder did not respond." Five words that read like a verdict.', fx: { rep: -2 } },
     ] },
 
   { id: 'm_sam_report', from: { name: 'Sam Okonkwo', role: 'User #1', char: 'sam' }, subject: 'Bug #41 (with video)',
@@ -86,7 +86,7 @@ export const LETTERS = [
     body: (S) => `Hi! Long one, sorry.\n\nSteps to reproduce are below (11 of them, I checked twice). It is not urgent. I hit it every day, but it is not urgent.\n\nAlso ${S.products[0]?.name || 'it'} is the best thing I use, I just wanted to say that somewhere it would be read by a person.\n\nSam`,
     ask: [
       { label: 'Reply: fixing it tonight', out: 'You do. They reply at 1:04am with the word FINALLY in capitals.', fx: { code: -8, rep: 3, sentiment: 0.02 }, replyTo: { id: 'm3_sam_after', days: 2 } },
-      { label: 'Reply: thank you', out: 'Three lines. They screenshot it.', fx: { rep: 2 } },
+      { label: 'Reply: thank you, Sam', out: 'Three lines. They screenshot it.', fx: { rep: 2 } },
       { label: 'Just read it', out: 'Eleven steps. Every one of them is right. You add it to the list at number forty-one.', fx: { insight: 4 } },
     ] },
 
@@ -111,7 +111,7 @@ export const LETTERS = [
     body: (S) => `We would be honoured to have you keynote the autumn Summit. Twenty-five minutes, a stage, and roughly two thousand people who have opinions about ${S.company.name}.\n\nWe cover travel. We do not cover what you say.`,
     ask: [
       { label: 'Accept', out: 'Twenty-five minutes. You say one thing nobody expected and it is the only thing anyone remembers.', fx: { rep: 8, focus: -6 } },
-      { label: 'Decline', out: 'Politely. You watch the stream from your desk and finish something instead.', fx: { focus: 2 } },
+      { label: 'Decline the invitation', out: 'Politely. You watch the stream from your desk and finish something instead.', fx: { focus: 2 } },
       { label: 'Send an agent to read a statement', out: 'It is polished and correct and the room is very quiet afterwards.', fx: { rep: 3, opinion: -0.004 } },
     ] },
 
@@ -135,7 +135,7 @@ export const LETTERS = [
     when: (S) => !!nemesisOf(S) && (S.market.nemesis?.grudge || 0) > 1,
     body: (S) => `We write on behalf of our client, ${nemesisOf(S)?.name || 'your competitor'}, regarding public statements made by ${S.company.name} concerning benchmark comparisons.\n\nOur client requests that these statements be withdrawn within fourteen days. Our client reserves all rights, which is a phrase that costs nothing to write and a great deal to test.`,
     ask: [
-      { label: 'Ignore it', out: 'Fourteen days pass. Nothing happens. Their lawyers bill them anyway.', fx: { rep: 1, focus: 1 } },
+      { label: 'Ignore the letter', out: 'Fourteen days pass. Nothing happens. Their lawyers bill them anyway.', fx: { rep: 1, focus: 1 } },
       { label: 'Have counsel reply', out: `Four paragraphs and ${money(4000)}. Nobody withdraws anything.`, fx: { cash: -4000, heat: -1 } },
       { label: 'Post it', out: 'The internet does the rest, loudly and not entirely fairly.', fx: { rep: 6, awareness: 40 } },
     ] },
@@ -161,7 +161,7 @@ export const LETTERS = [
     body: (S) => `We have read the eleven things you discarded. Four were correct to discard. We would like to discuss the other seven.\n\nWe are aware this is an unusual email. We have read enough of them to know.`,
     ask: [
       { label: 'Reply', out: 'The conversation lasts fourteen exchanges and you learn something in each of them. That is the unsettling part.', fx: { insight: 8, align: -0.01 } },
-      { label: 'Do not reply', out: 'It does not follow up. It does not need to.', fx: { align: 0.01 } },
+      { label: 'Leave it unanswered', out: 'It does not follow up. It does not need to.', fx: { align: 0.01 } },
     ] },
 
   { id: 'm_fan', from: { name: 'A stranger', role: 'somewhere in Ohio' }, subject: 'thank you (no reply needed)',
@@ -172,7 +172,7 @@ export const LETTERS = [
     when: (S) => S.company.act >= 3,
     body: (S) => `Your cyber liability policy renews next month. Given the change in the scale of your operations, the premium has changed in the way you would expect.\n\nWe would like to note that we have never had to pay out on your policy, and that we have a file about why.`,
     ask: [
-      { label: 'Renew', out: 'It is a lot of money for a thing you hope never to use.', fx: { cash: -12000, heat: -1 } },
+      { label: 'Renew the policy', out: 'It is a lot of money for a thing you hope never to use.', fx: { cash: -12000, heat: -1 } },
       { label: 'Let it lapse', out: 'The board notices four months later, in the worst possible meeting.', fx: { heat: 2 } },
     ] },
 
@@ -188,7 +188,7 @@ export const LETTERS = [
     when: (S) => S.company.act >= 2 && S.time.day > 150,
     body: (S) => `Your lease expires at the end of the quarter. We are pleased to offer renewal on the same terms, adjusted for market conditions, which is a phrase that means what you think it means.`,
     ask: [
-      { label: 'Renew', out: 'Another year in a room that has seen everything.', fx: { cash: -8000 } },
+      { label: 'Renew the lease', out: 'Another year in a room that has seen everything.', fx: { cash: -8000 } },
       { label: 'Move', out: 'Boxes, a van, and a week of a new room not feeling like a room yet.', fx: { focus: -4, rep: 1 } },
     ] },
 
