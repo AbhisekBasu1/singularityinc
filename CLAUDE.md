@@ -6,6 +6,21 @@ A solo-founder simulation. Vanilla ES modules, no build step, no dependencies.
 ## Non-negotiables
 
 - **No build step and no runtime dependencies.** Everything must work by serving the folder.
+- **The two index files carry a generated preload list, and `lint` fails when it is
+  stale.** `node tools/preload.mjs` writes the `<link rel="modulepreload">` block
+  between the markers in `index.html` and `computer/index.html` from the static
+  import graph; `--check` is what `tools/lint.mjs` runs. It is not a build step —
+  the page works without it — it is the difference between the browser discovering
+  176 modules a level at a time (four dependent round trips to the edge before the
+  first line of the game runs, and eight at `/computer/`, whose shell is imported
+  only after the console's whole graph has landed) and asking for all of them the
+  moment the HTML arrives. Measured on the deployed host, six interleaved runs a
+  side: the title at 2.0 s → 1.5 s median, and the worst run 6.6 s → 2.4 s, because
+  one slow response in an early round used to hold everything behind it. Script
+  time is under 50 ms; the load was never the code. Add an import and the list is
+  stale; regenerate rather than editing it by hand. The remaining floor is the
+  1.3 MB on the wire and the edge's own latency, and `Cache-Control: no-cache`
+  means a repeat visit still revalidates every file — in one round now, not four.
 - **All tuning lives in `src/data/balance.js`.** Do not scatter magic numbers into systems.
 - **Content is data.** Events, research, projects, achievements, objectives and advice are
   plain data files under `src/data/`. Systems read them; they never hard-code content.

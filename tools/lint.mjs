@@ -271,6 +271,18 @@ for (const [name, list] of [['objectives', obj.OBJECTIVES], ['achievements', ach
   if (dup.length) fail(name, `duplicate ids: ${[...new Set(dup)].join(', ')}`);
 }
 
+// 8. The preload lists in the two index files are generated from the import
+//    graph (`tools/preload.mjs`). A stale list is a slow first load and not a
+//    broken page, so nothing but this would ever notice it.
+{
+  const { stale } = await import('./preload.mjs');
+  for (const x of stale()) {
+    fail(x.file, `modulepreload list is ${x.noBlock ? 'missing' : 'stale'}`
+      + (x.noBlock ? '' : ` (${x.missing} not listed, ${x.extra} not imported${x.reordered ? ', order changed' : ''})`)
+      + ' — run node tools/preload.mjs');
+  }
+}
+
 console.log(problems ? `\n${problems} lint problem(s)`
   : `  content lint clean — ${events.EVENTS.length} events · ${research.RESEARCH.length} research · ${projects.PROJECTS.length} projects · ${threads.THREADS.length} threads · ${doctrines.DOCTRINES.length} doctrines · ${directives.DIRECTIVES.length} directives · ${epi.EPILOGUES.length} epilogues · ${scen.SCENARIOS.length} scenarios`);
 process.exit(problems ? 1 : 0);

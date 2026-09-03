@@ -11,6 +11,7 @@
     "evals": "node evals/select.mjs && node evals/baseline.mjs && node evals/capsfuzz.mjs",
     "balance": "RUNS=3 DAYS=2000 node tools/balance.mjs",
     "caps": "node tools/capsderive.mjs",
+    "preload": "node tools/preload.mjs",
     "shot": "node tools/shot.mjs",
     "shot:world": "node tools/liveworld.mjs",
     "shot:os": "ROUTE=/computer/ node tools/shot.mjs",
