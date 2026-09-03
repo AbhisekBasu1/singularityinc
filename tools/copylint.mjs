@@ -109,6 +109,19 @@ const MODULES = {
   // door id to sentence, wrapped so the walker sees them.
   doors: Object.entries((await import('../src/data/events_acts.js')).DOOR_OPENED)
     .map(([id, text]) => ({ id, text })),
+  // The first screen's own prose: the five act sentences, the six movements'
+  // headings and the three plates that say what an assistant actually does.
+  // Every figure the landing prints is counted in `src/ui/landing.js`, so
+  // nothing in this module states a quantity — and this walk is the only thing
+  // standing between that rule and a sentence that says "sixteen endings".
+  landing: (await (async () => {
+    const m = await import('../src/data/landing.js');
+    const flat = m.ACT_LINES.map((a) => ({ id: `act${a.id}`, text: a.text }));
+    for (const [k, s] of Object.entries(m.SECTIONS)) flat.push({ id: `sec.${k}`, ...s });
+    flat.push(...m.WORLD_PLATES, m.NO_ASSISTANT);
+    flat.push({ id: 'foot', line: m.FOOTER.line, note: m.FOOTER.built });
+    return flat;
+  })()),
   machineFolders: (await import('../src/data/machine.js')).FOLDERS,
   machineDepartures: Object.entries((await import('../src/data/machine.js')).DEPARTURES)
     .map(([id, text]) => ({ id, text })),

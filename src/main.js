@@ -189,6 +189,10 @@ function assistantHandoffPending() {
 
 function enterGame() {
   inGame = true;
+  // The landing page keeps a node field and two observers alive. Continue goes
+  // straight here without passing through the beats, so this is the one place
+  // that is on every route out of the first screen.
+  Intro.endLanding();
   Transport.reset();
   // Older own-words saves could journal a once-only card without marking it
   // seen, so the deck immediately dealt the same card again. Repair that proof

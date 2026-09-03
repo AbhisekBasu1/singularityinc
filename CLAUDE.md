@@ -900,6 +900,42 @@ founder's own hand, so `surface.js` keeps a small `external` set and
 `reconcile` does not treat it as a stray to revoke. `muteAll` still takes it,
 because the plug means every origin.
 
+## The landing (`/`)
+
+The title beat at `/` is a landing page: one scroll inside the existing
+`.stage`, six movements, film above the fold and machine below it.
+`src/ui/landing.js` renders the sections and drives the hero's canvas;
+`src/data/landing.js` holds the five act sentences and the plates' copy and
+is under `copylint`. Rules that hold it together:
+
+- **The hero is still `showTitle`.** Every `data-act` the old title had is
+  still there, `tools/titleshot.mjs` still finds `.title-kicker`,
+  `.title-webmcp`, `.wm-*`, `.assistant-pick` and `.start-pick`, and the DOM
+  order is load-bearing: kicker, wordmark, tagline, actions, readout strip,
+  WebMCP panel — so on a short screen the strip and the panel drop below the
+  fold and **Begin never does** (the 392px case used to fail on this). The
+  world-layer plates below use `.ld-tool` for their chips, deliberately not
+  `.wm-tool`, which `titleshot` counts document-wide.
+- **The workstation's login is untouched.** The housing test is whether a
+  `decorFn` is installed, not whether it returned tiles — a first-ever visitor
+  to `/computer/` has three empty slots and `loginTilesHtml` returns nothing.
+- **The cold open moved out of the title.** It plays as a `cold` beat before
+  `who` on a first-ever visit, skippable, auto-advancing; `beats()` filters it
+  in only when owed and `chrome()` counts questions, so the founder sees
+  "1 / 3". The landing shows the same five lines typed in a terminal plate
+  instead of gating the page on them.
+- **The rain.** A 2D canvas: low-alpha fill for trails, one glyph per column
+  head, two layers for parallax, the game's own alphabet, word drops from
+  `openingHand()`, `FEATURE_KINDS` and `EVENTS` titles (never more than two on
+  screen), `fillText`/`fillRect` only, DPR capped at 2, its own LCG and never
+  `engine/rng.js`, paused when the tab is hidden or the hero has scrolled out,
+  one still frame under `prefers-reduced-motion`. Measured with a GPU: median
+  72 fps running and the same with the hero scrolled out.
+- **Every number on the page is derived at render** — the readout strip and
+  the numbers rack read the data modules; `src/data/landing.js` states no
+  quantity at all. A screenshot of either housing lives in `assets/readme/`
+  as WebP and is captured with Playwright, never drawn.
+
 ## Before committing
 
 `npm test` is the whole of the list below down to `choreo`, in that order. Run it

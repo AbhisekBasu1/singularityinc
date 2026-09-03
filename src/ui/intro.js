@@ -4,6 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { esc } from './dom.js';
 import { revealLines, typeInto, stagger, wait, skipActive, isPlaying } from './typewriter.js';
+import * as Landing from './landing.js';
 import { ARCHETYPES } from '../data/legacy.js';
 import { CATEGORIES } from '../data/products.js';
 import { DIFFICULTIES } from '../data/difficulty.js';
@@ -290,12 +291,40 @@ const COLD_OPEN = [
   'Six years ago this would have taken a team of eleven.',
 ];
 
+// Whether the cold open is still owed. On the console route the title is a
+// landing page and the five lines play as the first *beat* instead — a visitor
+// who has never seen the game should not have to sit through ten seconds of
+// prose before they are allowed to look at it, and a beat is where a cold open
+// belongs anyway: it opens the story rather than the website. The plate in
+// movement two shows it on the page, so nothing is hidden.
+//
+// Two flags, not one. `coldPending` is "is `cold` in the beat list", and it
+// has to hold still for the whole sequence: clearing it while the beat is on
+// screen shortens the list under `beat` and the next press skips a question.
+// `coldSeen` is the session's memory, so backing out of the first question and
+// pressing Begin again does not replay a film you have already watched.
+let coldPending = false;
+let coldSeen = false;
+
 export async function showTitle({ cold = null } = {}) {
   const L = legacy();
   const firstEver = (L.runs || 0) === 0 && !hasSave();
-  const doCold = cold === null ? firstEver : cold;
-
   const tiles = decor('accounts');
+  // The workstation dresses this as a login screen, and a login screen is not
+  // a landing page: it keeps the shape it has always had, cold open included.
+  //
+  // The housing test is `decorFn`, which only the workstation's shell installs
+  // — *not* whether `tiles` came back with anything. A machine nobody has
+  // logged into yet has three empty slots and `loginTilesHtml` deliberately
+  // returns nothing for that, so a first-ever visitor to `/computer/` would
+  // have been handed the console's landing page. `oslive` is what noticed.
+  if (decorFn) { coldPending = false; return showLogin({ cold, L, firstEver, tiles }); }
+  coldPending = cold === null ? (firstEver && !coldSeen) : !!cold;
+  return showLanding({ L });
+}
+
+async function showLogin({ cold, L, firstEver, tiles }) {
+  const doCold = cold === null ? firstEver : cold;
   app().className = '';
   app().innerHTML = `
   <div class="stage" id="stage">
@@ -353,8 +382,72 @@ export async function showTitle({ cold = null } = {}) {
   await stagger(block.querySelectorAll('.reveal'), { gap: 130, delay: 520 });
 }
 
+// ── The landing ─────────────────────────────────────────────────────────────
+// One page, one scroll, six movements, all of it inside the same `.stage`
+// scroller the beats use — which is what keeps `stageCue()` and every harness
+// that reaches for `.stage`, `.title-kicker` or `.title-webmcp` working.
+//
+// The register changes exactly once, at the fold. The hero is film: black,
+// bare typography over a live field, a reticle and nothing else. Everything
+// under it is machine — square plates, corner ticks, mono labels — because
+// that is what the game is, and a landing page that does not look like the
+// product is a landing page that lies.
+//
+// The order below is load-bearing. Begin sits *above* the readout strip and
+// the WebMCP panel so that on a short screen the two of them drop below the
+// fold and the button never does. `tools/titleshot.mjs` checks exactly that,
+// at 420 wide, which is where it used to fail.
+async function showLanding({ L }) {
+  const hand = openingHand();
+  const brief = hasSave() || (L.runs || 0) > 0 || assistantMode() === 'none';
+  const saved = hasSave();
+  app().className = '';
+  app().innerHTML = `
+  <div class="stage landing" id="stage">
+    <div class="ld-page">
+      <section class="ld-hero" id="ld-hero">
+        ${Landing.fieldHtml()}
+        <div class="ld-hero-inner title-block in" id="title-block">
+          <div class="title-kicker reveal">A solo-founder simulation</div>
+          <div class="ld-mark reveal">
+            <span class="ld-reticle" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+            <h1 class="title-word">SINGULARITY, INC.</h1>
+          </div>
+          <p class="title-sub ld-tagline reveal">A founder simulation where your own assistant plays the world against you.</p>
+          <p class="ld-pitch reveal">One founder, one laptop, and machines that will build anything you can describe &mdash; for as long as the money lasts.</p>
+          <div class="title-actions ld-actions" id="title-actions">
+            ${saved ? `<button class="btn btn-primary btn-lg reveal" data-act="continue-game">Continue</button>` : ''}
+            <button class="btn ${saved ? 'btn-ghost' : 'btn-primary'} btn-lg reveal" data-act="new-game">
+              ${saved ? 'New timeline' : beginLabel()}</button>
+            <a class="btn btn-ghost btn-lg reveal" href="computer/">Open the workstation</a>
+            <button class="btn btn-ghost btn-sm reveal ld-import" data-act="import-save-file">Import save file</button>
+          </div>
+          ${Landing.readout(hand)}
+          ${webmcpPanel({ brief })}
+          ${L.runs > 0 ? `<div class="title-legacy reveal">
+            <span>${L.runs} timeline${L.runs === 1 ? '' : 's'}</span>
+            <span>${L.points || 0} legacy points</span>
+            <span>best ${money(L.bestValuation || 0)}</span>
+          </div>` : ''}
+          <div class="title-foot reveal">Everything is simulated locally and saved in your browser.<br/>
+            Space pauses. Q &middot; W &middot; E &middot; R are your hands.</div>
+        </div>
+      </section>
+      ${Landing.sections({ hand, cold: COLD_OPEN })}
+    </div>
+  </div>`;
+
+  stageCue();
+  Landing.mount({ hand });
+  await stagger(document.querySelectorAll('#ld-hero .reveal'), { gap: 90, delay: 220 });
+}
+
 // ── The beats ───────────────────────────────────────────────────────────────
-const ALL_BEATS = ['who', 'founder', 'building', 'threshold'];
+// `cold` is in the list only when it is owed — a first-ever visit on the
+// console route, or `?cold` in the address bar. It carries no chrome, because
+// it is film and not a question, and `chrome()` therefore counts the questions
+// rather than the beats.
+const ALL_BEATS = ['cold', 'who', 'founder', 'building', 'threshold'];
 let beat = 0;
 let advanced = false;
 
@@ -371,12 +464,14 @@ function lockedArchetypes() {
   return ARCHETYPES.filter((a) => a.unlockedBy && !un.includes(a.id));
 }
 function beats() {
-  return openArchetypes().length === 1 ? ALL_BEATS.filter((b) => b !== 'founder') : ALL_BEATS;
+  const single = openArchetypes().length === 1;
+  return ALL_BEATS.filter((b) => (b !== 'founder' || !single) && (b !== 'cold' || coldPending));
 }
 
 export function showIntro(startAt = 0) {
   const open = openArchetypes();
   if (open.length === 1) draft.archetype = open[0].id;
+  Landing.unmount();                 // the field and the terminal go with the page
   beat = Math.max(0, Math.min(beats().length - 1, startAt));
   renderBeat();
 }
@@ -390,7 +485,9 @@ export async function nextBeat() {
   renderBeat();
 }
 export async function prevBeat() {
-  if (beat === 0) { showTitle({ cold: false }); return; }
+  // Back out of the first *question* returns to the landing, not to the cold
+  // open: a film you have already sat through is not somewhere to go back to.
+  if (beat === 0 || beats()[beat - 1] === 'cold') { showTitle({ cold: false }); return; }
   await leave();
   beat--;
   renderBeat();
@@ -467,8 +564,15 @@ export function endStageCue() {
   cueOff = null;
 }
 
+// The landing's own teardown: the node field's animation frame, its resize and
+// visibility listeners, and the observer waiting to type the cold open.
+export function endLanding() { Landing.unmount(); }
+
 function chrome(id) {
-  const list = beats();
+  // The dots count the questions. The cold open is one of the beats and none
+  // of the questions, so a founder is on "1 / 4" the moment they are asked
+  // something rather than "2 / 5" for having watched a title sequence.
+  const list = beats().filter((b) => b !== 'cold');
   const index = Math.max(0, list.indexOf(id));
   return `<div class="beat-chrome">
     <button class="beat-back" data-act="beat-back" title="Back">←</button>
@@ -481,7 +585,7 @@ function chrome(id) {
 
 async function renderBeat() {
   const id = beats()[beat];
-  const fn = id === 'who' ? beatWho : id === 'founder' ? beatFounder
+  const fn = id === 'cold' ? beatCold : id === 'who' ? beatWho : id === 'founder' ? beatFounder
     : id === 'building' ? beatBuilding : beatThreshold;
   // Each beat writes its innerHTML before its first `await`, so the stage is on
   // the page the moment the call returns its promise — measure it now rather
@@ -489,6 +593,34 @@ async function renderBeat() {
   const done = fn();
   stageCue();
   return done;
+}
+
+// ── 0. The cold open ────────────────────────────────────────────────────────
+// Film, not interface: bare typography over the photograph, no chrome, no
+// frame. It advances itself when the last line has landed and it advances at
+// once if the founder presses Skip — which is a real button and not only a
+// hint, because a screen that answers a click and nothing else is a screen no
+// keyboard and no automated hand can get past. The token guards the double
+// advance: press Skip while the reveal is still running and the auto-advance
+// underneath must find a beat that is no longer this one and do nothing.
+let coldToken = 0;
+async function beatCold() {
+  const mine = ++coldToken;
+  coldSeen = true;
+  app().innerHTML = `
+  <div class="stage"><div class="beat narrow cold-beat" id="beat">
+    <div class="beat-body narrow">
+      <div class="cold" id="cold"></div>
+      <div class="cold-doors">
+        <button class="btn btn-ghost btn-sm cold-skip" data-act="beat-next">Skip</button>
+        <span class="skip-note">click anywhere to hurry it along</span>
+      </div>
+    </div>
+  </div></div>`;
+  await revealLines(document.getElementById('cold'), COLD_OPEN, { mode: 'fade', gap: 1500 });
+  await wait(1200);
+  if (coldToken !== mine || beats()[beat] !== 'cold') return;
+  nextBeat();
 }
 
 // ── 1. Who ──────────────────────────────────────────────────────────────────
