@@ -1,0 +1,12 @@
+.git
+tools
+evals
+docs
+node_modules
+wrangler.jsonc
+package.json
+AGENTS.md
+CLAUDE.md
+SECURITY.md
+README.md
+LICENSE

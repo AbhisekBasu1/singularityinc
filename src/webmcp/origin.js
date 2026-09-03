@@ -11,6 +11,13 @@ export function resolveOrigin() {
     const q = new URLSearchParams(location.search).get('rival');
     if (q) return new URL(q).origin;
   } catch {}
+  // A deploy without a custom domain cannot make `rival.<host>` exist, so the
+  // page may name the rival's origin outright: `<meta name="rival-origin">` in
+  // index.html and computer/index.html. Empty means "use the convention".
+  try {
+    const m = document.querySelector('meta[name="rival-origin"]')?.content?.trim();
+    if (m) return new URL(m).origin;
+  } catch {}
   if (typeof location === 'undefined' || !location?.hostname) return null;   // headless: no address at all
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || /^\d+\.\d+\.\d+\.\d+$/.test(location.hostname)) {
     // The dev server: the rival is the next port up, on the same host — which

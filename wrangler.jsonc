@@ -1,0 +1,13 @@
+{
+  // The whole repository is the site: static assets, no build step, no script.
+  // `npx wrangler deploy` with this file is the entire deploy. A second Worker
+  // for the rival's origin is the same file with `--name singularityinc-rival`
+  // on the deploy command — see docs/DEPLOY.md.
+  "name": "singularityinc",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page"
+  }
+}

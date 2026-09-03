@@ -12,6 +12,8 @@
      asset router answers before any middleware, the `Origin-Trial` header in
      `_headers` never runs for `/` at all. Ship both. See docs/DEPLOY.md.
      `localhost` needs neither — it is already a secure context. -->
+<!-- Where Aperture lives when it is not rival.<this host>. Empty = the convention. -->
+<meta name="rival-origin" content="" />
 <meta http-equiv="origin-trial" content="REPLACE_WITH_THE_TOKEN_FOR_THIS_ORIGIN" />
 
 <!-- Social preview. The act banners are already 1920x640, which is close

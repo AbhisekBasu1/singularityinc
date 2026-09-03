@@ -17,6 +17,29 @@ Output directory:   /
 
 Note the hostname it gives you. That is the origin everything below is about.
 
+### Or Cloudflare Workers, from the repository
+
+The dashboard's *Create application → Import a repository* flow builds a
+Worker, not a Pages project, and it works for a static site because
+`wrangler.jsonc` at the root declares the whole folder as assets:
+
+```
+Build command:     (leave empty)
+Deploy command:    npx wrangler deploy
+Root directory:    /
+```
+
+`.assetsignore` keeps the harnesses and the docs out of the upload, and
+`_headers` is honoured the same way Pages honours it. The Worker's own
+`*.workers.dev` hostname is the origin the token below is registered for.
+
+For the rival, create a **second** Worker from the same repository with the
+deploy command `npx wrangler deploy --name singularityinc-rival`. Then either
+give it the custom domain `rival.<the game's host>` — the convention the game
+uses to find it — or, with no domain, put its `*.workers.dev` origin in the
+`<meta name="rival-origin">` tag in `index.html` and `computer/index.html`.
+It needs its own origin-trial token in `rival/index.html` either way.
+
 ## 2. Register the origin trial
 
 At <https://developer.chrome.com/origintrials>, register **WebMCP** for that
