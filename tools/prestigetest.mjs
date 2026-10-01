@@ -1,9 +1,15 @@
 // Prestige / new-timeline round trip.
 globalThis.performance = globalThis.performance || { now: () => Date.now() };
 const store = {};
+const timers = new Map();
+const pageListeners = { window: {}, document: {} };
+let nextTimer = 1;
+globalThis.setInterval = (fn) => { const id = nextTimer++; timers.set(id, fn); return id; };
+globalThis.clearInterval = (id) => timers.delete(id);
+const listen = (target) => (type, fn) => { (pageListeners[target][type] ??= []).push(fn); };
 globalThis.localStorage = { getItem: (k) => store[k] ?? null, setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } };
-globalThis.window = { addEventListener() {}, innerWidth: 1600, innerHeight: 900 };
-globalThis.document = { addEventListener() {}, getElementById: () => null, querySelector: () => null,
+globalThis.window = { addEventListener: listen('window'), innerWidth: 1600, innerHeight: 900 };
+globalThis.document = { addEventListener: listen('document'), getElementById: () => null, querySelector: () => null,
   querySelectorAll: () => [], createElement: () => ({ style: {}, classList: { add(){}, remove(){}, toggle(){} },
   appendChild(){}, remove(){}, addEventListener(){} }), body: { appendChild(){} }, hidden: false };
 globalThis.requestAnimationFrame = () => 0; globalThis.cancelAnimationFrame = () => {};
@@ -22,6 +28,7 @@ const { actionPromptAI } = await import('../src/systems/founder.js');
 const { resolveChoice, dismissEvent } = await import('../src/systems/narrative.js');
 const { totalMrr } = await import('../src/systems/product.js');
 const { money } = await import('../src/engine/format.js');
+const { triggerEnding } = await import('../src/systems/progression.js');
 
 let fails = 0;
 
@@ -66,6 +73,8 @@ console.log(`  act ${r1.act} · ${money(r1.val)} · ${r1.ach} achievements · ${
 ok(r1.act >= 3, 'reached at least act III');
 ok(r1.ach > 20, 'earned achievements');
 
+triggerEnding(s, 'steward');
+const pendingAutosaves = [...timers.values()];
 const { gain, legacy } = Game.prestige(s);
 console.log(`\n── prestige ──`);
 ok(gain > 5 && gain < 400, `legacy gain is in a sane band (${gain})`);
@@ -74,6 +83,26 @@ ok(!Save.hasSave(), 'run save cleared');
 ok(!!Save.loadLegacy(), 'legacy persisted');
 ok(Object.keys(legacy.achievements || {}).length === r1.ach, 'achievements carried into legacy');
 ok((legacy.unlockedArchetypes || []).length >= r1.arch.length, 'archetype unlocks carried');
+ok(s.legacy === legacy, 'the live state holds the awarded legacy');
+ok(!('_prestiged' in Save.serialisable(s)), 'the retirement flag is not part of exported saves');
+
+// Returning to the title does not replace S. Exercise the real save callbacks
+// before the next run starts, including a timer callback already queued.
+function lateSaves() {
+  for (const fn of pendingAutosaves) fn();
+  for (const fn of pageListeners.window.beforeunload || []) fn();
+  document.hidden = true;
+  for (const fn of pageListeners.document.visibilitychange || []) fn();
+  document.hidden = false;
+}
+console.log('\n── title-screen saves ──');
+const awarded = JSON.stringify(Save.loadLegacy());
+lateSaves();
+ok(JSON.stringify(Save.loadLegacy()) === awarded, 'autosave and page exit preserve all legacy fields');
+ok(!Save.hasSave(), 'late saves do not resurrect the retired run');
+ok(Save.loadLegacy().finishedOnce, 'the completed ending still unlocks later-run options');
+ok(Save.loadLegacy().log?.[0]?.ending === 'steward', 'the completed run remains in the career ledger');
+ok(Save.loadLegacy().chronicles?.length === 1, 'the completed chronicle stays on the shelf');
 
 console.log('\n── spend legacy points ──');
 const L = Save.loadLegacy();
@@ -87,6 +116,9 @@ for (const id of ['seed_capital', 'muscle_memory', 'prompt_savant', 'iron_consti
 }
 Save.saveLegacy(L);
 ok(spent > 0, `spent ${spent} points on perks`);
+const purchased = JSON.stringify(Save.loadLegacy());
+lateSaves();
+ok(JSON.stringify(Save.loadLegacy()) === purchased, 'late saves also preserve title-screen perk purchases');
 
 console.log('\n── run 2 (with legacy) ──');
 const s2 = Game.startNewGame({ founderName: 'B', companyName: 'Two', archetype: 'hacker', category: 'devtools', seed: seedFor(3) });
@@ -95,6 +127,13 @@ const m2 = computeMods(s2);
 ok(m2.codeRate > 1.3, `code rate carries the perk (×${m2.codeRate.toFixed(2)})`);
 ok(s2.legacy.runs === 1, 'run 2 knows it is the second timeline');
 ok(Object.keys(s2.achievements).length === 0, 'this run starts with a clean achievement sheet');
+const nextRunSave = store.singularity_inc_save_v1;
+ok(!Save.save(s), 'an explicit save of the retired state is refused');
+ok(store.singularity_inc_save_v1 === nextRunSave, 'a retired state cannot overwrite the next run');
+s2.resources.insight += 1;
+for (const fn of timers.values()) fn();
+ok(JSON.parse(store.singularity_inc_save_v1).resources.insight === s2.resources.insight,
+   'autosave continues to persist the next run');
 play(s2, 350);
 ok(s2.company.act >= 2, `run 2 progresses (act ${s2.company.act})`);
 ok(s2.stats.featuresShipped > 5, 'run 2 ships features');

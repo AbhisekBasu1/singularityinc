@@ -508,6 +508,11 @@ export function prestige(s = S) {
     }].slice(-CHRONICLE.SHELF);
   } catch (e) { console.error('[chronicle]', e); }
 
+  // S remains this run while the title is open. Publish the awarded legacy,
+  // then retire the run so autosave/page-exit cannot restore its cleared slot
+  // or overwrite legacy (including perks bought at the title).
+  s.legacy = legacy;
+  s._prestiged = true;
   Save.saveLegacy(legacy);
   Save.clearSave();
   emit('prestige', { gain, legacy });

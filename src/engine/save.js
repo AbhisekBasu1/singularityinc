@@ -66,7 +66,7 @@ export function slots() {
 // real-time event floor for the whole of the next session.
 const TRANSIENT = ['_agentDriven', '_offline', '_toolBusy', '_narrAcc', '_forecast', '_opsRelBonus',
                    '_specFx', '_lanes', '_review', '_infraEffect', '_infraRelBonus', '_mailAway',
-                   'tutorialHold', 'modalBlocking'];
+                   '_prestiged', 'tutorialHold', 'modalBlocking'];
 
 // One serialisation for the save slot and the export string. Never a
 // hypothetical — `forecast` points the live binding at a throwaway copy while
@@ -81,6 +81,9 @@ export function serialisable(state) {
 }
 
 export function save(state = S, slot = currentSlot()) {
+  // A retired timeline may still be S at the title, but its slot is gone and
+  // only saveLegacy owns the career until the next run replaces it.
+  if (state?._prestiged) return false;
   const copy = serialisable(state);
   if (!copy) return false;
   try {
